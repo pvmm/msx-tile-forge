@@ -140,7 +140,10 @@ class TileEditorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("MSX2 Tile Studio - Untitled")
-        self.root.state("zoomed")
+        try:
+            self.root.state("zoomed")  # Windows
+        except tk.TclError:
+            self.root.attributes("-zoomed", True)  # Some Linux distros
 
         self.current_project_base_path = None
         self.project_modified = False
