@@ -1,3 +1,4 @@
+#!/bin/env -S python3
 # -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk
@@ -5,6 +6,7 @@ from tkinter import colorchooser
 from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import simpledialog
+from contextlib import suppress
 import struct
 import os
 import math
@@ -140,7 +142,8 @@ class TileEditorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("MSX Tile Forge - Untitled") # Updated Title
-        self.root.state("zoomed")
+        with suppress(tk.TclError):
+            self.root.state("zoomed")
 
         self.current_project_base_path = None
         self.project_modified = False
