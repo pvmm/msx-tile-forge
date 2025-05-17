@@ -143,12 +143,17 @@ def get_contrast_color(hex_color):
 class TileEditorApp:
     def __init__(self, root):
         self.debug_enabled = getattr(root, 'app_debug_mode', False)
-
+        
         self.root = root
-
-        self.root.title("MSX Tile Forge - Untitled")
+        # MODIFIED: Set WM_DELETE_WINDOW protocol here
+        self.root.protocol("WM_DELETE_WINDOW", self.confirm_quit)
+        
+        self.root.title("MSX Tile Forge - Untitled") 
         with suppress(tk.TclError):
             self.root.state("zoomed")
+
+        # ... (rest of your __init__ method remains the same) ...
+        # ... (ensure all other initializations are present) ...
 
         self.current_project_base_path = None
         self.project_modified = False
@@ -158,8 +163,7 @@ class TileEditorApp:
 
         self.active_msx_palette = []
         for r_pal, g_pal, b_pal in MSX2_RGB7_VALUES:
-            canonical_hex = self._rgb7_to_hex(r_pal, g_pal, b_pal)
-            self.active_msx_palette.append(canonical_hex)
+            self.active_msx_palette.append(self._rgb7_to_hex(r_pal, g_pal, b_pal))
         self.selected_palette_slot = 0
 
         self.tile_image_cache = {}
@@ -169,15 +173,15 @@ class TileEditorApp:
         self.drag_active = False
         self.drag_item_type = None
         self.drag_start_index = -1
-        self.drag_press_x = 0       # X coord of initial button press for drag threshold
-        self.drag_press_y = 0       # Y coord of initial button press for drag threshold
+        self.drag_press_x = 0
+        self.drag_press_y = 0
         self.drag_canvas = None
         self.drag_indicator_id = None
 
         self.map_zoom_level = 1.0
         self.show_supertile_grid = tk.BooleanVar(value=False)
         self.show_window_view = tk.BooleanVar(value=False)
-        self.grid_color_index = 1
+        self.grid_color_index = 1 
         self.window_view_tile_x = 0
         self.window_view_tile_y = 0
         self.window_view_tile_w = tk.IntVar(value=DEFAULT_WIN_VIEW_WIDTH_TILES)
@@ -223,6 +227,8 @@ class TileEditorApp:
 
         self.rom_import_dialog = None
 
+        self.debug("[DEBUG] TileEditorApp __init__ started.")
+
         self.create_menu()
         self._setup_global_key_bindings()
         self.notebook = ttk.Notebook(root)
@@ -242,18 +248,18 @@ class TileEditorApp:
         self.create_tile_editor_widgets(self.tab_tile_editor)
         self.create_supertile_editor_widgets(self.tab_supertile_editor)
         self.create_map_editor_widgets(self.tab_map_editor)
-
-        self.update_all_displays(changed_level="all")
+        
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
+        self._setup_map_canvas_bindings() 
 
-        self._setup_map_canvas_bindings()
-
-        self._update_window_title()
+        self._update_window_title() 
+        self.update_all_displays(changed_level="all") 
         self._update_edit_menu_state()
         self._update_editor_button_states()
-        self._update_supertile_rotate_button_state() 
-
+        self._update_supertile_rotate_button_state()
         self._update_map_cursor()
+        
+        self.debug("[DEBUG] TileEditorApp __init__ finished.")
 
     def debug(self, message):
         """Prints the message to the console only if debug mode is enabled."""
@@ -520,7 +526,7 @@ class TileEditorApp:
         )
         file_menu.add_command(
             label="Save Project As...",
-            command=self.save_project_as,
+            command=self.save_project_as, # CORRECTED: Was self.save_project
             accelerator="Ctrl+Shift+S",
         )
         file_menu.add_separator()
@@ -537,11 +543,9 @@ class TileEditorApp:
         file_menu.add_command(
             label="Save Tileset (.SC4Tiles)...", command=self.save_tileset
         )
-        # --- NEW: Import Tiles from ROM ---
         file_menu.add_command(
-            label="Import Tiles from ROM...", command=self.open_rom_importer # New command
+            label="Import Tiles from ROM...", command=self.open_rom_importer
         )
-        # --- End New ---
         file_menu.add_separator()
         file_menu.add_command(
             label="Open Supertiles (.SC4Super)...", command=self.open_supertiles
@@ -554,7 +558,7 @@ class TileEditorApp:
         file_menu.add_command(label="Save Map (.SC4Map)...", command=self.save_map)
         file_menu.add_separator()
         file_menu.add_command(
-            label="Exit", command=self.root.quit, accelerator="Ctrl+Q"
+            label="Exit", command=self.confirm_quit, accelerator="Ctrl+Q"
         )
 
         # --- Edit Menu (Modified) ---
@@ -4079,82 +4083,114 @@ class TileEditorApp:
 
     # --- Project Save/Load Methods ---
 
-    def save_project_as(self):
-        """Prompts user for a base project name and saves all four component files."""
-        # Ask for base path (user types name, selects directory)
-        base_path = filedialog.asksaveasfilename(
-            filetypes=[("MSX Project (Enter Base Name)", "*.*")],  # Filter description
-            title="Save Project As (Enter Base Name)",
-        )
-        # Exit if cancelled
-        if not base_path:
-            return
-
-        # Construct full paths for each component file
-        pal_path = base_path + ".msxpal"
-        til_path = base_path + ".SC4Tiles"
-        sup_path = base_path + ".SC4Super"
-        map_path = base_path + ".SC4Map"
-
-        # Attempt to save all components sequentially
-        # Use the modified save methods which return True/False
-        # Stop saving if any component fails
-        success = True
-        if success:
-            success = self.save_palette(pal_path)
-        if success:
-            success = self.save_tileset(til_path)
-        if success:
-            success = self.save_supertiles(sup_path)
-        if success:
-            success = self.save_map(map_path)
-
-        # Update state and UI if all saves were successful
-        if success:
-            self.current_project_base_path = base_path  # Store the base path
-            self.project_modified = False
-            self._update_window_title()
-        else:
-            # Individual error messages should have been shown by the failing save_* method
-            messagebox.showerror(
-                "Project Save Error", "One or more project components failed to save."
-            )
-
     def save_project(self):
-        """Saves the project using the current base path, or calls Save As if none."""
-        # Check if a project path is already known
+        """Saves the project using the current base path, or calls Save As if none.
+        Returns True if save is successful and not cancelled by user, False otherwise.
+        """
         if self.current_project_base_path:
             base_path = self.current_project_base_path
-            # Construct component paths
             pal_path = base_path + ".msxpal"
             til_path = base_path + ".SC4Tiles"
             sup_path = base_path + ".SC4Super"
             map_path = base_path + ".SC4Map"
 
-            # Attempt to save all components
+            self.debug(f"[DEBUG] save_project: Saving to existing base path {base_path}")
+
             success = True
+            # These individual save methods (save_palette, etc.) should return True on success
+            # and False if the user cancels their specific file dialog (though for a direct save,
+            # they usually don't have a dialog unless it's an error) or if an error occurs.
             if success:
+                self.debug(f"[DEBUG] save_project: Saving palette to {pal_path}")
                 success = self.save_palette(pal_path)
             if success:
+                self.debug(f"[DEBUG] save_project: Saving tileset to {til_path}")
                 success = self.save_tileset(til_path)
             if success:
+                self.debug(f"[DEBUG] save_project: Saving supertiles to {sup_path}")
                 success = self.save_supertiles(sup_path)
             if success:
+                self.debug(f"[DEBUG] save_project: Saving map to {map_path}")
                 success = self.save_map(map_path)
 
-            # Show appropriate message
             if success:
+                self.debug("[DEBUG] save_project: All components saved successfully.")
                 self.project_modified = False
                 self._update_window_title()
+                return True # Indicate successful save
             else:
-                messagebox.showerror(
-                    "Project Save Error",
-                    "One or more project components failed to save.",
-                )
+                self.debug("[DEBUG] save_project: One or more components failed to save.")
+                return False # Indicate save operation failed or was incomplete
         else:
-            # If no project path is known, act like "Save As..."
-            self.save_project_as()
+            self.debug("[DEBUG] save_project: No current_project_base_path, calling save_project_as.")
+            # save_project_as will handle its own dialogs and return True/False
+            return self.save_project_as()
 
+    def save_project_as(self):
+        """Prompts user for a base project name and saves all four component files.
+        Returns True if all saves are successful and not cancelled by user, False otherwise.
+        """
+        # Prompt for a base name. The user can type just a name, and the dialog
+        # will place it in the selected directory.
+        # We don't use a specific project extension here, as it's a conceptual project.
+        base_path_from_dialog = filedialog.asksaveasfilename(
+            # defaultextension="", # Option 1: No default extension
+            title="Save Project As (Enter Base Name for Components)",
+            filetypes=[("All Files", "*.*")], # Allows user to type any name
+            parent=self.root
+        )
+
+        if not base_path_from_dialog:
+            self.debug("[DEBUG] save_project_as: User cancelled 'Save As' dialog.")
+            return False # User cancelled
+
+        # The base_path_from_dialog might include an extension if the user typed one
+        # or if the OS dialog added one based on the "All Files" filter (e.g., ".txt" on some systems if typed without one).
+        # We want to use the part *before* any such trailing extension as our true base.
+        # os.path.splitext will split "path/filename.ext" into ("path/filename", ".ext")
+        true_base_path, _ = os.path.splitext(base_path_from_dialog)
+        
+        # If splitext resulted in an empty base_path (e.g., user typed only ".txt"),
+        # then use the original dialog path. This is an edge case.
+        if not true_base_path: 
+            true_base_path = base_path_from_dialog
+
+        self.debug(f"[DEBUG] save_project_as: User selected/input: '{base_path_from_dialog}', True base path: '{true_base_path}'")
+
+        pal_path = true_base_path + ".msxpal"
+        til_path = true_base_path + ".SC4Tiles"
+        sup_path = true_base_path + ".SC4Super"
+        map_path = true_base_path + ".SC4Map"
+
+        success = True
+        if success:
+            self.debug(f"[DEBUG] save_project_as: Saving palette to {pal_path}")
+            success = self.save_palette(pal_path)
+        if success:
+            self.debug(f"[DEBUG] save_project_as: Saving tileset to {til_path}")
+            success = self.save_tileset(til_path)
+        if success:
+            self.debug(f"[DEBUG] save_project_as: Saving supertiles to {sup_path}")
+            success = self.save_supertiles(sup_path)
+        if success:
+            self.debug(f"[DEBUG] save_project_as: Saving map to {map_path}")
+            success = self.save_map(map_path)
+
+        if success:
+            self.debug("[DEBUG] save_project_as: All components saved successfully.")
+            self.current_project_base_path = true_base_path # Store the true base path
+            self.project_modified = False
+            self._update_window_title()
+            return True
+        else:
+            self.debug("[DEBUG] save_project_as: One or more components failed to save.")
+            messagebox.showerror(
+                "Project Save Error", 
+                "One or more project components failed to save.",
+                parent=self.root
+            )
+            return False
+    
     def open_project(self):
         """Prompts user to select ONE project file, then loads all four components."""
         filepath = filedialog.askopenfilename(
@@ -6242,33 +6278,20 @@ class TileEditorApp:
 
     def _setup_global_key_bindings(self):
         """Sets up global keyboard shortcuts (accelerators) for menu commands."""
-        # File Menu Bindings
         self.root.bind_all("<Control-n>", lambda event: self.new_project())
         self.root.bind_all("<Control-o>", lambda event: self.open_project())
         self.root.bind_all("<Control-s>", lambda event: self.save_project())
-        # Note: Use <Control-Shift-KeyPress-S> for Ctrl+Shift+S reliably
         self.root.bind_all(
             "<Control-Shift-KeyPress-S>", lambda event: self.save_project_as()
         )
-        self.root.bind_all("<Control-q>", lambda event: self.root.quit())
+        # MODIFIED: Ctrl+Q should also go through confirm_quit
+        self.root.bind_all("<Control-q>", lambda event: self.confirm_quit())
 
-        # Edit Menu Bindings (Call the generic handlers)
-        # Check state *within* the handler to see if action is allowed for the current tab
         self.root.bind_all("<Control-c>", lambda event: self.handle_generic_copy())
         self.root.bind_all("<Control-v>", lambda event: self.handle_generic_paste())
-
-        # View Menu Bindings
         self.root.bind_all("<Control-m>", lambda event: self.toggle_minimap())
 
-        # Add a print statement for confirmation (optional)
-        print("Global key bindings set up.")
-
-        # IMPORTANT: Prevent default text widget bindings for Copy/Paste if needed
-        # This stops Ctrl+C/V from trying to act on focused widgets like Entries
-        # if you want the menu action to ALWAYS take precedence.
-        # Use with caution, might interfere with expected text editing.
-        # self.root.event_delete("<<Copy>>", "<Control-c>")
-        # self.root.event_delete("<<Paste>>", "<Control-v>")
+        self.debug("[DEBUG] Global key bindings set up.")
 
     def handle_map_tab_keypress(self, event):
         """Handles key presses specifically bound when the Map Tab is active."""
@@ -8235,7 +8258,7 @@ class TileEditorApp:
         name_label.pack(anchor="w", pady=(0, 5))
 
         # Version and Author
-        info_text = "Version: 0.0.32\nAuthor: Damned Angel + Gemini AI"
+        info_text = "Version: 0.0.33\nAuthor: Damned Angel + Gemini AI"
         info_label = ttk.Label(text_frame, text=info_text, justify=tk.LEFT)
         info_label.pack(anchor="w")
 
@@ -8440,13 +8463,19 @@ class TileEditorApp:
         dialog.rom_data = rom_data
         dialog.rom_filepath = rom_filepath
         dialog.fine_offset_var = tk.IntVar(value=0)
-        dialog.selected_start_rom_tile_idx = -1
-        dialog.selected_end_rom_tile_idx = -1
+
+        dialog.rom_importer_selection = {} # MODIFIED: Dictionary to store {idx: (fg, bg)}
+        dialog.rom_importer_anchor_idx = -1   
+
+        # NEW: State for current importer FG/BG palette indices
+        dialog.current_importer_fg_idx = WHITE_IDX # Default
+        dialog.current_importer_bg_idx = BLACK_IDX # Default
+
         dialog.hover_info_text_var = tk.StringVar(value="Offset: N/A | Grid Index: N/A")
         dialog.selection_info_text_var = tk.StringVar(value="Tiles Selected: 0")
         dialog.top_left_grid_byte_offset_text_var = tk.StringVar(value="Grid Top-Left Byte: N/A")
-        dialog.redraw_timer_id = None # For Configure event debouncing
-        dialog.slider_redraw_timer_id = None # For slider event debouncing
+        dialog.redraw_timer_id = None 
+        dialog.slider_redraw_timer_id = None 
 
         main_dialog_frame = ttk.Frame(dialog, padding=5)
         main_dialog_frame.pack(expand=True, fill="both")
@@ -8456,7 +8485,7 @@ class TileEditorApp:
         main_dialog_frame.grid_rowconfigure(1, weight=0)    
 
         left_column_frame = ttk.Frame(main_dialog_frame)
-        left_column_frame.grid(row=0, column=0, sticky="nswe", padx=(0, 5)) 
+        left_column_frame.grid(row=0, column=0, sticky="nswe", padx=(0, 10)) # Increased padx for color pickers
 
         preview_label_frame = ttk.LabelFrame(left_column_frame, text="Live Preview")
         preview_label_frame.pack(side=tk.TOP, pady=(0, 10), anchor="n", fill=tk.X)
@@ -8472,29 +8501,43 @@ class TileEditorApp:
 
         offset_control_frame = ttk.Frame(left_column_frame) 
         offset_control_frame.pack(side=tk.TOP, pady=(0,10), fill=tk.X)
-
         ttk.Label(offset_control_frame, text="Fine Offset (0-7 bytes):").pack(side=tk.TOP, anchor="w")
-
         offset_slide_frame = ttk.Frame(offset_control_frame)
         offset_slide_frame.pack(side=tk.TOP, fill=tk.X, expand=True, padx=9)
-
         offset_slider = ttk.Scale(
-            offset_slide_frame, 
-            from_=0,
-            to=7,
-            orient=tk.HORIZONTAL,
-            variable=dialog.fine_offset_var,
-            command=self._on_fine_offset_slider_change # MODIFIED: Point to new debouncing handler
+            offset_slide_frame, from_=0, to=7, orient=tk.HORIZONTAL,
+            variable=dialog.fine_offset_var, command=self._on_fine_offset_slider_change 
         )
         offset_slider.pack(side=tk.TOP, fill=tk.X, expand=True)
-
         offset_tick_frame = ttk.Frame(offset_control_frame)
         offset_tick_frame.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(2,0))
-
         for i in range(8): 
             offset_tick_frame.grid_columnconfigure(i, weight=1)
             lbl = ttk.Label(offset_tick_frame, text=str(i), font=("TkSmallCaptionFont", 7)) 
-            lbl.grid(row=0, column=i) 
+            lbl.grid(row=0, column=i)
+        
+        # --- NEW: Importer Color Selection UI ---
+        importer_color_frame = ttk.LabelFrame(left_column_frame, text="Preview/Import Colors")
+        importer_color_frame.pack(side=tk.TOP, pady=(10,5), fill=tk.X)
+
+        # FG Color Swatch
+        fg_color_subframe = ttk.Frame(importer_color_frame)
+        fg_color_subframe.pack(fill=tk.X, pady=2)
+        ttk.Label(fg_color_subframe, text="FG (1-bits):").pack(side=tk.LEFT, padx=(5,2))
+        dialog.importer_fg_swatch = tk.Label(fg_color_subframe, text="   ", relief="raised", borderwidth=2)
+        dialog.importer_fg_swatch.pack(side=tk.LEFT, padx=2)
+        dialog.importer_fg_swatch.bind("<Button-1>", 
+            lambda e, swatch_type='fg': self._pick_importer_color(swatch_type))
+
+        # BG Color Swatch
+        bg_color_subframe = ttk.Frame(importer_color_frame)
+        bg_color_subframe.pack(fill=tk.X, pady=2)
+        ttk.Label(bg_color_subframe, text="BG (0-bits):").pack(side=tk.LEFT, padx=(5,2))
+        dialog.importer_bg_swatch = tk.Label(bg_color_subframe, text="   ", relief="raised", borderwidth=2)
+        dialog.importer_bg_swatch.pack(side=tk.LEFT, padx=2)
+        dialog.importer_bg_swatch.bind("<Button-1>", 
+            lambda e, swatch_type='bg': self._pick_importer_color(swatch_type))
+        # --- END Importer Color Selection UI ---
         
         info_bar_frame = ttk.Frame(left_column_frame, padding=3) 
         info_bar_frame.pack(side=tk.TOP, fill=tk.X, expand=False, pady=(5,5))
@@ -8505,6 +8548,8 @@ class TileEditorApp:
         selection_label = ttk.Label(info_bar_frame, textvariable=dialog.selection_info_text_var, anchor="w", justify=tk.LEFT)
         selection_label.pack(side=tk.TOP, fill=tk.X)
 
+        # ... (rest of the method: canvas_frame, scrollbars, buttons, bindings, dialog positioning) ...
+        # ... (This part remains unchanged from your working baseline) ...
         canvas_frame = ttk.Frame(main_dialog_frame)
         canvas_frame.grid(row=0, column=1, sticky="nswe") 
         canvas_frame.grid_rowconfigure(0, weight=1)
@@ -8575,6 +8620,9 @@ class TileEditorApp:
         dialog.canvas.focus_set()
         dialog.protocol("WM_DELETE_WINDOW", self._close_rom_importer_dialog)
         
+        # Update swatches with initial default colors
+        self._update_importer_color_swatches() # NEW CALL
+
         dialog.after(50, lambda: self._on_rom_importer_setting_change(configure_event=True))
 
         dialog.update_idletasks()
@@ -8643,6 +8691,12 @@ class TileEditorApp:
 
         rom_data = dialog.rom_data
         fine_offset = dialog.fine_offset_var.get()
+        
+        # Get current global importer rendering colors
+        current_fg_render_idx = getattr(dialog, 'current_importer_fg_idx', WHITE_IDX)
+        current_bg_render_idx = getattr(dialog, 'current_importer_bg_idx', BLACK_IDX)
+        selection_dict = getattr(dialog, 'rom_importer_selection', {})
+
 
         canvas.delete("all")
         dialog.tile_image_refs = []
@@ -8653,6 +8707,8 @@ class TileEditorApp:
         self.debug(f"[DEBUG] Canvas Dimensions (WxH): {canvas_width}x{canvas_height}")
         self.debug(f"[DEBUG] ROM Data Size: {len(rom_data)} bytes")
         self.debug(f"[DEBUG] Fine Offset: {fine_offset} bytes")
+        self.debug(f"[DEBUG] Current Importer FG/BG Idx: {current_fg_render_idx}/{current_bg_render_idx}")
+
 
         if canvas_width <= 1 or canvas_height <= 1:
             self.debug("[DEBUG] Canvas not yet sized (or too small). Aborting draw.")
@@ -8704,7 +8760,6 @@ class TileEditorApp:
 
         view_y1 = canvas.canvasy(0)
         view_y2 = canvas.canvasy(canvas_height)
-
         start_row_idx = max(0, int(view_y1 // (tile_display_size + padding)))
         end_row_idx = min(num_rows_in_rom_data, int(math.ceil(view_y2 / (tile_display_size + padding))))
         if (view_y2 > view_y1) and (view_y2 % (tile_display_size + padding) == 0):
@@ -8716,25 +8771,32 @@ class TileEditorApp:
 
         if not hasattr(dialog, 'top_left_grid_byte_offset'):
             dialog.top_left_grid_byte_offset = 0 
-
         first_visible_rom_tile_idx = start_row_idx * tiles_across
         dialog.top_left_grid_byte_offset = fine_offset + (first_visible_rom_tile_idx * TILE_WIDTH)
         if hasattr(dialog, 'top_left_grid_byte_offset_text_var'):
             try:
                 dialog.top_left_grid_byte_offset_text_var.set(f"Grid Top-Left Byte: {dialog.top_left_grid_byte_offset} (0x{dialog.top_left_grid_byte_offset:X})")
-            except tk.TclError:
-                pass
+            except tk.TclError: pass
 
         drawn_tile_count_this_pass = 0
         for r_grid in range(start_row_idx, end_row_idx):
             for c_grid in range(tiles_across):
                 current_rom_tile_absolute_idx = r_grid * tiles_across + c_grid
+                if current_rom_tile_absolute_idx >= total_potential_tiles: continue
+
+                # Determine FG/BG colors for this specific tile
+                tile_fg_idx, tile_bg_idx = current_fg_render_idx, current_bg_render_idx # Default to global
+                if current_rom_tile_absolute_idx in selection_dict:
+                    stored_colors = selection_dict[current_rom_tile_absolute_idx]
+                    tile_fg_idx, tile_bg_idx = stored_colors[0], stored_colors[1]
                 
-                if current_rom_tile_absolute_idx >= total_potential_tiles:
-                    continue
+                # Ensure palette indices are valid
+                safe_tile_fg_idx = tile_fg_idx if 0 <= tile_fg_idx < len(self.active_msx_palette) else WHITE_IDX
+                safe_tile_bg_idx = tile_bg_idx if 0 <= tile_bg_idx < len(self.active_msx_palette) else BLACK_IDX
+                color_for_fg_pixel = self.active_msx_palette[safe_tile_fg_idx]
+                color_for_bg_pixel = self.active_msx_palette[safe_tile_bg_idx]
 
                 rom_byte_start_pos = fine_offset + (current_rom_tile_absolute_idx * TILE_WIDTH)
-                
                 if rom_byte_start_pos + TILE_WIDTH > len(rom_data):
                     num_bytes_avail = len(rom_data) - rom_byte_start_pos
                     tile_bytes_data = rom_data[rom_byte_start_pos:] + bytes(TILE_WIDTH - num_bytes_avail)
@@ -8749,28 +8811,20 @@ class TileEditorApp:
                     line_data_hex = []
                     for x_pixel_in_tile in range(TILE_WIDTH):
                         pixel_is_set = (row_byte >> (7 - x_pixel_in_tile)) & 1
-                        color_hex = self.active_msx_palette[WHITE_IDX] if pixel_is_set else self.active_msx_palette[BLACK_IDX]
+                        color_hex = color_for_fg_pixel if pixel_is_set else color_for_bg_pixel # Use determined colors
                         line_data_hex.append(color_hex)
                     
                     y_img_start = y_pixel_in_tile * (tile_display_size // TILE_HEIGHT)
                     y_img_end = (y_pixel_in_tile + 1) * (tile_display_size // TILE_HEIGHT)
-
                     for y_img in range(y_img_start, y_img_end):
                         scaled_line_data_hex = []
                         for hex_val in line_data_hex:
                             scaled_line_data_hex.extend([hex_val] * (tile_display_size // TILE_WIDTH))
                         try:
-                            # Removed: if img.winfo_exists():
                             img.put("{" + " ".join(scaled_line_data_hex) + "}", to=(0, y_img))
                         except tk.TclError:
-                            try:
-                                # Removed: if img.winfo_exists() and scaled_line_data_hex:
-                                if scaled_line_data_hex: # Check if list is not empty
-                                    img.put(scaled_line_data_hex[0], to=(0, y_img, tile_display_size, y_img + 1))
-                            except tk.TclError:
-                                pass
-
-
+                            if scaled_line_data_hex: img.put(scaled_line_data_hex[0], to=(0, y_img, tile_display_size, y_img + 1))
+                
                 canvas_x_pos = c_grid * (tile_display_size + padding) + padding
                 canvas_y_pos = r_grid * (tile_display_size + padding) + padding
                 try:
@@ -8780,8 +8834,7 @@ class TileEditorApp:
                 except tk.TclError:
                     self.debug(f"[DEBUG] TclError creating image for tile {current_rom_tile_absolute_idx} (canvas likely destroying).")
                     break 
-            else: 
-                continue
+            else: continue
             break 
         
         self.debug(f"[DEBUG] Drawn {drawn_tile_count_this_pass} tiles in this pass.")
@@ -8794,51 +8847,63 @@ class TileEditorApp:
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
         dialog = self.rom_import_dialog
-        canvas = dialog.canvas
-        canvas.delete("rom_selection_border") # Clear previous borders
+        canvas = getattr(dialog, 'canvas', None)
+        if not canvas or not canvas.winfo_exists():
+            return
 
-        start_idx = dialog.selected_start_rom_tile_idx
-        end_idx = dialog.selected_end_rom_tile_idx
+        try:
+            canvas.delete("rom_selection_border")
+        except tk.TclError: # Canvas might be gone
+            return
 
-        if start_idx == -1 : # No selection, or only start is set but end is not yet confirmed
+
+        selection_set = getattr(dialog, 'rom_importer_selection', set())
+        if not selection_set:
             return
         
-        # Determine the actual range to highlight (start_idx could be > end_idx before swap)
-        # If end_idx is -1, it means only start_idx is set (single tile selection so far)
-        current_selection_min_idx = min(start_idx, end_idx) if end_idx != -1 else start_idx
-        current_selection_max_idx = max(start_idx, end_idx) if end_idx != -1 else start_idx
-
         tile_display_size = VIEWER_TILE_SIZE
         padding = 1
-        canvas_width_current = canvas.winfo_width()
-        if canvas_width_current <= 1 : return # Canvas not ready
+        
+        canvas_width_current = 0
+        try:
+            if canvas.winfo_exists():
+                 canvas_width_current = canvas.winfo_width()
+        except tk.TclError:
+            return
+
+        if canvas_width_current <= 1 : return 
         tiles_across = max(1, canvas_width_current // (tile_display_size + padding))
 
-        # Iterate through all tiles in the defined selection range
-        for idx_in_selection_range in range(current_selection_min_idx, current_selection_max_idx + 1):
-            # Convert this absolute rom_tile_idx to its row/col in the conceptual full grid
-            grid_r, grid_c = divmod(idx_in_selection_range, tiles_across)
+        view_x1, view_y1, view_x2, view_y2 = 0,0,0,0 # Default values
+        try:
+            if canvas.winfo_exists():
+                view_x1 = canvas.canvasx(0)
+                view_y1 = canvas.canvasy(0)
+                view_x2 = canvas.canvasx(canvas.winfo_width())
+                view_y2 = canvas.canvasy(canvas.winfo_height())
+        except tk.TclError:
+            return
 
-            # Calculate pixel coordinates for this tile's border
-            # These are relative to the scrollable region's 0,0
-            border_x1 = grid_c * (tile_display_size + padding) + padding -1 # -1 for border outside
+
+        for selected_tile_idx in selection_set:
+            if not isinstance(selected_tile_idx, int) or selected_tile_idx < 0: # Basic type/value check
+                continue
+
+            grid_r, grid_c = divmod(selected_tile_idx, tiles_across)
+
+            border_x1 = grid_c * (tile_display_size + padding) + padding -1 
             border_y1 = grid_r * (tile_display_size + padding) + padding -1
-            border_x2 = border_x1 + tile_display_size + 2 # +2 for border thickness
+            border_x2 = border_x1 + tile_display_size + 2 
             border_y2 = border_y1 + tile_display_size + 2
             
-            # Check if this tile is (at least partially) visible on the canvas
-            # This simple check is okay as create_rectangle handles off-canvas coords gracefully.
-            # More precise check would involve canvas.canvasx/y for visible region.
-            view_x1 = canvas.canvasx(0)
-            view_y1 = canvas.canvasy(0)
-            view_x2 = canvas.canvasx(canvas.winfo_width())
-            view_y2 = canvas.canvasy(canvas.winfo_height())
-
-            # Only draw if the tile's bounding box overlaps the current view
             if border_x2 > view_x1 and border_x1 < view_x2 and \
                border_y2 > view_y1 and border_y1 < view_y2:
-                canvas.create_rectangle(border_x1, border_y1, border_x2, border_y2,
-                                        outline="yellow", width=2, tags="rom_selection_border")
+                try:
+                    if canvas.winfo_exists():
+                        canvas.create_rectangle(border_x1, border_y1, border_x2, border_y2,
+                                                outline="yellow", width=2, tags="rom_selection_border")
+                except tk.TclError: 
+                    break 
 
     def _on_rom_canvas_motion(self, event):
         """Handles mouse motion over the ROM importer canvas for hover info and preview."""
@@ -8846,40 +8911,60 @@ class TileEditorApp:
             return
         
         dialog = self.rom_import_dialog
-        canvas = dialog.canvas
+        canvas = getattr(dialog, 'canvas', None)
+        if not canvas or not canvas.winfo_exists(): return
+
         rom_data = dialog.rom_data
         fine_offset = dialog.fine_offset_var.get()
 
         tile_display_size = VIEWER_TILE_SIZE
         padding = 1
-        canvas_width_current = canvas.winfo_width()
-        if canvas_width_current <= 1: return # Canvas not ready
+        
+        canvas_width_current = 0
+        try:
+            if canvas.winfo_exists():
+                canvas_width_current = canvas.winfo_width()
+        except tk.TclError: return
+
+        if canvas_width_current <= 1: return
         tiles_across = max(1, canvas_width_current // (tile_display_size + padding))
 
-        # Get canvas coordinates relative to scrollable content
         cx = canvas.canvasx(event.x)
         cy = canvas.canvasy(event.y)
-
-        # Determine which tile in the conceptual full grid is under cursor
-        grid_col_under_cursor = int(cx // (tile_display_size + padding))
-        grid_row_under_cursor = int(cy // (tile_display_size + padding))
         
-        hovered_rom_tile_absolute_idx = grid_row_under_cursor * tiles_across + grid_col_under_cursor
+        clicked_grid_col = int(cx // (tile_display_size + padding)) # Renamed for clarity, though not a click
+        clicked_grid_row = int(cy // (tile_display_size + padding))
+        hovered_rom_tile_absolute_idx = clicked_grid_row * tiles_across + clicked_grid_col
         
-        total_potential_tiles = (len(rom_data) - fine_offset) // TILE_WIDTH
-        if total_potential_tiles <= 0: hovered_rom_tile_absolute_idx = -1 # No valid tiles
+        total_potential_tiles = 0
+        if len(rom_data) > fine_offset:
+            total_potential_tiles = (len(rom_data) - fine_offset) // TILE_WIDTH
+        
+        # Make sure hovered_rom_tile_absolute_idx is valid before proceeding
+        is_valid_hover_idx = (0 <= hovered_rom_tile_absolute_idx < total_potential_tiles)
 
-        if 0 <= hovered_rom_tile_absolute_idx < total_potential_tiles:
-            # Calculate the byte position in the ROM for this hovered tile
+        if is_valid_hover_idx:
             hovered_byte_start_pos = fine_offset + (hovered_rom_tile_absolute_idx * TILE_WIDTH)
             
-            dialog.hover_info_text_var.set(
-                f"Offset: {hovered_byte_start_pos} (0x{hovered_byte_start_pos:X}) | Grid Index: {hovered_rom_tile_absolute_idx}"
-            )
-            self._draw_rom_tile_preview(hovered_byte_start_pos) # Update live preview
+            if hasattr(dialog, 'hover_info_text_var') and isinstance(dialog.hover_info_text_var, tk.StringVar):
+                try:
+                    dialog.hover_info_text_var.set(
+                        f"Offset: {hovered_byte_start_pos} (0x{hovered_byte_start_pos:X}) | Grid Index: {hovered_rom_tile_absolute_idx}"
+                    )
+                except tk.TclError: pass # Dialog might be closing
+            # Pass hovered_rom_tile_absolute_idx to the preview function
+            self._draw_rom_tile_preview(hovered_byte_start_pos, hovered_rom_tile_absolute_idx)
         else:
-            dialog.hover_info_text_var.set("Offset: N/A | Grid Index: N/A")
-            dialog.preview_canvas.delete("all") # Clear preview if not over a valid tile
+            if hasattr(dialog, 'hover_info_text_var') and isinstance(dialog.hover_info_text_var, tk.StringVar):
+                try:
+                    dialog.hover_info_text_var.set("Offset: N/A | Grid Index: N/A")
+                except tk.TclError: pass
+            
+            preview_canvas = getattr(dialog, 'preview_canvas', None)
+            if preview_canvas and preview_canvas.winfo_exists():
+                try:
+                    preview_canvas.delete("all")
+                except tk.TclError: pass
 
     def _on_rom_canvas_leave(self, event):
         """Clears hover info and preview when mouse leaves ROM importer canvas."""
@@ -8890,19 +8975,28 @@ class TileEditorApp:
              self.rom_import_dialog.preview_canvas.delete("all")
 
     def _on_rom_canvas_left_click(self, event):
-        """Handles left-click on ROM importer canvas for selecting tiles."""
+        """Handles left-click on ROM importer canvas for complex selection and color association."""
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
         dialog = self.rom_import_dialog
-        canvas = dialog.canvas
+        canvas = getattr(dialog, 'canvas', None)
+        if not canvas or not canvas.winfo_exists():
+            return
+            
         rom_data = dialog.rom_data
         fine_offset = dialog.fine_offset_var.get()
 
         tile_display_size = VIEWER_TILE_SIZE
         padding = 1
-        canvas_width_current = canvas.winfo_width()
-        if canvas_width_current <=1: return # Canvas not ready
+        
+        canvas_width_current = 0
+        try:
+            if canvas.winfo_exists():
+                canvas_width_current = canvas.winfo_width()
+        except tk.TclError: return
+
+        if canvas_width_current <=1: return
         tiles_across = max(1, canvas_width_current // (tile_display_size + padding))
 
         cx = canvas.canvasx(event.x)
@@ -8912,27 +9006,124 @@ class TileEditorApp:
         clicked_grid_row = int(cy // (tile_display_size + padding))
         clicked_rom_tile_absolute_idx = clicked_grid_row * tiles_across + clicked_grid_col
 
-        total_potential_tiles = (len(rom_data) - fine_offset) // TILE_WIDTH
-        if not (0 <= clicked_rom_tile_absolute_idx < total_potential_tiles):
-            # Click was outside the area of actual tile data
-            return
-
-        if dialog.selected_start_rom_tile_idx == -1:
-            # This is the first click, setting the start of the selection
-            dialog.selected_start_rom_tile_idx = clicked_rom_tile_absolute_idx
-            dialog.selected_end_rom_tile_idx = clicked_rom_tile_absolute_idx # Also end for single select
-            dialog.import_button.config(state=tk.NORMAL) # Enable import
-        else:
-            # This is the second click, setting or updating the end of the selection
-            dialog.selected_end_rom_tile_idx = clicked_rom_tile_absolute_idx
-            # Auto-swap if end is before start
-            if dialog.selected_end_rom_tile_idx < dialog.selected_start_rom_tile_idx:
-                dialog.selected_start_rom_tile_idx, dialog.selected_end_rom_tile_idx = \
-                    dialog.selected_end_rom_tile_idx, dialog.selected_start_rom_tile_idx
-            # Import button is already enabled from the first click
+        total_potential_tiles = 0
+        if len(rom_data) > fine_offset : 
+            total_potential_tiles = (len(rom_data) - fine_offset) // TILE_WIDTH
         
-        self._draw_rom_import_selection_highlight()
-        self._update_rom_importer_info_labels() # Update "Tiles Selected" count
+        if not (0 <= clicked_rom_tile_absolute_idx < total_potential_tiles):
+            self.debug(f"[DEBUG] Click outside valid tile area. Clicked index: {clicked_rom_tile_absolute_idx}, Total potential: {total_potential_tiles}")
+            return 
+
+        is_shift_pressed = (event.state & 0x0001) != 0
+        is_ctrl_pressed = (event.state & 0x0004) != 0
+
+        selection_dict = dialog.rom_importer_selection 
+        current_anchor_idx = dialog.rom_importer_anchor_idx 
+        
+        fg_to_associate = dialog.current_importer_fg_idx
+        bg_to_associate = dialog.current_importer_bg_idx
+        color_tuple_to_associate = (fg_to_associate, bg_to_associate)
+
+        self.debug(f"\n[DEBUG] _on_rom_canvas_left_click: Clicked Idx: {clicked_rom_tile_absolute_idx}")
+        self.debug(f"[DEBUG] Shift: {is_shift_pressed}, Ctrl: {is_ctrl_pressed}")
+        self.debug(f"[DEBUG] Current Anchor: {current_anchor_idx}")
+        self.debug(f"[DEBUG] Current Importer FG/BG: {fg_to_associate}/{bg_to_associate}")
+        self.debug(f"[DEBUG] Selection BEFORE: {selection_dict.copy()}")
+
+        selection_changed = False # Flag to see if we need to update UI
+
+        if is_ctrl_pressed and is_shift_pressed:
+            self.debug("[DEBUG] Path: Ctrl+Shift+Click")
+            if current_anchor_idx != -1:
+                min_idx = min(current_anchor_idx, clicked_rom_tile_absolute_idx)
+                max_idx = max(current_anchor_idx, clicked_rom_tile_absolute_idx)
+                self.debug(f"[DEBUG] Ctrl+Shift: Adding range {min_idx}-{max_idx}")
+                anchor_colors = selection_dict.get(current_anchor_idx, color_tuple_to_associate)
+                self.debug(f"[DEBUG] Ctrl+Shift: Using colors {anchor_colors} for new range.")
+                for i in range(min_idx, max_idx + 1):
+                    if i not in selection_dict or selection_dict[i] != anchor_colors:
+                        selection_dict[i] = anchor_colors
+                        selection_changed = True
+            else:
+                self.debug("[DEBUG] Ctrl+Shift: No anchor, treating as Ctrl+Click.")
+                if clicked_rom_tile_absolute_idx in selection_dict:
+                    del selection_dict[clicked_rom_tile_absolute_idx]
+                    selection_changed = True
+                else:
+                    selection_dict[clicked_rom_tile_absolute_idx] = color_tuple_to_associate
+                    selection_changed = True
+                dialog.rom_importer_anchor_idx = clicked_rom_tile_absolute_idx
+                if current_anchor_idx != dialog.rom_importer_anchor_idx : selection_changed = True
+        
+        elif is_shift_pressed:
+            self.debug("[DEBUG] Path: Shift+Click")
+            if current_anchor_idx != -1:
+                # Create a temporary set for the new range to compare with old selection
+                new_range_selection = {}
+                min_idx = min(current_anchor_idx, clicked_rom_tile_absolute_idx)
+                max_idx = max(current_anchor_idx, clicked_rom_tile_absolute_idx)
+                self.debug(f"[DEBUG] Shift: Selecting range {min_idx}-{max_idx} with current colors.")
+                for i in range(min_idx, max_idx + 1):
+                    new_range_selection[i] = color_tuple_to_associate
+                
+                if selection_dict != new_range_selection: # Check if selection actually changes
+                    selection_dict.clear()
+                    selection_dict.update(new_range_selection)
+                    selection_changed = True
+                # Anchor remains the same for shift-click after initial anchor set
+            else: 
+                self.debug("[DEBUG] Shift: No anchor, treating as Normal Click.")
+                if not (len(selection_dict) == 1 and clicked_rom_tile_absolute_idx in selection_dict):
+                    selection_dict.clear()
+                    selection_dict[clicked_rom_tile_absolute_idx] = color_tuple_to_associate
+                    selection_changed = True
+                if dialog.rom_importer_anchor_idx != clicked_rom_tile_absolute_idx:
+                    dialog.rom_importer_anchor_idx = clicked_rom_tile_absolute_idx
+                    selection_changed = True # Anchor change is a state change
+        
+        elif is_ctrl_pressed:
+            self.debug("[DEBUG] Path: Ctrl+Click")
+            if clicked_rom_tile_absolute_idx in selection_dict:
+                self.debug(f"[DEBUG] Ctrl: Deselecting tile {clicked_rom_tile_absolute_idx}.")
+                del selection_dict[clicked_rom_tile_absolute_idx]
+                selection_changed = True
+            else:
+                self.debug(f"[DEBUG] Ctrl: Selecting tile {clicked_rom_tile_absolute_idx} with current colors.")
+                selection_dict[clicked_rom_tile_absolute_idx] = color_tuple_to_associate
+                selection_changed = True
+            if dialog.rom_importer_anchor_idx != clicked_rom_tile_absolute_idx:
+                dialog.rom_importer_anchor_idx = clicked_rom_tile_absolute_idx
+                selection_changed = True
+        
+        else: # Normal Click
+            self.debug("[DEBUG] Path: Normal Click")
+            # Check if this click actually changes the selection
+            is_already_selected_alone = (len(selection_dict) == 1 and clicked_rom_tile_absolute_idx in selection_dict)
+            if not is_already_selected_alone:
+                selection_dict.clear()
+                selection_dict[clicked_rom_tile_absolute_idx] = color_tuple_to_associate
+                selection_changed = True
+            if dialog.rom_importer_anchor_idx != clicked_rom_tile_absolute_idx:
+                dialog.rom_importer_anchor_idx = clicked_rom_tile_absolute_idx
+                selection_changed = True
+
+        self.debug(f"[DEBUG] Selection AFTER: {selection_dict.copy()}")
+        self.debug(f"[DEBUG] New Anchor: {dialog.rom_importer_anchor_idx}")
+
+        if selection_changed: # Only update UI if something actually changed
+            if hasattr(dialog, 'import_button') and dialog.import_button.winfo_exists():
+                dialog.import_button.config(state=tk.NORMAL if selection_dict else tk.DISABLED)
+            
+            self._update_rom_importer_info_labels() # Update count immediately
+            self._draw_rom_import_selection_highlight() # Update highlight borders immediately (fast)
+
+            # Now, debounce the full canvas redraw
+            if hasattr(dialog, 'redraw_timer_id') and dialog.redraw_timer_id is not None:
+                dialog.after_cancel(dialog.redraw_timer_id)
+            # Use _perform_debounced_rom_canvas_draw which calls _draw_rom_importer_canvas
+            dialog.redraw_timer_id = dialog.after(50, self._perform_debounced_rom_canvas_draw) # 50ms delay for selection changes
+        else:
+            self.debug("[DEBUG] No actual change in selection or anchor. Skipping UI updates.")
 
     def _on_rom_canvas_right_click(self, event):
         """Handles right-click on ROM importer canvas to cancel selection."""
@@ -8943,11 +9134,20 @@ class TileEditorApp:
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
         dialog = self.rom_import_dialog
-        dialog.selected_start_rom_tile_idx = -1
-        dialog.selected_end_rom_tile_idx = -1
-        dialog.import_button.config(state=tk.DISABLED) # Disable import button
-        self._draw_rom_import_selection_highlight() # Remove highlight
-        self._update_rom_importer_info_labels() # Update "Tiles Selected" to 0
+        
+        # Check if attributes exist before trying to clear/set them
+        if hasattr(dialog, 'rom_importer_selection'):
+            dialog.rom_importer_selection.clear()
+        else: # Initialize if somehow missed
+            dialog.rom_importer_selection = set()
+            
+        dialog.rom_importer_anchor_idx = -1
+            
+        if hasattr(dialog, 'import_button') and dialog.import_button.winfo_exists():
+            dialog.import_button.config(state=tk.DISABLED) 
+        
+        self._draw_rom_import_selection_highlight() 
+        self._update_rom_importer_info_labels()
 
     def _update_rom_importer_info_labels(self):
         """Updates dynamic labels in the ROM importer (selected count, top-left byte)."""
@@ -8955,50 +9155,70 @@ class TileEditorApp:
             return
         
         dialog = self.rom_import_dialog
-        start = dialog.selected_start_rom_tile_idx
-        end = dialog.selected_end_rom_tile_idx
+        
         count = 0
-        if start != -1: # A selection exists
-            min_idx = min(start, end) if end != -1 else start
-            max_idx = max(start, end) if end != -1 else start
-            count = (max_idx - min_idx) + 1
-        dialog.selection_info_text_var.set(f"Tiles Selected: {count}")
+        if hasattr(dialog, 'rom_importer_selection'):
+            count = len(dialog.rom_importer_selection)
+        
+        if hasattr(dialog, 'selection_info_text_var') and isinstance(dialog.selection_info_text_var, tk.StringVar):
+            try:
+                dialog.selection_info_text_var.set(f"Tiles Selected: {count}")
+            except tk.TclError: # Can happen if dialog is closing
+                pass
+        # top_left_grid_byte_offset_text_var is updated in _draw_rom_importer_canvas
 
-        # The top_left_grid_byte_offset_text_var is updated in _draw_rom_importer_canvas
-        # as it depends on the current scroll position and fine_offset.
-
-    def _draw_rom_tile_preview(self, rom_byte_start_pos):
-        """Draws a single tile from ROM data into the preview canvas."""
+    def _draw_rom_tile_preview(self, rom_byte_start_pos, hovered_rom_tile_absolute_idx=-1): # Added hovered_idx
+        """Draws a single tile from ROM data into the preview canvas, using appropriate colors."""
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog) or \
-           not hasattr(self.rom_import_dialog, 'preview_canvas'): # Check preview_canvas exists
+           not hasattr(self.rom_import_dialog, 'preview_canvas'):
             return
 
         preview_canvas = self.rom_import_dialog.preview_canvas
         rom_data = self.rom_import_dialog.rom_data
+        dialog = self.rom_import_dialog # For accessing selection and current importer colors
         preview_canvas.delete("all")
 
         if rom_byte_start_pos < 0 or rom_byte_start_pos >= len(rom_data):
-            return # Invalid offset
+            return
 
-        # Extract 8 bytes for the tile, padding if near end of ROM
+        # Determine FG/BG colors for this preview
+        preview_fg_idx = getattr(dialog, 'current_importer_fg_idx', WHITE_IDX)
+        preview_bg_idx = getattr(dialog, 'current_importer_bg_idx', BLACK_IDX)
+        
+        selection_dict = getattr(dialog, 'rom_importer_selection', {})
+        if hovered_rom_tile_absolute_idx != -1 and hovered_rom_tile_absolute_idx in selection_dict:
+            stored_colors = selection_dict[hovered_rom_tile_absolute_idx]
+            preview_fg_idx, preview_bg_idx = stored_colors[0], stored_colors[1]
+
+        # Ensure palette indices are valid
+        safe_preview_fg_idx = preview_fg_idx if 0 <= preview_fg_idx < len(self.active_msx_palette) else WHITE_IDX
+        safe_preview_bg_idx = preview_bg_idx if 0 <= preview_bg_idx < len(self.active_msx_palette) else BLACK_IDX
+        color_for_fg_pixel_preview = self.active_msx_palette[safe_preview_fg_idx]
+        color_for_bg_pixel_preview = self.active_msx_palette[safe_preview_bg_idx]
+
         if rom_byte_start_pos + TILE_WIDTH > len(rom_data):
             num_bytes_avail = len(rom_data) - rom_byte_start_pos
             tile_bytes_data = rom_data[rom_byte_start_pos:] + bytes(TILE_WIDTH - num_bytes_avail)
         else:
             tile_bytes_data = rom_data[rom_byte_start_pos : rom_byte_start_pos + TILE_WIDTH]
 
-        pixel_render_size = EDITOR_PIXEL_SIZE # Use main editor's pixel size for preview
-        for r_tile_pixel in range(TILE_HEIGHT): # 0-7
+        pixel_render_size = EDITOR_PIXEL_SIZE
+        for r_tile_pixel in range(TILE_HEIGHT):
+            if r_tile_pixel >= len(tile_bytes_data): continue # Should not happen with padding
             row_byte = tile_bytes_data[r_tile_pixel]
-            for c_tile_pixel in range(TILE_WIDTH): # 0-7
+            for c_tile_pixel in range(TILE_WIDTH):
                 pixel_is_set = (row_byte >> (7 - c_tile_pixel)) & 1
-                color_hex = self.active_msx_palette[WHITE_IDX] if pixel_is_set else self.active_msx_palette[BLACK_IDX]
+                color_hex = color_for_fg_pixel_preview if pixel_is_set else color_for_bg_pixel_preview
                 
                 x1 = c_tile_pixel * pixel_render_size
                 y1 = r_tile_pixel * pixel_render_size
                 x2 = x1 + pixel_render_size
                 y2 = y1 + pixel_render_size
-                preview_canvas.create_rectangle(x1, y1, x2, y2, fill=color_hex, outline="grey") # Use grey outline
+                try:
+                    if preview_canvas.winfo_exists():
+                        preview_canvas.create_rectangle(x1, y1, x2, y2, fill=color_hex, outline="grey")
+                except tk.TclError: # Canvas might be destroying
+                    return 
 
     def _on_rom_canvas_keypress(self, event):
         """Handles keyboard navigation for the ROM importer canvas."""
@@ -9081,100 +9301,117 @@ class TileEditorApp:
         return "break" # Consume the event
 
     def _execute_rom_tile_import(self):
-        """Reads selected tile data from ROM and appends to the main tileset."""
-        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX
+        """Reads selected tile data from ROM and appends to the main tileset, using stored colors."""
+        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors 
+        # Removed WHITE_IDX, BLACK_IDX from globals as they are constants used for default
 
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
         dialog = self.rom_import_dialog
-        start_rom_idx_in_grid = dialog.selected_start_rom_tile_idx
-        end_rom_idx_in_grid = dialog.selected_end_rom_tile_idx
-        rom_data = dialog.rom_data
-        fine_offset = dialog.fine_offset_var.get()
-
-        if start_rom_idx_in_grid == -1: # No selection made
+        
+        selection_dict = getattr(dialog, 'rom_importer_selection', {}) 
+        if not selection_dict: 
             messagebox.showwarning("Import Error", "No tiles selected from ROM.", parent=dialog)
             return
 
-        # Determine the actual range of tiles to import from the grid selection
-        # If end_rom_idx_in_grid is -1, it means only start_rom_idx_in_grid was selected (single tile)
-        actual_start_idx = min(start_rom_idx_in_grid, end_rom_idx_in_grid) if end_rom_idx_in_grid != -1 else start_rom_idx_in_grid
-        actual_end_idx = max(start_rom_idx_in_grid, end_rom_idx_in_grid) if end_rom_idx_in_grid != -1 else start_rom_idx_in_grid
+        rom_data = dialog.rom_data
+        fine_offset = dialog.fine_offset_var.get()
         
-        num_tiles_to_import_attempt = (actual_end_idx - actual_start_idx) + 1
+        sorted_selected_items = sorted(selection_dict.items(), key=lambda item: item[0])
+        
+        num_tiles_to_import_attempt = len(sorted_selected_items)
         imported_tiles_count = 0
         
-        # It's good practice to clear "marked unused" state if the tileset is about to change
-        # This is less critical for append, but good if this function were ever used for "replace"
-        # For now, let's assume appending doesn't invalidate existing marks unless an imported
-        # tile happens to be identical to a previously marked one.
-        # self._clear_marked_unused(trigger_redraw=False) # Optional, consider implications
+        first_newly_imported_tile_index = -1 # To select the first of the batch
 
-        for i in range(num_tiles_to_import_attempt):
+        for current_rom_tile_absolute_idx, (fg_idx_for_import, bg_idx_for_import) in sorted_selected_items:
             if num_tiles_in_set >= MAX_TILES:
                 messagebox.showinfo(
                     "Import Limit Reached",
                     f"Tileset limit of {MAX_TILES} reached.\nImported {imported_tiles_count} of {num_tiles_to_import_attempt} selected tiles.",
                     parent=dialog
                 )
-                break # Stop importing further tiles
-
-            # current_rom_tile_absolute_idx is the index within the conceptual full grid from ROM
-            current_rom_tile_absolute_idx = actual_start_idx + i
-            
-            # Calculate the starting byte position in the original ROM data for this tile
-            rom_byte_start_pos = fine_offset + (current_rom_tile_absolute_idx * TILE_WIDTH)
-
-            if rom_byte_start_pos >= len(rom_data): # Should not happen if selection was valid
-                print(f"Warning: ROM Import attempting to read past end of data. ROM Tile Idx: {current_rom_tile_absolute_idx}, Byte Pos: {rom_byte_start_pos}")
                 break 
 
-            # Prepare pattern and color data for the new tile
-            new_tile_pattern_data = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
-            new_tile_color_data = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)] # Default B/W
+            rom_byte_start_pos = fine_offset + (current_rom_tile_absolute_idx * TILE_WIDTH)
 
-            # Extract 8 bytes for the tile, padding if near end of ROM
+            if not (0 <= rom_byte_start_pos < len(rom_data)):
+                self.debug(f"[DEBUG] ROM Import: Skipping invalid ROM tile index {current_rom_tile_absolute_idx} leading to offset {rom_byte_start_pos} out of bounds for ROM size {len(rom_data)}")
+                continue 
+
+            new_tile_pattern_data = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+            new_tile_color_data = [(fg_idx_for_import, bg_idx_for_import) for _ in range(TILE_HEIGHT)]
+
             if rom_byte_start_pos + TILE_WIDTH > len(rom_data):
                 num_bytes_avail = len(rom_data) - rom_byte_start_pos
                 tile_bytes_from_rom = rom_data[rom_byte_start_pos:] + bytes(TILE_WIDTH - num_bytes_avail)
             else:
                 tile_bytes_from_rom = rom_data[rom_byte_start_pos : rom_byte_start_pos + TILE_WIDTH]
 
-            # Populate pattern from the bytes
             for r_pixel in range(TILE_HEIGHT):
-                row_byte_value = tile_bytes_from_rom[r_pixel]
-                for c_pixel in range(TILE_WIDTH):
-                    new_tile_pattern_data[r_pixel][c_pixel] = (row_byte_value >> (7 - c_pixel)) & 1
+                if r_pixel < len(tile_bytes_from_rom):
+                    row_byte_value = tile_bytes_from_rom[r_pixel]
+                    for c_pixel in range(TILE_WIDTH):
+                        new_tile_pattern_data[r_pixel][c_pixel] = (row_byte_value >> (7 - c_pixel)) & 1
+                else: 
+                    for c_pixel in range(TILE_WIDTH):
+                        new_tile_pattern_data[r_pixel][c_pixel] = 0 
             
-            # Assign to the next available slot in the main application's tileset
-            # (tileset_patterns and tileset_colors are pre-initialized to MAX_TILES length)
-            if num_tiles_in_set < MAX_TILES: # Double check, though outer loop also checks
-                tileset_patterns[num_tiles_in_set] = new_tile_pattern_data
-                tileset_colors[num_tiles_in_set] = new_tile_color_data
-                
-                num_tiles_in_set += 1
-                imported_tiles_count += 1
-                self._mark_project_modified() # Mark project as modified
-            else: # Should have been caught by outer loop's break
-                print("Error: MAX_TILES reached unexpectedly inside import loop.")
-                break
+            if num_tiles_in_set < MAX_TILES:
+                if len(tileset_patterns) > num_tiles_in_set and len(tileset_colors) > num_tiles_in_set:
+                    if first_newly_imported_tile_index == -1: # Capture index of the first tile added in this batch
+                        first_newly_imported_tile_index = num_tiles_in_set
+                    
+                    tileset_patterns[num_tiles_in_set] = new_tile_pattern_data
+                    tileset_colors[num_tiles_in_set] = new_tile_color_data 
+                    
+                    num_tiles_in_set += 1
+                    imported_tiles_count += 1
+                    self._mark_project_modified()
+                else:
+                    self.debug(f"[DEBUG] ROM Import Error: Tileset data structures not large enough for index {num_tiles_in_set}.")
+                    break 
+            else:
+                break 
 
+        # Store a reference to the dialog before closing, as self.rom_import_dialog will be None after close
+        # This is mostly for the parent=dialog in messagebox, not strictly needed if we close first.
+        parent_dialog_for_messagebox = self.rom_import_dialog 
+        
+        # Close the importer dialog first
+        self._close_rom_importer_dialog() 
 
         if imported_tiles_count > 0:
-            current_tile_index = num_tiles_in_set - 1 # Select the last imported tile
+            # If tiles were imported, select the first one of the newly imported batch
+            if first_newly_imported_tile_index != -1:
+                current_tile_index = first_newly_imported_tile_index
+            else: # Fallback if somehow no tiles were imported but count > 0 (should not happen)
+                current_tile_index = num_tiles_in_set - 1 
             
-            self.clear_all_caches() # Imported tiles mean existing caches are invalid
-            self.invalidate_minimap_background_cache() # If supertiles/map get auto-updated
+            self.clear_all_caches() 
+            self.invalidate_minimap_background_cache() 
             
-            self.update_all_displays(changed_level="all") # Refresh all UI
-            self.scroll_viewers_to_tile(current_tile_index) # Scroll to new tile
-            self._update_editor_button_states() # Enable/disable add/insert/delete
-            self._update_edit_menu_state() # Update copy/paste availability
+            # Select the Tile Editor tab
+            if hasattr(self, 'notebook') and hasattr(self, 'tab_tile_editor'):
+                try:
+                    self.notebook.select(self.tab_tile_editor)
+                except tk.TclError:
+                    self.debug("[DEBUG] TclError selecting tile editor tab after import (notebook/tab gone?).")
             
-            messagebox.showinfo("Import Successful", f"Successfully imported {imported_tiles_count} tile(s).", parent=dialog)
-
-        self._close_rom_importer_dialog() # Close the importer dialog
+            self.update_all_displays(changed_level="all") # This will draw the selected tab
+            self.scroll_viewers_to_tile(current_tile_index) 
+            self._update_editor_button_states() 
+            self._update_edit_menu_state() 
+            
+            messagebox.showinfo("Import Successful", 
+                                f"Successfully imported {imported_tiles_count} tile(s).", 
+                                parent=self.root) # Change parent to root as dialog is closed
+        elif num_tiles_to_import_attempt > 0 : # Attempted to import but 0 were actually imported
+            # This case might happen if MAX_TILES was already reached before starting
+             messagebox.showwarning("Import Notice", 
+                                   "No new tiles were imported. Tileset might be full.", 
+                                   parent=self.root)
 
     def _get_zoomed_supertile_pixel_dims(self):
         """
@@ -9450,6 +9687,134 @@ class TileEditorApp:
         # Now, call the main drawing function for the ROM importer canvas
         # This function will use the current value of dialog.fine_offset_var.get()
         self._draw_rom_importer_canvas()
+
+    def _update_importer_color_swatches(self):
+        """Updates the BG/FG color swatches in the ROM importer dialog."""
+        if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
+            return
+        
+        dialog = self.rom_import_dialog
+        
+        # Ensure swatches and color indices exist on dialog
+        if not all(hasattr(dialog, attr) for attr in ['importer_fg_swatch', 'importer_bg_swatch', 
+                                                      'current_importer_fg_idx', 'current_importer_bg_idx']):
+            return
+
+        try:
+            fg_color_hex = self.active_msx_palette[dialog.current_importer_fg_idx]
+            bg_color_hex = self.active_msx_palette[dialog.current_importer_bg_idx]
+
+            if dialog.importer_fg_swatch.winfo_exists():
+                dialog.importer_fg_swatch.config(bg=fg_color_hex, fg=get_contrast_color(fg_color_hex))
+            if dialog.importer_bg_swatch.winfo_exists():
+                dialog.importer_bg_swatch.config(bg=bg_color_hex, fg=get_contrast_color(bg_color_hex))
+        except IndexError:
+            self.debug("[DEBUG] Error updating importer swatches: Palette index out of range.")
+        except tk.TclError:
+            self.debug("[DEBUG] Error updating importer swatches: TclError (widget likely destroyed).")
+
+
+    def _pick_importer_color(self, swatch_type):
+        """Handles click on an importer FG/BG swatch to choose a color from the main palette."""
+        if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog) or \
+           not self.active_msx_palette:
+            return
+
+        dialog = self.rom_import_dialog
+        
+        # Create a temporary Toplevel for color picking
+        picker_win = tk.Toplevel(dialog)
+        picker_win.title(f"Select Importer {'FG' if swatch_type == 'fg' else 'BG'} Color")
+        picker_win.transient(dialog)
+        picker_win.grab_set()
+        picker_win.resizable(False, False)
+
+        picker_canvas_size = 4 * (PALETTE_SQUARE_SIZE + 2) # Use same size as tile editor palette
+        picker_canvas = tk.Canvas(picker_win, 
+                                  width=picker_canvas_size, 
+                                  height=picker_canvas_size, 
+                                  borderwidth=0, highlightthickness=0)
+        picker_canvas.pack(padx=5, pady=5)
+
+        # Store selected index from picker
+        selected_palette_index_from_picker = tk.IntVar(value=-1) 
+
+        def on_palette_color_click(event, index_clicked):
+            selected_palette_index_from_picker.set(index_clicked)
+            picker_win.destroy()
+
+        for i in range(len(self.active_msx_palette)): # Iterate up to 16 colors
+            row, col = divmod(i, 4)
+            x1 = col * (PALETTE_SQUARE_SIZE + 2) + 2
+            y1 = row * (PALETTE_SQUARE_SIZE + 2) + 2
+            x2 = x1 + PALETTE_SQUARE_SIZE
+            y2 = y1 + PALETTE_SQUARE_SIZE
+            color_hex = self.active_msx_palette[i]
+            
+            rect_id = picker_canvas.create_rectangle(x1, y1, x2, y2, fill=color_hex, outline="grey", width=1)
+            picker_canvas.tag_bind(rect_id, "<Button-1>", 
+                                   lambda e, idx=i: on_palette_color_click(e, idx))
+        
+        # Center picker window
+        picker_win.update_idletasks()
+        dialog_x = dialog.winfo_x()
+        dialog_y = dialog.winfo_y()
+        dialog_w = dialog.winfo_width()
+        # dialog_h = dialog.winfo_height() # Not needed for this centering
+        picker_w = picker_win.winfo_reqwidth()
+        picker_h = picker_win.winfo_reqheight()
+        # Position near the swatch, or center if too complex
+        # For now, simple centering on dialog:
+        x_pos = dialog_x + (dialog_w // 2) - (picker_w // 2)
+        y_pos = dialog_y + 100 # Slightly offset from top
+        picker_win.geometry(f"+{x_pos}+{y_pos}")
+
+        picker_win.wait_window() # Wait for picker to close
+
+        chosen_idx = selected_palette_index_from_picker.get()
+        if 0 <= chosen_idx < len(self.active_msx_palette):
+            changed_color = False
+            if swatch_type == 'fg':
+                if dialog.current_importer_fg_idx != chosen_idx:
+                    dialog.current_importer_fg_idx = chosen_idx
+                    changed_color = True
+            elif swatch_type == 'bg':
+                if dialog.current_importer_bg_idx != chosen_idx:
+                    dialog.current_importer_bg_idx = chosen_idx
+                    changed_color = True
+            
+            if changed_color:
+                self._update_importer_color_swatches()
+                self._draw_rom_importer_canvas() # Redraw grid with new default unselected colors
+
+    def confirm_quit(self):
+        """Checks for unsaved changes and prompts user before quitting."""
+        if self.project_modified:
+            # Ask: "Save changes to [Project Name / Untitled] before quitting?"
+            project_name_display = "Untitled"
+            if self.current_project_base_path:
+                project_name_display = os.path.basename(self.current_project_base_path)
+            
+            response = messagebox.askyesnocancel(
+                "Quit Application",
+                f"Save changes to '{project_name_display}' before quitting?",
+                parent=self.root # Ensure dialog is on top of main window
+            )
+
+            if response is True:  # Yes, Save
+                save_successful = self.save_project() # save_project handles "Save As" if needed
+                if save_successful: # If save_project itself wasn't cancelled by user
+                    self.root.destroy()
+                # If save_successful is False, it means user cancelled the save dialog
+                # or an error occurred. In this case, we DON'T quit, allowing them
+                # to try saving again or to cancel quitting.
+            elif response is False:  # No, Don't Save
+                self.root.destroy()
+            elif response is None:  # Cancel
+                return # Do nothing, don't quit
+        else:
+            # No unsaved changes, quit directly
+            self.root.destroy()
 
 # --- Main Execution ---
 if __name__ == "__main__":
