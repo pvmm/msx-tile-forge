@@ -142,7 +142,10 @@ def get_contrast_color(hex_color):
 # --- Application Class ---
 class TileEditorApp:
     def __init__(self, root):
+        self.debug_enabled = getattr(root, 'app_debug_mode', False)
+
         self.root = root
+
         self.root.title("MSX Tile Forge - Untitled")
         with suppress(tk.TclError):
             self.root.state("zoomed")
@@ -251,6 +254,11 @@ class TileEditorApp:
         self._update_supertile_rotate_button_state() 
 
         self._update_map_cursor()
+
+    def debug(self, message):
+        """Prints the message to the console only if debug mode is enabled."""
+        if self.debug_enabled:
+            print(str(message)) # Ensure message is a string
 
     # --- Palette Conversion Helpers ---
     def _hex_to_rgb7(self, hex_color):
@@ -8227,7 +8235,7 @@ class TileEditorApp:
         name_label.pack(anchor="w", pady=(0, 5))
 
         # Version and Author
-        info_text = "Version: 0.0.30\nAuthor: Damned Angel + Gemini AI"
+        info_text = "Version: 0.0.31\nAuthor: Damned Angel + Gemini AI"
         info_label = ttk.Label(text_frame, text=info_text, justify=tk.LEFT)
         info_label.pack(anchor="w")
 
@@ -8423,58 +8431,51 @@ class TileEditorApp:
         """Creates and displays the modal dialog for ROM tile importing."""
         self.rom_import_dialog = tk.Toplevel(self.root)
         self.rom_import_dialog.title(f"Import Tiles from: {os.path.basename(rom_filepath)}")
-        self.rom_import_dialog.transient(self.root) # Keep on top of main window
-        self.rom_import_dialog.grab_set() # Modal behavior
+        self.rom_import_dialog.transient(self.root)
+        self.rom_import_dialog.grab_set()
         self.rom_import_dialog.resizable(True, True)
-        self.rom_import_dialog.minsize(400, 300) # Set a minimum reasonable size
+        self.rom_import_dialog.minsize(400, 300)
 
-        # Store ROM data and related state directly on the dialog instance for easier access
-        # This makes the helper methods cleaner as they can access 'self.rom_import_dialog.attribute'
-        dialog = self.rom_import_dialog # Convenience alias
+        dialog = self.rom_import_dialog
         dialog.rom_data = rom_data
-        dialog.rom_filepath = rom_filepath # Though not strictly needed after loading
-        dialog.fine_offset_var = tk.IntVar(value=0) # Use specific name for var
-        dialog.selected_start_rom_tile_idx = -1 # Index relative to current grid view's potential tiles
+        dialog.rom_filepath = rom_filepath
+        dialog.fine_offset_var = tk.IntVar(value=0)
+        dialog.selected_start_rom_tile_idx = -1
         dialog.selected_end_rom_tile_idx = -1
         dialog.hover_info_text_var = tk.StringVar(value="Offset: N/A | Grid Index: N/A")
         dialog.selection_info_text_var = tk.StringVar(value="Tiles Selected: 0")
         dialog.top_left_grid_byte_offset_text_var = tk.StringVar(value="Grid Top-Left Byte: N/A")
+        dialog.redraw_timer_id = None # Initialize redraw_timer_id for debouncing Configure
 
-
-        # --- Main Frame ---
         main_dialog_frame = ttk.Frame(dialog, padding=5)
         main_dialog_frame.pack(expand=True, fill="both")
 
-        # --- Top Controls Frame (for offset slider) ---
         top_controls_frame = ttk.Frame(main_dialog_frame)
         top_controls_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
 
         ttk.Label(top_controls_frame, text="Fine Offset (0-7 bytes):").pack(side=tk.LEFT, padx=(0,5))
-        # The command will call a handler that redraws the canvas
         offset_slider = ttk.Scale(
             top_controls_frame,
             from_=0,
             to=7,
             orient=tk.HORIZONTAL,
-            variable=dialog.fine_offset_var, # Link to the IntVar
-            command=lambda val: self._on_rom_importer_setting_change() # Redraw on change
+            variable=dialog.fine_offset_var,
+            command=lambda val: self._on_rom_importer_setting_change()
         )
         offset_slider.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
 
-        # --- Middle Frame (Canvas and Preview) ---
         middle_frame = ttk.Frame(main_dialog_frame)
         middle_frame.pack(expand=True, fill="both")
 
-        # --- Canvas and Scrollbars Frame (Left part of middle_frame) ---
         canvas_frame = ttk.Frame(middle_frame)
         canvas_frame.pack(side=tk.LEFT, expand=True, fill="both")
 
         rom_v_scroll = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
         rom_h_scroll = ttk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL)
 
-        dialog.canvas = tk.Canvas( # Store canvas on dialog instance
+        dialog.canvas = tk.Canvas(
             canvas_frame,
-            bg="darkgrey", # Or another suitable background
+            bg="darkgrey",
             yscrollcommand=rom_v_scroll.set,
             xscrollcommand=rom_h_scroll.set,
             highlightthickness=0
@@ -8482,21 +8483,40 @@ class TileEditorApp:
         rom_v_scroll.config(command=dialog.canvas.yview)
         rom_h_scroll.config(command=dialog.canvas.xview)
 
+        # Add scrollbar bindings to trigger redraw
+        rom_v_scroll.bind("<B1-Motion>",
+            lambda event: self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
+                          if self.rom_import_dialog and tk.Toplevel.winfo_exists(self.rom_import_dialog) and
+                             hasattr(self.rom_import_dialog, 'canvas') and self.rom_import_dialog.canvas.winfo_exists()
+                          else None)
+        rom_v_scroll.bind("<ButtonRelease-1>",
+            lambda event: self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
+                          if self.rom_import_dialog and tk.Toplevel.winfo_exists(self.rom_import_dialog) and
+                             hasattr(self.rom_import_dialog, 'canvas') and self.rom_import_dialog.canvas.winfo_exists()
+                          else None)
+        rom_h_scroll.bind("<B1-Motion>",
+            lambda event: self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
+                          if self.rom_import_dialog and tk.Toplevel.winfo_exists(self.rom_import_dialog) and
+                             hasattr(self.rom_import_dialog, 'canvas') and self.rom_import_dialog.canvas.winfo_exists()
+                          else None)
+        rom_h_scroll.bind("<ButtonRelease-1>",
+            lambda event: self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
+                          if self.rom_import_dialog and tk.Toplevel.winfo_exists(self.rom_import_dialog) and
+                             hasattr(self.rom_import_dialog, 'canvas') and self.rom_import_dialog.canvas.winfo_exists()
+                          else None)
+
         dialog.canvas.grid(row=0, column=0, sticky="nsew")
         rom_v_scroll.grid(row=0, column=1, sticky="ns")
         rom_h_scroll.grid(row=1, column=0, sticky="ew")
         canvas_frame.grid_rowconfigure(0, weight=1)
         canvas_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Live Preview Frame (Right part of middle_frame) ---
-        preview_outer_frame = ttk.Frame(middle_frame, padding=(5,0)) # Add some padding from canvas
+        preview_outer_frame = ttk.Frame(middle_frame, padding=(5,0))
         preview_outer_frame.pack(side=tk.RIGHT, fill=tk.Y, anchor="ne")
-
         preview_label_frame = ttk.LabelFrame(preview_outer_frame, text="Live Preview")
-        preview_label_frame.pack(pady=0, anchor="n") # Anchor to north
-
-        preview_canvas_size = TILE_WIDTH * EDITOR_PIXEL_SIZE # Use main editor's pixel size
-        dialog.preview_canvas = tk.Canvas( # Store on dialog instance
+        preview_label_frame.pack(pady=0, anchor="n")
+        preview_canvas_size = TILE_WIDTH * EDITOR_PIXEL_SIZE
+        dialog.preview_canvas = tk.Canvas(
             preview_label_frame,
             width=preview_canvas_size,
             height=preview_canvas_size,
@@ -8505,75 +8525,50 @@ class TileEditorApp:
         )
         dialog.preview_canvas.pack(padx=5, pady=5)
 
-
-        # --- Bottom Frame (Info/Status Bar and Buttons) ---
         bottom_frame = ttk.Frame(main_dialog_frame)
         bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5,0))
 
-        # Info Bar
         info_bar_frame = ttk.Frame(bottom_frame, relief="sunken", padding=3)
-        info_bar_frame.pack(fill=tk.X, expand=False, side=tk.TOP, pady=(0,5)) # Place above buttons
-
+        info_bar_frame.pack(fill=tk.X, expand=False, side=tk.TOP, pady=(0,5))
         dialog.status_bar_top_left_label = ttk.Label(info_bar_frame, textvariable=dialog.top_left_grid_byte_offset_text_var)
         dialog.status_bar_top_left_label.pack(side=tk.LEFT, padx=2)
-        
-        ttk.Label(info_bar_frame, text="|").pack(side=tk.LEFT, padx=2) # Separator
-
+        ttk.Label(info_bar_frame, text="|").pack(side=tk.LEFT, padx=2)
         hover_label = ttk.Label(info_bar_frame, textvariable=dialog.hover_info_text_var)
         hover_label.pack(side=tk.LEFT, padx=2)
-
-        ttk.Label(info_bar_frame, text="|").pack(side=tk.LEFT, padx=2) # Separator
-
+        ttk.Label(info_bar_frame, text="|").pack(side=tk.LEFT, padx=2)
         selection_label = ttk.Label(info_bar_frame, textvariable=dialog.selection_info_text_var)
-        selection_label.pack(side=tk.LEFT, padx=2) # Selection count
+        selection_label.pack(side=tk.LEFT, padx=2)
 
-        # Buttons Frame
         buttons_frame = ttk.Frame(bottom_frame)
-        buttons_frame.pack(fill=tk.X, expand=False, side=tk.TOP) # Below info bar
-
-        dialog.import_button = ttk.Button( # Store on dialog instance
+        buttons_frame.pack(fill=tk.X, expand=False, side=tk.TOP)
+        dialog.import_button = ttk.Button(
             buttons_frame, text="Import", command=self._execute_rom_tile_import, state=tk.DISABLED
         )
-        # Pack import button to the right of cancel
         cancel_button = ttk.Button(
             buttons_frame, text="Cancel", command=self._close_rom_importer_dialog
         )
-        cancel_button.pack(side=tk.RIGHT, padx=(0,0)) # No right padding for cancel
-        dialog.import_button.pack(side=tk.RIGHT, padx=(0,5)) # Padding between cancel and import
+        cancel_button.pack(side=tk.RIGHT, padx=(0,0))
+        dialog.import_button.pack(side=tk.RIGHT, padx=(0,5))
 
-
-        # --- Bindings ---
-        # Redraw canvas if dialog is resized or fine_offset changes
         dialog.canvas.bind("<Configure>", lambda e: self._on_rom_importer_setting_change(configure_event=True))
-        # Mouse events for selection and hover info
         dialog.canvas.bind("<Motion>", self._on_rom_canvas_motion)
         dialog.canvas.bind("<Leave>", self._on_rom_canvas_leave)
-        dialog.canvas.bind("<Button-1>", self._on_rom_canvas_left_click) # Left click for selection
-        dialog.canvas.bind("<Button-3>", self._on_rom_canvas_right_click) # Right-click to cancel selection
-        dialog.bind("<Escape>", lambda e: self._clear_rom_import_selection()) # Esc to cancel selection
-
-        # Keyboard navigation for canvas (needs focus)
-        dialog.canvas.bind("<FocusIn>", lambda e: None) # Dummy to allow canvas to take focus
-        dialog.canvas.bind("<Key>", self._on_rom_canvas_keypress) # Handle key presses on canvas
-        dialog.canvas.focus_set() # Set initial focus to the canvas for keyboard nav
-
-        # Protocol for window close button (X)
+        dialog.canvas.bind("<Button-1>", self._on_rom_canvas_left_click)
+        dialog.canvas.bind("<Button-3>", self._on_rom_canvas_right_click)
+        dialog.bind("<Escape>", lambda e: self._clear_rom_import_selection())
+        dialog.canvas.bind("<FocusIn>", lambda e: None)
+        dialog.canvas.bind("<Key>", self._on_rom_canvas_keypress)
+        dialog.canvas.focus_set()
         dialog.protocol("WM_DELETE_WINDOW", self._close_rom_importer_dialog)
+        dialog.after(20, lambda: self._on_rom_importer_setting_change(configure_event=True)) # Ensure initial draw after geometry
 
-        # Initial draw (deferred to allow window to actually draw and get dimensions)
-        dialog.after(20, self._on_rom_importer_setting_change) # Slight delay to ensure geometry is set
-
-        # Center dialog relative to root window
-        dialog.update_idletasks() # Ensure dimensions are calculated
+        dialog.update_idletasks()
         root_w = self.root.winfo_width()
         root_h = self.root.winfo_height()
         root_x = self.root.winfo_x()
         root_y = self.root.winfo_y()
-
-        # Ensure dialog is not smaller than minsize
-        dialog_w = dialog.winfo_reqwidth() # Use requested width
-        dialog_h = dialog.winfo_reqheight() # Use requested height
-
+        dialog_w = dialog.winfo_reqwidth()
+        dialog_h = dialog.winfo_reqheight()
         x_pos = root_x + (root_w // 2) - (dialog_w // 2)
         y_pos = root_y + (root_h // 2) - (dialog_h // 2)
         dialog.geometry(f"{dialog_w}x{dialog_h}+{x_pos}+{y_pos}")
@@ -8589,117 +8584,152 @@ class TileEditorApp:
         """Called when fine_offset slider changes or canvas is configured/resized."""
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
-        
-        # Debounce or defer if canvas is too small during configure
+
+        dialog = self.rom_import_dialog
+
         if configure_event:
-            canvas = self.rom_import_dialog.canvas
-            # If canvas has virtually no size, it's probably not ready. Defer draw.
-            if canvas.winfo_width() < VIEWER_TILE_SIZE or \
-               canvas.winfo_height() < VIEWER_TILE_SIZE:
-                self.rom_import_dialog.after(50, self._draw_rom_importer_canvas)
-                return
-        
-        self._draw_rom_importer_canvas() # Proceed with drawing
+            # Ensure redraw_timer_id attribute exists on the dialog
+            if not hasattr(dialog, 'redraw_timer_id'):
+                dialog.redraw_timer_id = None # Initialize if it was missed
+
+            if dialog.redraw_timer_id is not None:
+                dialog.after_cancel(dialog.redraw_timer_id)
+            # Schedule the debounced draw call
+            dialog.redraw_timer_id = dialog.after(150, self._perform_debounced_rom_canvas_draw)
+            return # Debouncing will handle the draw
+        else:
+            # For non-configure events (like slider change), draw more directly
+            # The _draw_rom_importer_canvas itself has a check for tiny canvas
+            # but calling the debounced version here too for consistency might be safer,
+            # or call _draw_rom_importer_canvas if immediate feedback is desired for slider.
+            # Let's call _draw_rom_importer_canvas for immediate slider feedback.
+            self._draw_rom_importer_canvas()
 
     def _draw_rom_importer_canvas(self):
         """Draws the content of the ROM importer canvas (tile grid)."""
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
-        dialog = self.rom_import_dialog # Convenience
-        canvas = dialog.canvas
+        self.debug("\n[DEBUG] --- ROM Importer Canvas Redraw START ---")
+
+        dialog = self.rom_import_dialog
+        canvas = getattr(dialog, 'canvas', None)
+        if not canvas or not canvas.winfo_exists():
+            self.debug("[DEBUG] ROM Importer canvas widget no longer exists. Aborting draw.")
+            self.debug("[DEBUG] --- ROM Importer Canvas Redraw END (canvas gone) ---")
+            return
+
         rom_data = dialog.rom_data
         fine_offset = dialog.fine_offset_var.get()
 
-        canvas.delete("all") # Clear previous drawing
-        dialog.tile_image_refs = [] # To prevent PhotoImage garbage collection
+        canvas.delete("all")
+        dialog.tile_image_refs = []
 
         canvas_width = canvas.winfo_width()
         canvas_height = canvas.winfo_height()
 
-        if canvas_width <= 1 or canvas_height <= 1: # Canvas not yet sized properly
+        self.debug(f"[DEBUG] Canvas Dimensions (WxH): {canvas_width}x{canvas_height}")
+        self.debug(f"[DEBUG] ROM Data Size: {len(rom_data)} bytes")
+        self.debug(f"[DEBUG] Fine Offset: {fine_offset} bytes")
+
+        if canvas_width <= 1 or canvas_height <= 1:
+            self.debug("[DEBUG] Canvas not yet sized (or too small). Aborting draw.")
+            self.debug("[DEBUG] --- ROM Importer Canvas Redraw END (aborted small canvas) ---")
             return
 
-        tile_display_size = VIEWER_TILE_SIZE # Fixed display size for tiles in importer
-        padding = 1 # Padding around each tile
+        tile_display_size = VIEWER_TILE_SIZE
+        padding = 1
         
-        # Calculate how many tiles can fit across the current canvas width
         tiles_across = max(1, canvas_width // (tile_display_size + padding))
         
-        # Calculate total number of tiles that *could* be formed from the ROM data
-        # with the current fine_offset
-        if len(rom_data) <= fine_offset: # Not enough data for even one byte
+        if len(rom_data) <= fine_offset:
             total_potential_tiles = 0
         else:
-            total_potential_tiles = (len(rom_data) - fine_offset) // TILE_WIDTH 
+            total_potential_tiles = (len(rom_data) - fine_offset) // TILE_WIDTH
+        
+        self.debug(f"[DEBUG] Tile Display Size: {tile_display_size}, Padding: {padding}")
+        self.debug(f"[DEBUG] Tiles Across (calculated): {tiles_across}")
+        self.debug(f"[DEBUG] Total Potential Tiles (from ROM data): {total_potential_tiles}")
         
         if total_potential_tiles <= 0:
-             dialog.canvas.config(scrollregion=(0,0,1,1)) # Minimal scroll region
-             self._update_rom_importer_info_labels() # Update labels (e.g., top-left byte)
+             try:
+                 if canvas.winfo_exists():
+                     canvas.config(scrollregion=(0,0,1,1))
+             except tk.TclError:
+                 self.debug("[DEBUG] TclError configuring scrollregion for no potential tiles (canvas likely destroying).")
+             self._update_rom_importer_info_labels()
+             self.debug("[DEBUG] No potential tiles. Scrollregion set to minimal. Aborting further draw.")
+             self.debug("[DEBUG] --- ROM Importer Canvas Redraw END (no tiles) ---")
              return
 
         num_rows_in_rom_data = math.ceil(total_potential_tiles / tiles_across)
         
-        # Set the scrollable region of the canvas
         scroll_region_width = tiles_across * (tile_display_size + padding) + padding
         scroll_region_height = num_rows_in_rom_data * (tile_display_size + padding) + padding
-        dialog.canvas.config(scrollregion=(0, 0, scroll_region_width, scroll_region_height))
+        scroll_region_width = max(1, scroll_region_width)
+        scroll_region_height = max(1, scroll_region_height)
 
-        # Determine visible area based on scroll position
-        # canvasx/y(0) gives the coordinate of the top-left visible part of the scrollable area
+        self.debug(f"[DEBUG] Num Rows in ROM Data (calculated for grid): {num_rows_in_rom_data}")
+        self.debug(f"[DEBUG] Scroll Region (WxH): {scroll_region_width}x{scroll_region_height}")
+        
+        try:
+            if canvas.winfo_exists():
+                canvas.config(scrollregion=(0, 0, scroll_region_width, scroll_region_height))
+        except tk.TclError:
+            self.debug("[DEBUG] TclError configuring scrollregion (canvas likely destroying).")
+            self.debug("[DEBUG] --- ROM Importer Canvas Redraw END (TclError on scrollregion) ---")
+            return
+
         view_y1 = canvas.canvasy(0)
         view_y2 = canvas.canvasy(canvas_height)
 
-        # Calculate which rows of tiles are visible
         start_row_idx = max(0, int(view_y1 // (tile_display_size + padding)))
         end_row_idx = min(num_rows_in_rom_data, int(math.ceil(view_y2 / (tile_display_size + padding))))
+        if (view_y2 > view_y1) and (view_y2 % (tile_display_size + padding) == 0):
+             end_row_idx = min(num_rows_in_rom_data, end_row_idx + 1)
+        end_row_idx = max(start_row_idx, end_row_idx)
 
-        # Update the displayed top-left grid byte offset
-        # This is the byte in the ROM that corresponds to the tile at grid (0, start_row_idx)
-        # which is the first tile drawn in the visible area.
+        self.debug(f"[DEBUG] Canvas Y-View (scroll_coord_start, scroll_coord_end): {view_y1}, {view_y2}")
+        self.debug(f"[DEBUG] Visible Grid Rows (start_idx for loop, end_idx for loop): {start_row_idx}, {end_row_idx}")
+
+        if not hasattr(dialog, 'top_left_grid_byte_offset'):
+            dialog.top_left_grid_byte_offset = 0 
+
         first_visible_rom_tile_idx = start_row_idx * tiles_across
         dialog.top_left_grid_byte_offset = fine_offset + (first_visible_rom_tile_idx * TILE_WIDTH)
-        dialog.top_left_grid_byte_offset_text_var.set(f"Grid Top-Left Byte: {dialog.top_left_grid_byte_offset} (0x{dialog.top_left_grid_byte_offset:X})")
+        if hasattr(dialog, 'top_left_grid_byte_offset_text_var'):
+            try:
+                dialog.top_left_grid_byte_offset_text_var.set(f"Grid Top-Left Byte: {dialog.top_left_grid_byte_offset} (0x{dialog.top_left_grid_byte_offset:X})")
+            except tk.TclError:
+                pass
 
-
-        for r_grid in range(start_row_idx, end_row_idx): # Iterate only visible rows
+        drawn_tile_count_this_pass = 0
+        for r_grid in range(start_row_idx, end_row_idx):
             for c_grid in range(tiles_across):
-                # This is the index of the tile if the entire ROM was laid out with current settings
-                current_rom_tile_absolute_idx = r_grid * tiles_across + c_grid 
+                current_rom_tile_absolute_idx = r_grid * tiles_across + c_grid
                 
                 if current_rom_tile_absolute_idx >= total_potential_tiles:
-                    continue # Drawing past the end of available tiles
+                    continue
 
-                # Calculate the starting byte position in the original ROM data for this tile
                 rom_byte_start_pos = fine_offset + (current_rom_tile_absolute_idx * TILE_WIDTH)
                 
-                # Extract 8 bytes for the tile, padding if near end of ROM
                 if rom_byte_start_pos + TILE_WIDTH > len(rom_data):
-                    # Partial tile at the end of the ROM data
                     num_bytes_avail = len(rom_data) - rom_byte_start_pos
-                    tile_bytes_data = rom_data[rom_byte_start_pos:] + bytes(TILE_WIDTH - num_bytes_avail) # Pad with zeros
+                    tile_bytes_data = rom_data[rom_byte_start_pos:] + bytes(TILE_WIDTH - num_bytes_avail)
                 else:
                     tile_bytes_data = rom_data[rom_byte_start_pos : rom_byte_start_pos + TILE_WIDTH]
 
-                # Create PhotoImage for this tile (using black/white from active palette)
                 img = tk.PhotoImage(width=tile_display_size, height=tile_display_size)
-                dialog.tile_image_refs.append(img) # Store ref to prevent GC
+                dialog.tile_image_refs.append(img)
 
-                # Draw pixels onto the PhotoImage
-                # (Simplified drawing: assumes TILE_WIDTH/HEIGHT == 8 for direct mapping)
-                for y_pixel_in_tile in range(TILE_HEIGHT): # 0-7
+                for y_pixel_in_tile in range(TILE_HEIGHT):
                     row_byte = tile_bytes_data[y_pixel_in_tile]
                     line_data_hex = []
-                    for x_pixel_in_tile in range(TILE_WIDTH): # 0-7
+                    for x_pixel_in_tile in range(TILE_WIDTH):
                         pixel_is_set = (row_byte >> (7 - x_pixel_in_tile)) & 1
-                        # Map to pixel display coordinates if tile_display_size > TILE_HEIGHT/WIDTH
-                        # For VIEWER_TILE_SIZE = 16, and TILE_HEIGHT=8, each tile pixel becomes 2x2 display pixels
                         color_hex = self.active_msx_palette[WHITE_IDX] if pixel_is_set else self.active_msx_palette[BLACK_IDX]
                         line_data_hex.append(color_hex)
                     
-                    # Efficiently put whole rows if tile_display_size matches TILE_HEIGHT,
-                    # otherwise, this simple pixel-by-pixel put is needed.
-                    # For VIEWER_TILE_SIZE, we need to scale.
                     y_img_start = y_pixel_in_tile * (tile_display_size // TILE_HEIGHT)
                     y_img_end = (y_pixel_in_tile + 1) * (tile_display_size // TILE_HEIGHT)
 
@@ -8708,17 +8738,34 @@ class TileEditorApp:
                         for hex_val in line_data_hex:
                             scaled_line_data_hex.extend([hex_val] * (tile_display_size // TILE_WIDTH))
                         try:
+                            # Removed: if img.winfo_exists():
                             img.put("{" + " ".join(scaled_line_data_hex) + "}", to=(0, y_img))
-                        except tk.TclError: # Fallback for safety on error
-                            if scaled_line_data_hex: img.put(scaled_line_data_hex[0], to=(0, y_img, tile_display_size, y_img + 1))
+                        except tk.TclError:
+                            try:
+                                # Removed: if img.winfo_exists() and scaled_line_data_hex:
+                                if scaled_line_data_hex: # Check if list is not empty
+                                    img.put(scaled_line_data_hex[0], to=(0, y_img, tile_display_size, y_img + 1))
+                            except tk.TclError:
+                                pass
 
-                # Calculate position on canvas
+
                 canvas_x_pos = c_grid * (tile_display_size + padding) + padding
                 canvas_y_pos = r_grid * (tile_display_size + padding) + padding
-                canvas.create_image(canvas_x_pos, canvas_y_pos, image=img, anchor=tk.NW, tags=f"rom_tile_{current_rom_tile_absolute_idx}")
+                try:
+                    if canvas.winfo_exists():
+                        canvas.create_image(canvas_x_pos, canvas_y_pos, image=img, anchor=tk.NW, tags=f"rom_tile_{current_rom_tile_absolute_idx}")
+                    drawn_tile_count_this_pass +=1
+                except tk.TclError:
+                    self.debug(f"[DEBUG] TclError creating image for tile {current_rom_tile_absolute_idx} (canvas likely destroying).")
+                    break 
+            else: 
+                continue
+            break 
         
-        self._draw_rom_import_selection_highlight() # Redraw selection border over new tiles
-        self._update_rom_importer_info_labels() # Update other info labels
+        self.debug(f"[DEBUG] Drawn {drawn_tile_count_this_pass} tiles in this pass.")
+        self._draw_rom_import_selection_highlight()
+        self._update_rom_importer_info_labels()
+        self.debug("[DEBUG] --- ROM Importer Canvas Redraw END ---")
 
     def _draw_rom_import_selection_highlight(self):
         """Draws yellow border around selected tiles in ROM importer."""
@@ -8936,45 +8983,80 @@ class TileEditorApp:
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
-        canvas = self.rom_import_dialog.canvas
-        redraw_needed_for_info = False # Flag to redraw if scroll changes top-left byte
+        # Safely get canvas from dialog, it might not exist if dialog is closing
+        canvas = getattr(self.rom_import_dialog, 'canvas', None)
+        if not canvas or not canvas.winfo_exists():
+            return
+        
+        key_pressed = event.keysym
+        # Print yview *before* the action for comparison
+        try:
+            current_yview_before_action = canvas.yview()
+            self.debug(f"[DEBUG] Keypress: {key_pressed}, Current yview (before action): {current_yview_before_action}")
+        except tk.TclError: # Canvas might be gone
+            self.debug(f"[DEBUG] Keypress: {key_pressed}, Error getting yview (canvas likely gone).")
+            return
 
-        if event.keysym == "Up":
+
+        action_taken = False
+        if key_pressed == "Up":
             canvas.yview_scroll(-1, "units")
-            redraw_needed_for_info = True
-        elif event.keysym == "Down":
+            action_taken = True
+        elif key_pressed == "Down":
             canvas.yview_scroll(1, "units")
-            redraw_needed_for_info = True
-        elif event.keysym == "Left": # Horizontal scroll, does not change top-left byte typically
+            action_taken = True
+        elif key_pressed == "Left":
             canvas.xview_scroll(-1, "units")
-        elif event.keysym == "Right":
+            action_taken = True # Redraw might be needed if x-scroll changes which tiles are 'first' in a row
+        elif key_pressed == "Right":
             canvas.xview_scroll(1, "units")
-        elif event.keysym == "Prior": # PageUp
+            action_taken = True
+        elif key_pressed == "Prior": # PageUp
             canvas.yview_scroll(-1, "pages")
-            redraw_needed_for_info = True
-        elif event.keysym == "Next": # PageDown
+            action_taken = True
+        elif key_pressed == "Next": # PageDown
             canvas.yview_scroll(1, "pages")
-            redraw_needed_for_info = True
-        elif event.keysym == "Home":
+            action_taken = True
+        elif key_pressed == "Home":
             canvas.yview_moveto(0.0)
-            redraw_needed_for_info = True
-        elif event.keysym == "End":
-            # Scroll to the very end. Calculate what fraction that is.
-            # This might need to consider the actual content height vs canvas height.
-            # For simplicity now, yview_moveto(1.0) attempts to show the bottom.
-            canvas.yview_moveto(1.0) 
-            redraw_needed_for_info = True
+            action_taken = True
+        elif key_pressed == "End":
+            canvas.yview_moveto(1.0)
+            action_taken = True
         else:
-            return # Not a handled key, allow default behavior
+            return # Not a handled key
 
-        if redraw_needed_for_info:
-            # After scrolling, the content of the canvas needs to be redrawn,
-            # AND the top-left byte offset needs to be recalculated.
-            # _draw_rom_importer_canvas handles both.
-             self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
+        if action_taken:
+            # Define a local function to be called by 'after'
+            # This captures the current 'key_pressed' for the debug message
+            def check_and_redraw_after_scroll(key_for_debug=key_pressed):
+                # Check dialog and canvas existence again, as 'after' calls are delayed
+                if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
+                    self.debug(f"[DEBUG] After '{key_for_debug}': ROM importer dialog no longer exists. Skipping check/redraw.")
+                    return
+                
+                current_canvas_after = getattr(self.rom_import_dialog, 'canvas', None)
+                if not current_canvas_after or not current_canvas_after.winfo_exists():
+                    self.debug(f"[DEBUG] After '{key_for_debug}': ROM importer canvas no longer exists. Skipping check/redraw.")
+                    return
+                
+                try:
+                    yview_after = current_canvas_after.yview()
+                    canvasy_0_after = current_canvas_after.canvasy(0)
+                    canvasy_H_after = current_canvas_after.canvasy(current_canvas_after.winfo_height())
+                    self.debug(f"[DEBUG] After '{key_for_debug}': yview()={yview_after}, canvasy(0)={canvasy_0_after}, canvasy(H)={canvasy_H_after}")
+                except tk.TclError:
+                    self.debug(f"[DEBUG] After '{key_for_debug}': TclError getting scroll state (canvas likely destroying).")
+                    return # Don't proceed to redraw if canvas state is bad
 
+                # Schedule the actual draw using after_idle
+                # This ensures it runs after Tk's event loop is idle from other processing
+                self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
 
-        return "break" # Consume event to prevent other bindings
+            # Schedule the check_and_redraw_after_scroll function
+            canvas.after_idle(check_and_redraw_after_scroll) # Use after_idle for safety
+
+        return "break" # Consume the event
 
     def _execute_rom_tile_import(self):
         """Reads selected tile data from ROM and appends to the main tileset."""
@@ -9264,74 +9346,93 @@ class TileEditorApp:
             self.draw_map_canvas() # Redraw main map content
             self.draw_minimap()    # Update minimap
 
+    def _perform_debounced_rom_canvas_draw(self):
+        """Called by the after timer to actually redraw the ROM canvas after debouncing Configure."""
+        if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
+            return
+        
+        dialog = self.rom_import_dialog
+        if hasattr(dialog, 'redraw_timer_id'): # Check if attribute exists
+            dialog.redraw_timer_id = None
+
+        # Ensure canvas exists and is of a minimum size before attempting to draw
+        canvas = getattr(dialog, 'canvas', None) # Safely get canvas
+        if not canvas or not canvas.winfo_exists():
+            return
+            
+        if canvas.winfo_width() < VIEWER_TILE_SIZE or \
+           canvas.winfo_height() < VIEWER_TILE_SIZE:
+            # If still too small, reschedule. Clear previous timer if it somehow exists.
+            if hasattr(dialog, 'redraw_timer_id') and dialog.redraw_timer_id is not None:
+                 dialog.after_cancel(dialog.redraw_timer_id)
+            dialog.redraw_timer_id = dialog.after(50, self._perform_debounced_rom_canvas_draw)
+            return
+
+        self._draw_rom_importer_canvas()
+
 # --- Main Execution ---
 if __name__ == "__main__":
+    import argparse # Import the argparse module
+
+    # --- Argument Parsing ---
+    parser = argparse.ArgumentParser(description="MSX Tile Forge - Tile and Map Editor.")
+    parser.add_argument(
+        "--debug",
+        action="store_true", # Sets args.debug to True if --debug is present
+        help="Enable detailed debug console output."
+    )
+    args = parser.parse_args()
+    # --- End Argument Parsing ---
+
     root = tk.Tk()
-    # Hide the main window initially
     root.withdraw()
 
-    # --- Set Application Icon ---
-    try:
-        # Decode the icon Base64 string
-        icon_data = base64.b64decode(ICON_IMAGE)
-        # Create PhotoImage directly from data
-        app_icon = tk.PhotoImage(data=icon_data)
-        # Set the icon for the root window and future Toplevels
-        root.iconphoto(True, app_icon)
-        # Store a reference to the icon on the root window itself
-        root.app_icon_ref = app_icon  # <<< --- ADD THIS LINE ---
-    except Exception as e:
-        print(f"Warning: Could not set application icon: {e}")
-        root.app_icon_ref = None # Ensure the attribute exists even if icon fails
-    # --- End Icon Setup ---
+    # --- Make debug state globally accessible or pass to app ---
+    # Option 1: Store on root and have app access it (simple)
+    root.app_debug_mode = args.debug
+    if root.app_debug_mode:
+        print("[INFO] Debug mode enabled via --debug flag.")
 
+    # Option 2: Pass directly to TileEditorApp constructor (if you modify it)
+    # For now, Option 1 is easier to integrate without changing constructor.
+
+    # ... (rest of your icon setup, splash screen, etc.) ...
 
     # --- Splash Screen Setup ---
     splash_win = tk.Toplevel(root)
-    splash_win.overrideredirect(True) # Remove window decorations
-    splash_win.config(cursor="watch") # Show waiting cursor
+    splash_win.overrideredirect(True)
+    splash_win.config(cursor="watch")
 
     try:
-        # Decode the Base64 string
         image_data = base64.b64decode(SPLASH_IMAGE)
-        # Create PhotoImage directly from data
         splash_photo = tk.PhotoImage(data=image_data)
-
-        # Create a label to display the image
         splash_label = tk.Label(splash_win, image=splash_photo, borderwidth=0)
         splash_label.pack()
-
-        # Get image dimensions to center the window
         img_width = splash_photo.width()
         img_height = splash_photo.height()
-
-        # Calculate position for centering
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
         x_pos = (screen_width // 2) - (img_width // 2)
         y_pos = (screen_height // 2) - (img_height // 2)
-
-        # Position the splash screen window
         splash_win.geometry(f'{img_width}x{img_height}+{x_pos}+{y_pos}')
 
-        # Function to destroy splash and show main app
         def show_main_window():
             splash_win.destroy()
-            root.deiconify() # Show the main window
-            app = TileEditorApp(root) # Initialize the main application *now*
+            root.deiconify()
+            # If you choose Option 2 for debug_mode, pass it here:
+            # app = TileEditorApp(root, debug_mode=args.debug)
+            app = TileEditorApp(root) # Using Option 1 for now
+            if hasattr(app, 'debug') and callable(app.debug): # Check if debug method exists
+                 app.debug("[DEBUG] Main application initialized.")
 
-        # Schedule the splash screen to close after 3 seconds (3000 ms)
+
         root.after(3000, show_main_window)
-
-        # Keep the splash image reference alive until needed
-        splash_label.image = splash_photo # Prevent garbage collection
+        splash_label.image = splash_photo
 
     except Exception as e:
         print(f"Error displaying splash screen: {e}")
-        # If splash fails, immediately show the main window
-        # Icon should still be set if successful above
         root.deiconify()
-        app = TileEditorApp(root)
+        # app = TileEditorApp(root, debug_mode=args.debug) # If passing
+        app = TileEditorApp(root) # Using Option 1
 
-    # Start the Tkinter event loop (manages 'after' callback)
     root.mainloop()
