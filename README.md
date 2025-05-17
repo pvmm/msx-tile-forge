@@ -43,7 +43,6 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Resizable Minimap window displaying the entire map, current map viewport, and window view area. Automatically maintains map aspect ratio.
     *   Map region selection (Shift+Drag) for Copy/Paste operations.
     *   Eyedropper functionality (right-click) to select tiles in the supertile definition or supertiles on the map/palettes.
-    *   "ST Coords" display now accurately reflects the current project's supertile dimensions.
     *   Save/Load maps as `.SC4Map` binary files.
 *   **Project Management:** New, Open, Save, Save As for complete projects (bundling palette, tiles, supertiles, and map). Tracks unsaved changes.
 *   **General UI & UX:**
@@ -165,6 +164,45 @@ This tab is for arranging supertiles to create a game map.
     *   **Supertile Palette:** Selects supertile for painting. Drag-and-drop reorders supertiles.
     *   **Selected Supertile Label.**
 *   **Minimap Window (Ctrl+M):** Overview of map, viewport, and window view.
+
+### 5. Importing Tiles from ROM
+
+This feature allows you to load an external binary file (typically a game ROM) and extract 8x8 pixel, 1-bit-per-pixel (1bpp) tile data from it to add to your current project's tileset. The imported tiles will use the active palette's first two colors (index 0 for background, index 1 for foreground) by default for their row color attributes.
+
+**Procedure:**
+
+1.  **Access the Importer:**
+    *   Go to `File -> Import Tiles from ROM...` in the main menu.
+    *   A file dialog will appear. Select the ROM file you wish to import from.
+
+2.  **ROM Importer Dialog:**
+    *   A new dialog window will open, displaying the content of the selected ROM file as a grid of potential 8x8 tiles.
+    *   **Fine Offset Slider (0-7 bytes):** At the top, this slider allows you to adjust the starting byte offset within the ROM data before tile decoding begins. This is useful if the tile data in the ROM doesn't start exactly at a multiple of 8 bytes from the beginning of the file or the region you are interested in. As you adjust the slider, the tile grid will update in real-time.
+    *   **Tile Grid:**
+        *   The main area shows the ROM data interpreted as a sequence of 8x8 1bpp tiles. Each byte from the ROM is treated as one row of 8 pixels.
+        *   You can scroll through the entire ROM's potential tile data using the vertical and horizontal scrollbars, or by using keyboard navigation (Arrow keys, PageUp/PageDown, Home, End) when the grid has focus.
+    *   **Live Preview:** On the right side, a magnified preview of the tile currently under your mouse cursor in the grid is displayed. This uses the same rendering as the main Tile Editor.
+    *   **Status Bar (Bottom of Dialog):**
+        *   **Grid Top-Left Byte:** Shows the byte offset in the original ROM file that corresponds to the tile currently displayed at the top-left corner of the visible grid. This updates as you scroll.
+        *   **Offset & Grid Index (Hover):** As you move your mouse over the tile grid, this area updates to show the absolute byte offset in the ROM for the tile under the cursor, and its sequential index within the currently rendered full grid of potential ROM tiles.
+        *   **Tiles Selected:** Displays how many tiles are currently included in your selection.
+
+3.  **Selecting Tiles for Import:**
+    *   **Left-Click:** Click on a tile in the grid to start a selection. Click on a second tile to define the end of a rectangular selection (inclusive). The selected tiles will be highlighted with a yellow border.
+    *   If you only click once, that single tile is selected.
+    *   If you click a second time and the new end point is before the start point, the selection range will automatically adjust.
+    *   **Right-Click (or Escape Key):** Clears any current selection in the ROM tile grid.
+
+4.  **Importing the Selected Tiles:**
+    *   Once you have selected the desired range of tiles, the "Import" button will become active.
+    *   Click the **"Import"** button.
+    *   The selected tiles will be read from the ROM data, converted into the application's tile format (using active palette colors 0 and 1 for background/foreground for all rows), and appended to the end of your current project's tileset.
+    *   The ROM Importer dialog will close.
+    *   The main application will update, and the newly imported tiles will be visible in the Tile Editor and Supertile Editor's tileset viewers. The last imported tile will typically be selected.
+    *   If your tileset reaches the maximum limit (256 tiles) during import, only the tiles that fit will be imported, and you will be notified.
+
+5.  **Cancel:**
+    *   Click the "Cancel" button or close the dialog window (using the 'X' button) at any time to abort the import process without making changes to your project.
 
 ## Technical Description of Generated Files
 
