@@ -10,7 +10,6 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
 
 ## Features
 
-*   **Project Management:** New, Open, Save, Save As for complete projects (bundling palette, tiles, supertiles, and map). Tracks unsaved changes.
 *   **Palette Editor:**
     *   Manage a 16-color active MSX2 palette.
     *   Select colors from a 512-color MSX2 visual picker or by direct RGB (0-7 per channel) input.
@@ -21,7 +20,7 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Assign unique foreground and background palette indices to each of the 8 rows within a tile.
     *   Tileset viewer (up to 256 tiles) with selection and drag-and-drop reordering.
     *   Operations: Add New, Insert, Delete tiles.
-    *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (colors reset), Shift Up/Down/Left/Right.
+    *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW, Shift Up/Down/Left/Right.
     *   Copy/Paste functionality for tile patterns and row colors.
     *   "Mark Unused" feature to highlight tiles not referenced in any supertile.
     *   Save/Load tilesets as `.SC4Tiles` binary files.
@@ -32,9 +31,9 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Supertile selector (up to 256 supertiles) with selection and drag-and-drop reordering.
     *   Operations: Add New, Insert, Delete supertiles.
     *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (**enabled only for square supertiles**), Shift Up/Down/Left/Right for the supertile definition.
-    *   Copy/Paste functionality for supertile definitions (assumes matching dimensions).
-    *   "Mark Unused" feature (highlights unused supertiles and unused tiles within this tab's context).
-    *   Save/Load supertile definitions as `.SC4Super` binary files (includes supertile dimensions).
+    *   Copy/Paste functionality for supertile definitions.
+    *   "Mark Unused" feature (highlights unused tiles and supertiles).
+    *   Save/Load supertile definitions as `.SC4Super` binary files.
 *   **Map Editor:**
     *   Construct maps by placing supertiles on a grid (default 32x24, configurable up to 1024x1024 supertiles).
     *   Supertile palette for selecting supertiles to paint.
@@ -46,14 +45,12 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Eyedropper functionality (right-click) to select tiles in the supertile definition or supertiles on the map/palettes.
     *   "ST Coords" display now accurately reflects the current project's supertile dimensions.
     *   Save/Load maps as `.SC4Map` binary files.
+*   **Project Management:** New, Open, Save, Save As for complete projects (bundling palette, tiles, supertiles, and map). Tracks unsaved changes.
 *   **General UI & UX:**
     *   Tabbed interface for clear separation of editing modes.
     *   Comprehensive menu system with keyboard accelerators.
     *   Contextual cursors for different editor actions.
-    *   Startup splash screen and application icon.
-    *   Informative "About" dialog.
-    *   Window title indicates project name and modification status.
-    *   Improved stability for ROM Importer dialog during resize and scrolling operations.
+
 
 ## How to Run
 
@@ -151,7 +148,6 @@ This tab is for creating composite "supertiles" from the existing base tiles. Th
 
 ### 4. Map Editor Tab
 
-(Content mostly unchanged, noted ST Coords fix)
 This tab is for arranging supertiles to create a game map.
 *   **Left Pane (Main Area):**
     *   **Controls Bar:** Map Size, Zoom, **ST Coords (now respects project supertile dimensions)**, Window View toggle and size, Supertile Grid toggle.
@@ -175,12 +171,10 @@ This tab is for arranging supertiles to create a game map.
 All files are custom binary formats. Multi-byte integers are generally stored in Big-Endian format unless specified.
 
 ### 1. Palette File (`.msxpal`)
-(Content unchanged)
 *   **Purpose:** Stores the 16 active palette colors.
 *   **Format:** Total Size: 48 bytes. 16 entries, each 3 bytes (R,G,B as 0-7).
 
 ### 2. Tileset File (`.SC4Tiles`)
-(Content unchanged)
 *   **Purpose:** Stores 8x8 tile pattern data and row color attributes.
 *   **Format:**
     *   Header: `num_tiles_in_set` (1 byte).
@@ -199,7 +193,6 @@ All files are custom binary formats. Multi-byte integers are generally stored in
         *   Data is stored row by row for the `width x height` grid of tiles within the supertile.
 
 ### 4. Map File (`.SC4Map`)
-(Content unchanged)
 *   **Purpose:** Stores the map layout, referencing supertile indices.
 *   **Format:**
     *   Header: `map_width` (2 bytes, Unsigned Short, Big-Endian), `map_height` (2 bytes, Unsigned Short, Big-Endian).
