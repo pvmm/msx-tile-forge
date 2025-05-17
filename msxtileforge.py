@@ -9796,7 +9796,7 @@ class TileEditorApp:
                 project_name_display = os.path.basename(self.current_project_base_path)
             
             response = messagebox.askyesnocancel(
-                "Quit Application",
+                "Quit MSX Tile Forge",
                 f"Save changes to '{project_name_display}' before quitting?",
                 parent=self.root # Ensure dialog is on top of main window
             )
