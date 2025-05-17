@@ -8235,7 +8235,7 @@ class TileEditorApp:
         name_label.pack(anchor="w", pady=(0, 5))
 
         # Version and Author
-        info_text = "Version: 0.0.31\nAuthor: Damned Angel + Gemini AI"
+        info_text = "Version: 0.0.32\nAuthor: Damned Angel + Gemini AI"
         info_label = ttk.Label(text_frame, text=info_text, justify=tk.LEFT)
         info_label.pack(anchor="w")
 
@@ -8434,7 +8434,7 @@ class TileEditorApp:
         self.rom_import_dialog.transient(self.root)
         self.rom_import_dialog.grab_set()
         self.rom_import_dialog.resizable(True, True)
-        self.rom_import_dialog.minsize(400, 300)
+        self.rom_import_dialog.minsize(550, 400) 
 
         dialog = self.rom_import_dialog
         dialog.rom_data = rom_data
@@ -8445,30 +8445,70 @@ class TileEditorApp:
         dialog.hover_info_text_var = tk.StringVar(value="Offset: N/A | Grid Index: N/A")
         dialog.selection_info_text_var = tk.StringVar(value="Tiles Selected: 0")
         dialog.top_left_grid_byte_offset_text_var = tk.StringVar(value="Grid Top-Left Byte: N/A")
-        dialog.redraw_timer_id = None # Initialize redraw_timer_id for debouncing Configure
+        dialog.redraw_timer_id = None # For Configure event debouncing
+        dialog.slider_redraw_timer_id = None # For slider event debouncing
 
         main_dialog_frame = ttk.Frame(dialog, padding=5)
         main_dialog_frame.pack(expand=True, fill="both")
+        main_dialog_frame.grid_columnconfigure(0, weight=0) 
+        main_dialog_frame.grid_columnconfigure(1, weight=1) 
+        main_dialog_frame.grid_rowconfigure(0, weight=1)    
+        main_dialog_frame.grid_rowconfigure(1, weight=0)    
 
-        top_controls_frame = ttk.Frame(main_dialog_frame)
-        top_controls_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
+        left_column_frame = ttk.Frame(main_dialog_frame)
+        left_column_frame.grid(row=0, column=0, sticky="nswe", padx=(0, 5)) 
 
-        ttk.Label(top_controls_frame, text="Fine Offset (0-7 bytes):").pack(side=tk.LEFT, padx=(0,5))
+        preview_label_frame = ttk.LabelFrame(left_column_frame, text="Live Preview")
+        preview_label_frame.pack(side=tk.TOP, pady=(0, 10), anchor="n", fill=tk.X)
+        preview_canvas_size = TILE_WIDTH * EDITOR_PIXEL_SIZE
+        dialog.preview_canvas = tk.Canvas(
+            preview_label_frame,
+            width=preview_canvas_size,
+            height=preview_canvas_size,
+            bg="grey",
+            highlightthickness=0
+        )
+        dialog.preview_canvas.pack(padx=5, pady=5, anchor="center") 
+
+        offset_control_frame = ttk.Frame(left_column_frame) 
+        offset_control_frame.pack(side=tk.TOP, pady=(0,10), fill=tk.X)
+
+        ttk.Label(offset_control_frame, text="Fine Offset (0-7 bytes):").pack(side=tk.TOP, anchor="w")
+
+        offset_slide_frame = ttk.Frame(offset_control_frame)
+        offset_slide_frame.pack(side=tk.TOP, fill=tk.X, expand=True, padx=9)
+
         offset_slider = ttk.Scale(
-            top_controls_frame,
+            offset_slide_frame, 
             from_=0,
             to=7,
             orient=tk.HORIZONTAL,
             variable=dialog.fine_offset_var,
-            command=lambda val: self._on_rom_importer_setting_change()
+            command=self._on_fine_offset_slider_change # MODIFIED: Point to new debouncing handler
         )
-        offset_slider.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+        offset_slider.pack(side=tk.TOP, fill=tk.X, expand=True)
 
-        middle_frame = ttk.Frame(main_dialog_frame)
-        middle_frame.pack(expand=True, fill="both")
+        offset_tick_frame = ttk.Frame(offset_control_frame)
+        offset_tick_frame.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(2,0))
 
-        canvas_frame = ttk.Frame(middle_frame)
-        canvas_frame.pack(side=tk.LEFT, expand=True, fill="both")
+        for i in range(8): 
+            offset_tick_frame.grid_columnconfigure(i, weight=1)
+            lbl = ttk.Label(offset_tick_frame, text=str(i), font=("TkSmallCaptionFont", 7)) 
+            lbl.grid(row=0, column=i) 
+        
+        info_bar_frame = ttk.Frame(left_column_frame, padding=3) 
+        info_bar_frame.pack(side=tk.TOP, fill=tk.X, expand=False, pady=(5,5))
+        dialog.status_bar_top_left_label = ttk.Label(info_bar_frame, textvariable=dialog.top_left_grid_byte_offset_text_var, anchor="w", justify=tk.LEFT)
+        dialog.status_bar_top_left_label.pack(side=tk.TOP, fill=tk.X)
+        hover_label = ttk.Label(info_bar_frame, textvariable=dialog.hover_info_text_var, anchor="w", justify=tk.LEFT)
+        hover_label.pack(side=tk.TOP, fill=tk.X)
+        selection_label = ttk.Label(info_bar_frame, textvariable=dialog.selection_info_text_var, anchor="w", justify=tk.LEFT)
+        selection_label.pack(side=tk.TOP, fill=tk.X)
+
+        canvas_frame = ttk.Frame(main_dialog_frame)
+        canvas_frame.grid(row=0, column=1, sticky="nswe") 
+        canvas_frame.grid_rowconfigure(0, weight=1)
+        canvas_frame.grid_columnconfigure(0, weight=1)
 
         rom_v_scroll = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
         rom_h_scroll = ttk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL)
@@ -8483,7 +8523,6 @@ class TileEditorApp:
         rom_v_scroll.config(command=dialog.canvas.yview)
         rom_h_scroll.config(command=dialog.canvas.xview)
 
-        # Add scrollbar bindings to trigger redraw
         rom_v_scroll.bind("<B1-Motion>",
             lambda event: self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
                           if self.rom_import_dialog and tk.Toplevel.winfo_exists(self.rom_import_dialog) and
@@ -8508,47 +8547,22 @@ class TileEditorApp:
         dialog.canvas.grid(row=0, column=0, sticky="nsew")
         rom_v_scroll.grid(row=0, column=1, sticky="ns")
         rom_h_scroll.grid(row=1, column=0, sticky="ew")
-        canvas_frame.grid_rowconfigure(0, weight=1)
-        canvas_frame.grid_columnconfigure(0, weight=1)
+        
+        buttons_frame = ttk.Frame(main_dialog_frame)
+        buttons_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10,0))
+        buttons_frame.grid_columnconfigure(0, weight=1) 
+        buttons_frame.grid_columnconfigure(1, weight=0) 
+        buttons_frame.grid_columnconfigure(2, weight=0) 
+        buttons_frame.grid_columnconfigure(3, weight=1) 
 
-        preview_outer_frame = ttk.Frame(middle_frame, padding=(5,0))
-        preview_outer_frame.pack(side=tk.RIGHT, fill=tk.Y, anchor="ne")
-        preview_label_frame = ttk.LabelFrame(preview_outer_frame, text="Live Preview")
-        preview_label_frame.pack(pady=0, anchor="n")
-        preview_canvas_size = TILE_WIDTH * EDITOR_PIXEL_SIZE
-        dialog.preview_canvas = tk.Canvas(
-            preview_label_frame,
-            width=preview_canvas_size,
-            height=preview_canvas_size,
-            bg="grey",
-            highlightthickness=0
-        )
-        dialog.preview_canvas.pack(padx=5, pady=5)
-
-        bottom_frame = ttk.Frame(main_dialog_frame)
-        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5,0))
-
-        info_bar_frame = ttk.Frame(bottom_frame, relief="sunken", padding=3)
-        info_bar_frame.pack(fill=tk.X, expand=False, side=tk.TOP, pady=(0,5))
-        dialog.status_bar_top_left_label = ttk.Label(info_bar_frame, textvariable=dialog.top_left_grid_byte_offset_text_var)
-        dialog.status_bar_top_left_label.pack(side=tk.LEFT, padx=2)
-        ttk.Label(info_bar_frame, text="|").pack(side=tk.LEFT, padx=2)
-        hover_label = ttk.Label(info_bar_frame, textvariable=dialog.hover_info_text_var)
-        hover_label.pack(side=tk.LEFT, padx=2)
-        ttk.Label(info_bar_frame, text="|").pack(side=tk.LEFT, padx=2)
-        selection_label = ttk.Label(info_bar_frame, textvariable=dialog.selection_info_text_var)
-        selection_label.pack(side=tk.LEFT, padx=2)
-
-        buttons_frame = ttk.Frame(bottom_frame)
-        buttons_frame.pack(fill=tk.X, expand=False, side=tk.TOP)
         dialog.import_button = ttk.Button(
             buttons_frame, text="Import", command=self._execute_rom_tile_import, state=tk.DISABLED
         )
         cancel_button = ttk.Button(
             buttons_frame, text="Cancel", command=self._close_rom_importer_dialog
         )
-        cancel_button.pack(side=tk.RIGHT, padx=(0,0))
-        dialog.import_button.pack(side=tk.RIGHT, padx=(0,5))
+        dialog.import_button.grid(row=0, column=1, padx=(0,5))
+        cancel_button.grid(row=0, column=2, padx=(5,0))
 
         dialog.canvas.bind("<Configure>", lambda e: self._on_rom_importer_setting_change(configure_event=True))
         dialog.canvas.bind("<Motion>", self._on_rom_canvas_motion)
@@ -8560,17 +8574,25 @@ class TileEditorApp:
         dialog.canvas.bind("<Key>", self._on_rom_canvas_keypress)
         dialog.canvas.focus_set()
         dialog.protocol("WM_DELETE_WINDOW", self._close_rom_importer_dialog)
-        dialog.after(20, lambda: self._on_rom_importer_setting_change(configure_event=True)) # Ensure initial draw after geometry
+        
+        dialog.after(50, lambda: self._on_rom_importer_setting_change(configure_event=True))
 
         dialog.update_idletasks()
         root_w = self.root.winfo_width()
         root_h = self.root.winfo_height()
         root_x = self.root.winfo_x()
         root_y = self.root.winfo_y()
+        
+        dialog.update_idletasks() 
         dialog_w = dialog.winfo_reqwidth()
         dialog_h = dialog.winfo_reqheight()
+
         x_pos = root_x + (root_w // 2) - (dialog_w // 2)
         y_pos = root_y + (root_h // 2) - (dialog_h // 2)
+        
+        dialog_w = max(dialog_w, dialog.winfo_minwidth())
+        dialog_h = max(dialog_h, dialog.winfo_minheight())
+
         dialog.geometry(f"{dialog_w}x{dialog_h}+{x_pos}+{y_pos}")
 
     def _close_rom_importer_dialog(self):
@@ -9368,6 +9390,65 @@ class TileEditorApp:
             dialog.redraw_timer_id = dialog.after(50, self._perform_debounced_rom_canvas_draw)
             return
 
+        self._draw_rom_importer_canvas()
+
+    def _on_fine_offset_slider_change(self, slider_value_str=None):
+        """Handles the fine_offset slider value change with debouncing and snapping."""
+        if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
+            return
+
+        dialog = self.rom_import_dialog
+
+        # Ensure the slider_redraw_timer_id attribute exists on the dialog object
+        if not hasattr(dialog, 'slider_redraw_timer_id'):
+            dialog.slider_redraw_timer_id = None
+
+        if slider_value_str is not None:
+            try:
+                # The value from the slider command is a string representation of a float
+                current_float_val = float(slider_value_str)
+                rounded_int_val = round(current_float_val) # Round to nearest integer
+
+                # Ensure the rounded value is within the slider's defined range (0-7)
+                # This is mostly a safeguard, as 'from_' and 'to' should constrain it.
+                clamped_int_val = max(0, min(7, rounded_int_val))
+
+                # Update the IntVar. This will cause the slider to visually snap
+                # if its current internal float value was different from the rounded int.
+                # Only set if different to avoid potential recursive calls if not careful,
+                # though with an IntVar, Tkinter usually handles this well.
+                if dialog.fine_offset_var.get() != clamped_int_val:
+                    dialog.fine_offset_var.set(clamped_int_val)
+                    # No need to call _draw_rom_importer_canvas here directly.
+                    # The debouncer will handle it based on the *final* settled value.
+                    # If you wanted instant preview of the *snapped* value, you could add it here.
+
+            except ValueError:
+                # Handle cases where slider_value_str might not be a valid float string
+                # This shouldn't happen with a standard Scale widget but good for robustness.
+                pass # Keep current var value if conversion fails
+
+        # Cancel any previously scheduled redraw for the slider
+        if dialog.slider_redraw_timer_id is not None:
+            dialog.after_cancel(dialog.slider_redraw_timer_id)
+        
+        # Schedule the actual redraw after a short delay
+        # _perform_debounced_slider_redraw will use dialog.fine_offset_var.get()
+        dialog.slider_redraw_timer_id = dialog.after(250, self._perform_debounced_slider_redraw)
+
+    def _perform_debounced_slider_redraw(self):
+        """Called by the after timer to redraw the ROM importer canvas after slider movement has paused."""
+        if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
+            return
+
+        dialog = self.rom_import_dialog
+        
+        # Ensure the slider_redraw_timer_id attribute exists before trying to clear it
+        if hasattr(dialog, 'slider_redraw_timer_id'):
+            dialog.slider_redraw_timer_id = None # Clear the timer ID
+
+        # Now, call the main drawing function for the ROM importer canvas
+        # This function will use the current value of dialog.fine_offset_var.get()
         self._draw_rom_importer_canvas()
 
 # --- Main Execution ---
