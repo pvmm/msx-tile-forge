@@ -1,10 +1,11 @@
 # MSX Tile Forge
+v0.0.33
 
-An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and Tkinter.
+An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and TkMyinter.
 
 ## Introduction
 
-MSX Tile Forge (v0.0.31) is a desktop application created to assist in the development of graphical assets for MSX2 computers and similar retro systems that utilize tile-based graphics and have specific palette limitations. It provides an integrated environment for designing 16-color palettes, creating 8x8 pixel tiles with row-specific colors, composing supertiles (meta-tiles) from these base tiles with **project-configurable dimensions**, and arranging them into larger game maps. The tool aims to streamline the asset creation workflow for retro game developers and hobbyists.
+MSX Tile Forge is a desktop application created to assist in the development of graphical assets for MSX2 computers and similar retro systems that utilize tile-based graphics and have specific palette limitations. It provides an integrated environment for designing 16-color palettes, creating 8x8 pixel tiles with row-specific colors, composing 4x4 supertiles from these tiles, and arranging them into larger game maps. The tool aims to streamline the asset creation workflow for retro game developers and hobbyists.
 
 All project components (palette, tiles, supertiles, map) can be saved and loaded individually or as a complete project, using custom binary file formats designed for ease of use and integration into MSX development pipelines.
 
@@ -15,233 +16,333 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Select colors from a 512-color MSX2 visual picker or by direct RGB (0-7 per channel) input.
     *   Save/Load custom `.msxpal` palette files.
     *   Reset to the standard MSX2 default palette.
+
 *   **Tile Editor (8x8 pixels):**
     *   Pixel-level drawing with selectable foreground/background colors.
     *   Assign unique foreground and background palette indices to each of the 8 rows within a tile.
     *   Tileset viewer (up to 256 tiles) with selection and drag-and-drop reordering.
     *   Operations: Add New, Insert, Delete tiles.
-    *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW, Shift Up/Down/Left/Right.
+    *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (colors reset for rows), Shift Up/Down/Left/Right.
     *   Copy/Paste functionality for tile patterns and row colors.
     *   "Mark Unused" feature to highlight tiles not referenced in any supertile.
     *   Save/Load tilesets as `.SC4Tiles` binary files.
-    *   **ROM Importer:** Import 8x8 1bpp tile data directly from ROM files via a visual browser with fine offset control, live preview, and selection.
+    *   **ROM Importer:** Import 8x8 1bpp tile data directly from ROM files. Features a visual browser with fine offset control, live preview, advanced multi-selection (Click, Shift+Click, Ctrl+Click, Ctrl+Shift+Click), and per-selection configurable preview/import colors from the active palette.
+      
 *   **Supertile Editor (Project-Configurable Dimensions, e.g., 2x2, 4x4, 8x2 tiles):**
     *   Define supertiles by arranging existing tiles in a grid of **user-defined width and height** (1-32 tiles per dimension, set per project).
-    *   Tileset viewer for selecting component tiles.
+    *   Tileset viewer for selecting component tiles from the current tileset.
     *   Supertile selector (up to 256 supertiles) with selection and drag-and-drop reordering.
     *   Operations: Add New, Insert, Delete supertiles.
     *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (**enabled only for square supertiles**), Shift Up/Down/Left/Right for the supertile definition.
-    *   Copy/Paste functionality for supertile definitions.
-    *   "Mark Unused" feature (highlights unused tiles and supertiles).
-    *   Save/Load supertile definitions as `.SC4Super` binary files.
+    *   Copy/Paste functionality for supertile definitions
+    *   "Mark Unused" feature: Highlights unused supertiles (not used on the map) and also re-highlights unused base tiles (not used in any supertile definition) within this tab's context.
+    *   Save/Load supertile definitions as `.SC4Super` binary files (these files store the supertile dimensions).
+ 
 *   **Map Editor:**
-    *   Construct maps by placing supertiles on a grid (default 32x24, configurable up to 1024x1024 supertiles).
-    *   Supertile palette for selecting supertiles to paint.
-    *   Zoomable and pannable map canvas.
-    *   Optional supertile grid overlay with cyclable colors ('G' key when map tab is active).
-    *   "Window View" overlay: Visualizes screen boundaries, configurable size (W:1-32, H:1-27 tiles), draggable and resizable via handles or keyboard (WASD when map tab is active).
-    *   Resizable Minimap window displaying the entire map, current map viewport, and window view area. Automatically maintains map aspect ratio.
-    *   Map region selection (Shift+Drag) for Copy/Paste operations.
-    *   Eyedropper functionality (right-click) to select tiles in the supertile definition or supertiles on the map/palettes.
+    *   Construct maps by placing supertiles on a grid (default 32x24 supertiles, dimensions configurable up to 1024x1024 supertiles per project).
+    *   Supertile palette for selecting supertiles (from the current project's supertile set) to paint onto the map.
+    *   Zoomable (Ctrl+MouseWheel or buttons) and pannable (Ctrl+LMB Drag or MMB Drag) map canvas.
+    *   Optional supertile grid overlay with cyclable colors (toggled by 'Show Supertile Grid' checkbox; 'G' key cycles colors when map tab is active).
+    *   "Window View" overlay:
+        *   Visualizes a screen-like boundary on the map.
+        *   Dimensions configurable in 8x8 base tiles (Width: 1-32, Height: 1-27). Max height of 27 accommodates MSX half-tile overscan concepts.
+        *   Draggable on the map canvas (when not holding Ctrl).
+        *   Resizable via its handles.
+        *   Can be nudged one tile at a time using WASD keys when the Window View is active and the map canvas has focus.
+    *   Resizable Minimap window (toggled via View menu or Ctrl+M):
+        *   Displays a scaled-down overview of the entire map.
+        *   Shows a red rectangle indicating the main Map Canvas's current viewport.
+        *   Shows a dashed blue rectangle indicating the "Window View" overlay's position and size, if active.
+        *   Maintains the map's aspect ratio when resized by the user.
+    *   Map region selection using Shift+LMB Drag for Copy/Paste operations within the map.
+    *   Eyedropper functionality (Right-Click on map) to select the supertile under the cursor and make it active in the Supertile Palette.
+    *   "ST Coords" display the supertile coordinates under the mouse.
+    *   Paste Preview: When map data is on the clipboard, a semi-transparent preview of the paste area follows the mouse cursor.
     *   Save/Load maps as `.SC4Map` binary files.
-*   **Project Management:** New, Open, Save, Save As for complete projects (bundling palette, tiles, supertiles, and map). Tracks unsaved changes.
-*   **General UI & UX:**
-    *   Tabbed interface for clear separation of editing modes.
-    *   Comprehensive menu system with keyboard accelerators.
-    *   Contextual cursors for different editor actions.
 
+*   **Project Management:**
+    *   Projects bundle all asset types: palettes, tilesets, supertiles and maps.
+    *   Ability to save and load individual asset components (palette, tileset, supertiles, map) separately.
+    *   Automatic tracking of unsaved changes within a project, with prompts to prevent data loss.
 
-## How to Run
+## Getting Started
+
+This section explains how to set up your system and run MSX Tile Forge.
 
 ### System Requirements
-*   Python 3.x (Developed and tested with Python 3.12, but should be compatible with recent Python 3 versions).
-*   Tkinter (typically included with standard Python installations). No other external libraries are required.
+
+*   **Python:** Version 3.x. The application has been developed and tested with Python 3.12, but it is expected to be compatible with other recent Python 3 releases.
+*   **Tkinter:** This is Python's standard GUI (Graphical User Interface) package and is typically included with most Python installations across Windows, macOS, and Linux. No other external Python libraries are required.
 
 ### Running the Application
-1.  Ensure Python 3 is installed and accessible from your command line or terminal.
-2.  Navigate to the directory containing the `msxtileforge.py` (or your script's name) file.
-3.  Execute the script using the Python interpreter:
+
+1.  **Ensure Python 3 is Installed:**
+    Verify that Python 3 is installed on your system and that the `python` (or `python3` on some systems) command is accessible from your command line or terminal.
+
+2.  **Obtain the Script:**
+    Download or clone the `msxtileforge.py` script (or the directory containing it) to your computer.
+
+3.  **Navigate to the Script's Directory:**
+    Open your command line interface (Terminal, Command Prompt, PowerShell, etc.) and navigate to the directory where you saved the `msxtileforge.py` file.
+    ```bash
+    cd path/to/your/msx-tile-forge-directory
+    ```
+
+4.  **Execute the Script:**
+    Run the application using the Python interpreter:
     ```bash
     python msxtileforge.py
     ```
-    (On some systems, you might use `python3 msxtileforge.py`)
-4.  **Optional Debug Mode:** To enable detailed console output for troubleshooting:
+    *   On some systems, particularly Linux or macOS where Python 2 might also be present, you may need to use `python3` explicitly:
+        ```bash
+        python3 msxtileforge.py
+        ```
+
+5.  **Optional Debug Mode:**
+    To launch the application with detailed diagnostic messages printed to the console (useful for troubleshooting or development), use the `--debug` flag:
     ```bash
     python msxtileforge.py --debug
     ```
+    or
+    ```bash
+    python3 msxtileforge.py --debug
+    ```
 
-The application window should appear after a brief splash screen.
+Upon successful execution, the MSX Tile Forge application window should appear after a brief splash screen.
 
 ## Manual
 
-The application is organized into four main tabs: Palette Editor, Tile Editor, Supertile Editor, and Map Editor.
+This manual provides an overview of MSX Tile Forge's functionalities, organized by its main interface components.
 
-### Global Operations (Menu Bar)
+### Global Operations (Menu Bar & General UX)
+
+The main menu bar provides access to project-wide operations and settings.
 
 *   **File Menu:**
-    *   **New Project (Ctrl+N):** Clears all current data. Prompts for **new supertile grid dimensions (width/height)**. Then starts a fresh, untitled project. Prompts to save if current project is modified.
-    *   **Open Project... (Ctrl+O):** Opens a dialog to select any component file (`.msxpal`, `.SC4Tiles`, `.SC4Super`, `.SC4Map`) of a project. The application will then attempt to load all four associated files based on the selected file's base name (supertile dimensions are loaded from `.SC4Super`). Prompts to save if current project is modified.
-    *   **Save Project (Ctrl+S):** Saves all four components of the current project. If the project hasn't been saved before, it behaves like "Save Project As...".
-    *   **Save Project As... (Ctrl+Shift+S):** Opens a dialog to specify a base name and location for saving all four project components.
-    *   **Open/Save Palette (.msxpal)...:** Loads or saves only the 16-color active palette.
-    *   **Open/Save Tileset (.SC4Tiles)...:** Loads or saves only the tile definitions.
-    *   **Import Tiles from ROM...:** Opens a dialog to select a ROM file and import 8x8 1bpp tile data from it into the current tileset.
-    *   **Open/Save Supertiles (.SC4Super)...:** Loads or saves only the supertile definitions (including their grid dimensions).
-    *   **Open/Save Map (.SC4Map)...:** Loads or saves only the map data.
-    *   **Exit (Ctrl+Q):** Closes the application. Prompts to save if current project is modified.
+    *   **Project Management:**
+        *   `New Project (Ctrl+N)`: Starts a new project, prompting for supertile dimensions. Clears all current data (palette, tiles, supertiles, map).
+        *   `Open Project... (Ctrl+O)`: Loads an existing project. Select any of its four component files (`.msxpal`, `.SC4Tiles`, `.SC4Super`, `.SC4Map`); the application loads all associated files. Supertile dimensions are restored from the `.SC4Super` file.
+        *   `Save Project (Ctrl+S)`: Saves all four components of the current project. If unsaved, acts like "Save Project As...".
+        *   `Save Project As... (Ctrl+Shift+S)`: Saves all four project components under a new base name and location chosen by the user.
+    *   **Individual File Operations:** Allows loading or saving specific asset types independently:
+        *   Palette (`.msxpal`)
+        *   Tileset (`.SC4Tiles`)
+        *   Supertiles (`.SC4Super`)
+        *   Map (`.SC4Map`)
+    *   **Import Tiles from ROM...:** Opens the ROM Importer dialog to extract tile data from external binary files (see detailed section below).
+    *   **Exit (Ctrl+Q):** Closes the application. Prompts to save if there are unsaved changes to the current project.
+
 *   **Edit Menu:**
-    *   **Copy (Ctrl+C):** Context-sensitive. Copies the currently selected Tile, Supertile, or selected Map Region.
-    *   **Paste (Ctrl+V):** Context-sensitive. Pastes the copied data onto the current Tile, Supertile, or at the mouse cursor position on the Map.
-    *   **Clear Current Tile/Supertile/Map:** Resets the currently selected item or the entire map to a default state.
-    *   **Set Tileset Size...:** Allows changing the total number of tiles in the tileset (1-256).
-    *   **Set Supertile Count...:** Allows changing the total number of supertiles (1-256).
-    *   **Set Map Dimensions...:** Allows changing the width and height of the map in supertiles (1-1024 per dimension).
+    *   **Copy/Paste (Ctrl+C / Ctrl+V):** Context-sensitive actions.
+        *   **Tile Editor:** Copies/pastes the current tile's pattern and row colors.
+        *   **Supertile Editor:** Copies/pastes the current supertile's definition.
+        *   **Map Editor:** Copies/pastes a selected rectangular region of supertiles on the map.
+    *   **Clear Operations:**
+        *   `Clear Current Tile`: Resets the selected tile's pattern and row colors to default.
+        *   `Clear Current Supertile`: Resets the selected supertile's definition to all tile 0s.
+        *   `Clear Map`: Resets all cells in the current map to supertile 0.
+    *   **Set Data Counts/Dimensions:**
+        *   `Set Tileset Size...`: Adjusts the total number of active tiles (1-256).
+        *   `Set Supertile Count...`: Adjusts the total number of active supertiles (1-256).
+        *   `Set Map Dimensions...`: Changes the map's width and height in supertile units (1-1024 per side).
+        *   *Note: Reducing sizes may discard data and will prompt for confirmation if dependent items are affected.*
+
 *   **View Menu:**
-    *   **Show/Hide Minimap (Ctrl+M):** Toggles the visibility of the resizable Minimap window.
+    *   `Show/Hide Minimap (Ctrl+M)`: Toggles the resizable Minimap window for the Map Editor.
+
 *   **Help Menu:**
-    *   **About...:** Displays application information, version, and author.
+    *   `About...`: Displays application information (version, author).
+
+*   **General User Experience:**
+    *   **Unsaved Changes:** The window title is marked with an asterisk (*) if the project has unsaved modifications. Prompts to save are given before closing, opening, or creating new projects if changes are pending.
+    *   **Drag-and-Drop Reordering:** In the Tileset Viewers (Tile and Supertile Editor tabs) and Supertile Selectors (Supertile and Map Editor tabs), items can be reordered by clicking and dragging them to a new position. References are updated accordingly.
 
 ### 1. Palette Editor Tab
 
-(Content mostly unchanged, assumed correct)
-This tab allows you to define the 16-color active palette used throughout the application.
-*   **Active Palette (16 colors):** Click a slot to select it.
-*   **Selected Slot Info:** Displays index, color preview, Hex RGB, and MSX2 RGB (0-7).
-*   **Set Color (RGB 0-7):** Input fields to apply RGB values to the selected slot.
-*   **MSX2 512 Color Picker:** Click a color to apply it to the selected active palette slot.
-*   **Reset to MSX2 Default:** Resets to the standard MSX2 palette.
+This tab is dedicated to managing the 16-color active palette used for all graphics.
+
+*   **Active Palette Display:** A 4x4 grid shows the 16 colors. Click a slot to select it for modification (highlighted red).
+*   **Selected Slot Information:** Shows the selected slot's index, a color preview, its hexadecimal RGB value, and its MSX2-specific RGB values (0-7 per R, G, B channel).
+*   **Color Modification:**
+    *   **MSX2 512 Color Picker:** A large grid displaying all 512 possible MSX2 colors. Clicking a color here applies it to the selected active palette slot.
+    *   **Set Color (RGB 0-7):** Input R, G, B values (0-7 each) and click "Set" to apply them to the selected slot.
+*   **Reset Palette:** A button to revert the active 16-color palette to the standard MSX2 hardware default colors.
 
 ### 2. Tile Editor Tab
 
-(Content mostly unchanged, added ROM Importer context)
-This tab is for creating and modifying individual 8x8 pixel tiles.
-*   **Left Pane:**
-    *   **Tile Editor Canvas:** Draw (LMB) / Erase (RMB) pixels.
-    *   **Row Colors (FG/BG Buttons):** Set row-specific foreground/background colors.
-    *   **Transform Controls:** Flip H/V, Rotate (resets row colors), Shift Up/Down/Left/Right.
-    *   **Mark Unused Button:** Highlights tiles not used in any supertile.
-*   **Right Pane:**
-    *   **Color Selector Palette:** Select active drawing color from the 16-color active palette.
-    *   **Tileset Viewer:** Displays all tiles. Click to select for editing. Drag-and-drop to reorder.
-    *   **Tile Management Buttons:** Add New, Insert, Delete tiles.
-*   See `File -> Import Tiles from ROM...` to add tiles from external binary files.
+Used for creating and editing individual 8x8 pixel base tiles.
+
+*   **Tile Editing Area (Left):**
+    *   **Editor Canvas:** An 8x8 magnified grid for pixel drawing.
+        *   Left-Click: Draws a foreground pixel (marks as '1').
+        *   Right-Click: Draws a background pixel (marks as '0').
+        *   Uses the color selected in the "Color Selector Palette" (Right Pane).
+    *   **Row Colors Attributes:** Adjacent to the editor canvas, displays 8 pairs of FG (Foreground) and BG (Background) color swatches, one for each row of the tile.
+        *   Click a swatch to assign the currently selected color (from "Color Selector Palette") as that row's FG or BG palette index.
+    *   **Transformations:** Buttons for the currently edited tile:
+        *   Flip Horizontal / Flip Vertical.
+        *   Rotate 90° Clockwise (resets row colors to default for all rows).
+        *   Shift (Up, Down, Left, Right) with pixel wrapping.
+    *   **Mark Unused:** Highlights tiles in the "Tileset Viewer" not used in any supertile definition. Click again to clear.
+
+*   **Tileset Management (Right):**
+    *   **Color Selector Palette:** A 4x4 grid of the 16 active palette colors. Click to choose the active color for drawing pixels and setting row colors.
+    *   **Tileset Viewer:** Displays all tiles in the project (up to 256).
+        *   Click to select a tile for editing.
+        *   Drag-and-drop to reorder tiles (supertile definitions update references).
+    *   **Tile Operations:** Buttons for "Add New" (appends a blank tile), "Insert" (inserts a blank tile at selection), "Delete" (removes selected tile).
+    *   **Info Label:** Shows current tile index and total tiles.
 
 ### 3. Supertile Editor Tab
 
-This tab is for creating composite "supertiles" from the existing base tiles. The **dimensions of the supertile grid (e.g., 4x4, 2x8, etc.) are defined per project**.
-*   **Left Pane:**
-    *   **Supertile Definition Canvas:**
-        *   A grid of `Width x Height` (defined by project settings) representing the supertile.
-        *   **Left-Click a cell:** Places the tile currently selected in the "Tileset" viewer (right pane) into that cell.
-        *   **Right-Click a cell:** Selects the tile in that cell, making it active in the "Tileset" viewer.
-    *   **Info Labels:** Displays editing supertile index and selected tile for placing.
-    *   **Transform Controls:**
-        *   **Flip H/V:** Flip the supertile definition.
-        *   **Rotate:** Rotate 90° CW (**only enabled if the supertile grid is square**).
-        *   **Shift Up/Down/Left/Right:** Shift tiles within the definition.
-    *   **Mark Unused Button:** Highlights unused tiles (in this tab's viewer) and unused supertiles (not on map).
-*   **Right Pane:**
-    *   **Tileset Viewer:** Selects tiles for placing. Drag-and-drop reorders tileset.
-    *   **Supertile Selector:** Selects supertile for editing. Drag-and-drop reorders supertiles.
-    *   **Supertile Management Buttons:** Add New, Insert, Delete supertiles.
+For creating composite "supertiles" from base tiles. Supertile grid dimensions (e.g., 4x4, 2x8 tiles) are defined per-project.
+
+*   **Supertile Definition Area (Left):**
+    *   **Definition Canvas:** A grid matching the project's supertile dimensions (e.g., 4x4 cells, each showing a base tile).
+        *   Left-Click a cell: Places the currently selected tile (from "Tileset Viewer" on the right) into that cell.
+        *   Right-Click a cell (Eyedropper): Selects the tile within that cell, making it active in the "Tileset Viewer."
+    *   **Information:** Labels display the index of the supertile being edited and the tile selected for placement.
+    *   **Transformations:** Buttons for the current supertile definition:
+        *   Flip Horizontal / Flip Vertical.
+        *   Rotate 90° Clockwise (enabled only if the supertile grid is square).
+        *   Shift (Up, Down, Left, Right) tiles within the definition, with wrapping.
+    *   **Mark Unused:** Highlights unused supertiles (not on map) in the "Supertile Selector" and re-highlights unused base tiles in this tab's "Tileset Viewer." Click again to clear.
+
+*   **Asset Selection (Right):**
+    *   **Tileset Viewer:** Displays all base tiles. Click to select a tile for placing in the supertile definition. Drag-and-drop reorders tiles.
+    *   **Supertile Selector:** Displays all supertiles in the project. Click to select a supertile for editing. Drag-and-drop reorders supertiles (map data updates references).
+    *   **Supertile Operations:** Buttons for "Add New", "Insert", "Delete" supertiles.
+    *   **Info Label:** Shows total number of supertiles.
 
 ### 4. Map Editor Tab
 
-This tab is for arranging supertiles to create a game map.
-*   **Left Pane (Main Area):**
-    *   **Controls Bar:** Map Size, Zoom, **ST Coords (now respects project supertile dimensions)**, Window View toggle and size, Supertile Grid toggle.
-    *   **Map Canvas:**
-        *   Paint with selected supertile (LMB).
-        *   Eyedrop supertile (RMB).
-        *   Pan (Ctrl+LMB Drag or MMB Drag).
-        *   Select Region (Shift+LMB Drag).
-        *   Zoom (Ctrl+MouseWheel).
-        *   Nudge Window View (WASD with Window View active).
-        *   Clear Selection/Clipboard (Escape).
-    *   **Window View Overlay:** Draggable/resizable screen representation.
-    *   **Paste Preview:** Shows where map clipboard data will paste.
-*   **Right Pane:**
-    *   **Supertile Palette:** Selects supertile for painting. Drag-and-drop reorders supertiles.
-    *   **Selected Supertile Label.**
-*   **Minimap Window (Ctrl+M):** Overview of map, viewport, and window view.
+For arranging supertiles to construct game maps.
+
+*   **Main Map Area (Left):**
+    *   **Controls Bar (Top):**
+        *   Displays current map dimensions (in supertiles) and zoom level.
+        *   Zoom buttons (+, -, Reset).
+        *   "ST Coords" label: Shows supertile coordinates under the mouse, respecting project-specific supertile dimensions.
+        *   Checkboxes: "Show Supertile Grid" (press 'G' to cycle grid color), "Show Window View."
+        *   "Window View" Width/Height entries (in 8x8 base tiles).
+    *   **Map Canvas:** The main drawing area for the map.
+        *   **Painting (LMB):** Places the currently selected supertile (from "Supertile Palette" on the right) onto the map.
+        *   **Eyedropper (RMB):** Selects the supertile under the cursor, making it active in the "Supertile Palette."
+        *   **Navigation:** Pan with Ctrl+LMB Drag (or MMB Drag); Zoom with Ctrl+MouseWheel.
+        *   **Region Selection (Shift+LMB Drag):** Selects a rectangular area of supertiles for copy/paste.
+        *   **Window View Nudge (WASD Keys):** Moves the "Window View" overlay if active and canvas has focus.
+        *   **Paste Preview:** If map data is on the clipboard, a preview of the paste area follows the mouse.
+        *   **Clear Selection/Clipboard (Escape Key):** Deselects map region and clears map clipboard/preview.
+    *   **Window View Overlay (if active):** A draggable and resizable rectangle representing a screen area. Max height of 27 tiles allows for MSX overscan visualization (bottom half-tile shaded).
+
+*   **Supertile Selection (Right):**
+    *   **Supertile Palette:** Displays all supertiles in the project.
+        *   Click to select a supertile for painting on the map.
+        *   Drag-and-drop to reorder supertiles.
+    *   **Info Label:** Shows the currently selected supertile for painting.
+
+*   **Minimap Window (View Menu or Ctrl+M):**
+    *   A separate, resizable window providing an overview of the entire map.
+    *   Displays the main Map Canvas's current viewport (red rectangle) and the "Window View" overlay's position/size (dashed blue rectangle, if active).
+    *   Maintains map aspect ratio when resized.
 
 ### 5. Importing Tiles from ROM
 
-This feature allows you to load an external binary file (typically a game ROM) and extract 8x8 pixel, 1-bit-per-pixel (1bpp) tile data from it to add to your current project's tileset. The imported tiles will use the active palette's first two colors (index 0 for background, index 1 for foreground) by default for their row color attributes.
+This feature (accessible via `File -> Import Tiles from ROM...`) allows loading an external binary file (e.g., a game ROM) to extract 8x8 pixel, 1-bit-per-pixel (1bpp) tile data and add it to the current project's tileset.
 
-**Procedure:**
+**Importer Dialog Features:**
 
-1.  **Access the Importer:**
-    *   Go to `File -> Import Tiles from ROM...` in the main menu.
-    *   A file dialog will appear. Select the ROM file you wish to import from.
-
-2.  **ROM Importer Dialog:**
-    *   A new dialog window will open, displaying the content of the selected ROM file as a grid of potential 8x8 tiles.
-    *   **Fine Offset Slider (0-7 bytes):** At the top, this slider allows you to adjust the starting byte offset within the ROM data before tile decoding begins. This is useful if the tile data in the ROM doesn't start exactly at a multiple of 8 bytes from the beginning of the file or the region you are interested in. As you adjust the slider, the tile grid will update in real-time.
-    *   **Tile Grid:**
-        *   The main area shows the ROM data interpreted as a sequence of 8x8 1bpp tiles. Each byte from the ROM is treated as one row of 8 pixels.
-        *   You can scroll through the entire ROM's potential tile data using the vertical and horizontal scrollbars, or by using keyboard navigation (Arrow keys, PageUp/PageDown, Home, End) when the grid has focus.
-    *   **Live Preview:** On the right side, a magnified preview of the tile currently under your mouse cursor in the grid is displayed. This uses the same rendering as the main Tile Editor.
-    *   **Status Bar (Bottom of Dialog):**
-        *   **Grid Top-Left Byte:** Shows the byte offset in the original ROM file that corresponds to the tile currently displayed at the top-left corner of the visible grid. This updates as you scroll.
-        *   **Offset & Grid Index (Hover):** As you move your mouse over the tile grid, this area updates to show the absolute byte offset in the ROM for the tile under the cursor, and its sequential index within the currently rendered full grid of potential ROM tiles.
-        *   **Tiles Selected:** Displays how many tiles are currently included in your selection.
-
-3.  **Selecting Tiles for Import:**
-    *   **Left-Click:** Click on a tile in the grid to start a selection. Click on a second tile to define the end of a rectangular selection (inclusive). The selected tiles will be highlighted with a yellow border.
-    *   If you only click once, that single tile is selected.
-    *   If you click a second time and the new end point is before the start point, the selection range will automatically adjust.
-    *   **Right-Click (or Escape Key):** Clears any current selection in the ROM tile grid.
-
-4.  **Importing the Selected Tiles:**
-    *   Once you have selected the desired range of tiles, the "Import" button will become active.
-    *   Click the **"Import"** button.
-    *   The selected tiles will be read from the ROM data, converted into the application's tile format (using active palette colors 0 and 1 for background/foreground for all rows), and appended to the end of your current project's tileset.
-    *   The ROM Importer dialog will close.
-    *   The main application will update, and the newly imported tiles will be visible in the Tile Editor and Supertile Editor's tileset viewers. The last imported tile will typically be selected.
-    *   If your tileset reaches the maximum limit (256 tiles) during import, only the tiles that fit will be imported, and you will be notified.
-
-5.  **Cancel:**
-    *   Click the "Cancel" button or close the dialog window (using the 'X' button) at any time to abort the import process without making changes to your project.
+*   **Layout:** The dialog is split into a left pane (controls and single tile preview) and a right pane (scrollable grid of tiles from the ROM).
+*   **Live Preview (Left Pane):** Magnified view of the tile currently under the mouse cursor in the main ROM grid.
+*   **Fine Offset Slider (Left Pane):** Adjusts the starting byte offset (0-7 bytes) within the ROM for tile decoding. The slider thumb snaps to integer values, with tick marks (0-7) displayed below.
+*   **Preview/Import Colors (Left Pane):**
+    *   Two clickable color swatches ("FG (1-bits)" and "BG (0-bits)") allow choosing two colors from the main application's 16-color active palette. These are the "current importer rendering colors."
+*   **Status Information (Left Pane):** Displays "Grid Top-Left Byte" offset, hover information (ROM offset and grid index of tile under mouse), and "Tiles Selected" count.
+*   **ROM Tile Grid (Right Pane):** Shows ROM data interpreted as a sequence of 8x8 1bpp tiles. Scrollable via scrollbars or keyboard.
+*   **Rendering Colors in Previews:**
+    *   **Unselected Tiles** in the grid and the live preview (when hovering an unselected tile) use the "current importer rendering colors."
+    *   **Selected Tiles** in the grid and the live preview (when hovering a selected tile) use the FG/BG colors that were active in the "Preview/Import Colors" swatches *at the moment they were selected*. These colors are "locked-in" for each selected tile's preview.
+    *   Changing the "Preview/Import Colors" swatches immediately updates unselected tiles; selected tiles retain their locked-in preview colors.
+*   **Multi-Selection in Grid:**
+    *   **Click (LMB):** Clears previous selection; selects the clicked tile; sets it as the "anchor"; associates current importer FG/BG colors.
+    *   **Shift + Click (LMB):** Clears previous selection; selects a range from the anchor to the clicked tile; associates current importer FG/BG colors with this new range.
+    *   **Ctrl + Click (LMB):** Toggles selection of the clicked tile without clearing others; associates current importer FG/BG colors if adding; updates the "anchor."
+    *   **Ctrl + Shift + Click (LMB):** Adds a range (from anchor to clicked tile) to the existing selection; newly added tiles use colors associated with the anchor (or current importer colors if anchor wasn't specifically colored).
+    *   **Right-Click / Escape Key:** Clears current selection.
+    *   Selected tiles are highlighted with a yellow border.
+*   **Importing:**
+    *   The "Import" button (active when tiles are selected) appends selected tiles to the project's tileset.
+    *   Each imported tile's default row colors are set using the FG/BG palette indices stored with it at its time of selection in the importer.
+    *   Import stops if the tileset limit (256 tiles) is reached.
+*   **Cancel:** Closes the dialog without importing.
 
 ## Technical Description of Generated Files
 
-All files are custom binary formats. Multi-byte integers are generally stored in Big-Endian format unless specified.
+All project assets are saved in custom binary file formats. Multi-byte numerical values (like map dimensions) are stored in Big-Endian format unless specified otherwise.
 
 ### 1. Palette File (`.msxpal`)
-*   **Purpose:** Stores the 16 active palette colors.
-*   **Format:** Total Size: 48 bytes. 16 entries, each 3 bytes (R,G,B as 0-7).
+
+*   **Purpose:** Stores the 16-color active MSX2 palette.
+*   **Structure:**
+    *   A sequence of 16 color entries, totaling 48 bytes.
+    *   Each entry is 3 bytes, representing one palette color (index 0 to 15):
+        *   Byte 1: Red component (value 0-7)
+        *   Byte 2: Green component (value 0-7)
+        *   Byte 3: Blue component (value 0-7)
 
 ### 2. Tileset File (`.SC4Tiles`)
-*   **Purpose:** Stores 8x8 tile pattern data and row color attributes.
-*   **Format:**
-    *   Header: `num_tiles_in_set` (1 byte).
-    *   Tile Data (repeated): 8 bytes for pattern (1 bit/pixel per row), 8 bytes for color attributes (4 bits FG index, 4 bits BG index per row).
+
+*   **Purpose:** Stores definitions for 8x8 pixel tiles, including their pixel patterns and per-row color attributes.
+*   **Structure:**
+    *   **Header (1 byte):**
+        *   `num_tiles_in_set`: The number of tiles defined in this file (value 1-255. A value of 0 represents 256 tiles).
+    *   **Tile Data Blocks (repeated `num_tiles_in_set` times):**
+        *   Each tile block is 16 bytes:
+            *   **Pattern Data (8 bytes):** One byte per row of the 8x8 tile.
+                *   Each bit within a byte represents a pixel (MSB = leftmost pixel).
+                *   `1` = foreground pixel, `0` = background pixel.
+            *   **Color Attribute Data (8 bytes):** One byte per row of the 8x8 tile.
+                *   Each byte defines the foreground and background palette indices for that row:
+                    *   High Nibble (bits 7-4): Foreground palette index (0-15).
+                    *   Low Nibble (bits 3-0): Background palette index (0-15).
 
 ### 3. Supertile Definition File (`.SC4Super`)
-*   **Purpose:** Stores the definitions of supertiles (which base tiles make up each supertile) **and their dimensions**.
-*   **Format:**
-    *   **Header:**
-        *   `num_supertiles` (1 byte): Number of supertiles defined (0-255; if 256, this byte is 0, but practically max is 255 if 0 means 256).
-        *   `supertile_grid_width` (1 byte): Number of base tiles horizontally in each supertile definition (1-32).
-        *   `supertile_grid_height` (1 byte): Number of base tiles vertically in each supertile definition (1-32).
-    *   **Supertile Definition Data (repeated `num_supertiles` times):**
-        *   Each supertile definition consists of `supertile_grid_width * supertile_grid_height` bytes.
-        *   Each byte is the index (0-255) of a tile from the `.SC4Tiles` file.
-        *   Data is stored row by row for the `width x height` grid of tiles within the supertile.
+
+*   **Purpose:** Stores the definitions of supertiles, specifying which base tiles compose them and the supertile grid dimensions.
+*   **Structure:**
+    *   **Header (3 bytes):**
+        *   `num_supertiles` (1 byte): Number of supertiles defined (value 1-255. A value of 0 represents 256 supertiles).
+        *   `supertile_grid_width` (1 byte): The width of each supertile in base tiles (value 1-32).
+        *   `supertile_grid_height` (1 byte): The height of each supertile in base tiles (value 1-32).
+    *   **Supertile Definition Blocks (repeated `num_supertiles` times):**
+        *   Each block defines one supertile and consists of `supertile_grid_width * supertile_grid_height` bytes.
+        *   Each byte within a block is a tile index (0-255) from a `.SC4Tiles` file, specifying the base tile for that position within the supertile's grid.
+        *   Tile indices are stored row by row (top-to-bottom, left-to-right within each row).
 
 ### 4. Map File (`.SC4Map`)
-*   **Purpose:** Stores the map layout, referencing supertile indices.
-*   **Format:**
-    *   Header: `map_width` (2 bytes, Unsigned Short, Big-Endian), `map_height` (2 bytes, Unsigned Short, Big-Endian).
-    *   Map Data: Sequence of `map_width * map_height` bytes, each being a supertile index (0-255). Stored row by row.
 
+*   **Purpose:** Stores the overall map layout, referencing supertile indices.
+*   **Structure:**
+    *   **Header (4 bytes):**
+        *   `map_width` (2 bytes, Unsigned Short, Big-Endian): Width of the map in supertile units.
+        *   `map_height` (2 bytes, Unsigned Short, Big-Endian): Height of the map in supertile units.
+    *   **Map Data:**
+        *   A sequence of `map_width * map_height` bytes.
+        *   Each byte is a supertile index (0-255) from a `.SC4Super` file, specifying the supertile for that map cell.
+        *   Supertile indices are stored row by row (top-to-bottom, left-to-right within each row).
+     
 ## Contributing
 
-Contributions, bug reports, and feature suggestions are welcome! Please feel free to open an issue or submit a pull request on the GitHub repository.
+Contributions to MSX Tile Forge are welcome! If you have bug reports, feature suggestions, or would like to contribute code:
+
+1.  **Issues:** Please feel free to open an issue on the project's GitHub repository to discuss bugs or propose new features.
+2.  **Pull Requests:** For code contributions, please fork the repository, make your changes in a separate branch, and then submit a pull request for review.
+
+Clear descriptions and, where applicable, steps to reproduce issues are greatly appreciated.
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0**.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
-A copy of the license should be included with the software (e.g., in a `LICENSE` file). The full text can also be found at: [https://www.gnu.org/licenses/agpl-3.0.en.html](https://www.gnu.org/licenses/agpl-3.0.en.html)
+The full text of the license should be included with the software (typically in a `LICENSE` or `COPYING` file). It can also be found online at:
+[https://www.gnu.org/licenses/agpl-3.0.en.html](https://www.gnu.org/licenses/agpl-3.0.en.html)
