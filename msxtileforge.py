@@ -8586,7 +8586,7 @@ class TileEditorApp:
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
-        self.debug(f"\n[DEBUG] ### _draw_rom_importer_canvas ### Place full_canvas_image at content coords")
+        self.debug(f"\n[DEBUG] ### _draw_rom_importer_canvas ### Python List Buffer Strategy")
 
         dialog = self.rom_import_dialog
         canvas = getattr(dialog, 'canvas', None)
@@ -8594,7 +8594,6 @@ class TileEditorApp:
             self.debug("[DEBUG] Canvas widget no longer exists. Aborting.")
             return
 
-        # --- Start of existing code from Step 21 ---
         rom_data = dialog.rom_data
         global_fine_offset_for_grid = dialog.fine_offset_var.get()
         current_fg_render_idx = getattr(dialog, 'current_importer_fg_idx', WHITE_IDX)
@@ -8608,7 +8607,6 @@ class TileEditorApp:
             self.debug("[DEBUG] Canvas not yet sized. Aborting.")
             return
 
-        # Create/Resize full_canvas_image to be the size of the VIEWPORT
         if not hasattr(dialog, 'full_canvas_image_ref') or \
            getattr(dialog.full_canvas_image_ref, 'width', lambda: -1)() != canvas_width or \
            getattr(dialog.full_canvas_image_ref, 'height', lambda: -1)() != canvas_height:
@@ -8616,11 +8614,10 @@ class TileEditorApp:
                 safe_img_width = max(1, canvas_width)
                 safe_img_height = max(1, canvas_height)
                 dialog.full_canvas_image_ref = tk.PhotoImage(width=safe_img_width, height=safe_img_height)
-                self.debug(f"[DEBUG] Viewport Image: Created/Resized to {safe_img_width}x{safe_img_height}")
             except tk.TclError as e:
                  self.debug(f"[DEBUG] TclError creating full_canvas_image_ref: {e}. Aborting.")
                  return
-        full_canvas_image = dialog.full_canvas_image_ref # This image is viewport-sized
+        full_canvas_image = dialog.full_canvas_image_ref
         
         try:
             if canvas.winfo_exists(): canvas.delete("all_rom_content")
@@ -8635,20 +8632,21 @@ class TileEditorApp:
         else: total_potential_tiles = (len(rom_data) - global_fine_offset_for_grid) // TILE_WIDTH
 
         if total_potential_tiles <= 0:
-            # ... (empty canvas handling - same)
+            # ... (empty canvas handling - same, ensure it calls update_idletasks)
             try:
                 if canvas.winfo_exists():
                     canvas.config(scrollregion=(0,0,1,1))
                     bg_fill_color_hex_empty = canvas.cget("bg")
-                    # Fill the viewport-sized image
                     full_canvas_image.put(bg_fill_color_hex_empty, to=(0, 0, canvas_width, canvas_height))
-                    # Place it at content (0,0) as there's no other content to scroll to
-                    canvas.create_image(0, 0, image=full_canvas_image, anchor=tk.NW, tags=("rom_content_image", "all_rom_content"))
+                    canvas.create_image(view_content_x1_empty, view_content_y1_empty, image=full_canvas_image, anchor=tk.NW, tags=("rom_content_image", "all_rom_content")) # Use 0,0 for empty
                     canvas.update_idletasks() 
+            except NameError: # If view_content_x1_empty not defined (should be if this path taken early)
+                if canvas.winfo_exists(): canvas.create_image(0,0, image=full_canvas_image, anchor=tk.NW, tags=("rom_content_image", "all_rom_content")); canvas.update_idletasks()
             except tk.TclError: pass
             self._update_rom_importer_info_labels()
             self.debug("[DEBUG] ### _draw_rom_importer_canvas END (no tiles) ###")
             return
+
 
         num_total_content_rows = math.ceil(total_potential_tiles / current_draw_grid_cols) if current_draw_grid_cols > 0 else 0
         scroll_region_width = current_draw_grid_cols * (tile_display_size + padding) + padding
@@ -8659,22 +8657,18 @@ class TileEditorApp:
             if canvas.winfo_exists(): canvas.config(scrollregion=(0, 0, scroll_region_width, scroll_region_height))
         except tk.TclError: self.debug("[DEBUG] TclError configuring scrollregion. Aborting."); return
 
-        view_content_x1 = canvas.canvasx(0) # Top-left X of visible part of content
-        view_content_y1 = canvas.canvasy(0) # Top-left Y of visible part of content
-        self.debug(f"[DEBUG] DRAW: grid_cols={current_draw_grid_cols}, current_scroll_offset_content=({view_content_x1:.1f}, {view_content_y1:.1f})")
+        view_content_x1 = canvas.canvasx(0)
+        view_content_y1 = canvas.canvasy(0)
+        self.debug(f"[DEBUG] DRAW: grid_cols={current_draw_grid_cols}, scroll_offset=({view_content_x1:.1f}, {view_content_y1:.1f})")
 
-        # Iteration bounds for tiles that might be visible in the current viewport
         start_grid_col_idx_viewport = max(0, int(view_content_x1 // (tile_display_size + padding)))
         end_grid_col_idx_viewport = min(current_draw_grid_cols, int(math.ceil((view_content_x1 + canvas_width) / (tile_display_size + padding))))
         end_grid_col_idx_viewport = max(start_grid_col_idx_viewport, end_grid_col_idx_viewport)
-
         start_grid_row_idx = max(0, int(view_content_y1 // (tile_display_size + padding)))
         end_grid_row_idx = min(num_total_content_rows, int(math.ceil((view_content_y1 + canvas_height) / (tile_display_size + padding))))
         end_grid_row_idx = max(start_grid_row_idx, end_grid_row_idx)
         
-        self.debug(f"[DEBUG] DRAW: Viewport Iteration - Cols: {start_grid_col_idx_viewport} to {end_grid_col_idx_viewport-1}, Rows: {start_grid_row_idx} to {end_grid_row_idx-1}")
-        
-        # ... (top_left_grid_byte_offset update logic - same)
+        # ... (top_left_grid_byte_offset update logic - same) ...
         actual_first_visible_tile_idx_in_data = (start_grid_row_idx * current_draw_grid_cols) + start_grid_col_idx_viewport
         if not hasattr(dialog, 'top_left_grid_byte_offset'): dialog.top_left_grid_byte_offset = 0
         dialog.top_left_grid_byte_offset = global_fine_offset_for_grid + (actual_first_visible_tile_idx_in_data * TILE_WIDTH)
@@ -8683,22 +8677,17 @@ class TileEditorApp:
                 dialog.top_left_grid_byte_offset_text_var.set(f"Grid Top-Left Byte: {dialog.top_left_grid_byte_offset} (0x{dialog.top_left_grid_byte_offset:X})")
             except tk.TclError: pass
 
+
+        # --- Create Python list buffer for the viewport pixels ---
         bg_fill_color_hex = canvas.cget("bg")
-        try:
-            full_canvas_image.put(bg_fill_color_hex, to=(0, 0, canvas_width, canvas_height)) # Fill viewport-sized image
-        except tk.TclError as e: self.debug(f"[DEBUG] TclError putting background: {e}. Aborting."); return
+        # viewport_pixel_buffer[y][x] will store the hex color string
+        viewport_pixel_buffer = [[bg_fill_color_hex] * canvas_width for _ in range(canvas_height)]
+        self.debug(f"[DEBUG] Initialized viewport_pixel_buffer: {canvas_height} rows, {canvas_width} cols")
 
-        if not hasattr(dialog, 'temp_tile_image_unscaled_ref'):
-             try: 
-                safe_tile_w = max(1, TILE_WIDTH); safe_tile_h = max(1, TILE_HEIGHT)
-                dialog.temp_tile_image_unscaled_ref = tk.PhotoImage(width=safe_tile_w, height=safe_tile_h)
-             except tk.TclError: self.debug("[DEBUG] Failed create temp_tile_image. Abort."); return
-        temp_tile_image_unscaled = dialog.temp_tile_image_unscaled_ref
-
+        # temp_tile_image_unscaled is not needed if we directly calculate scaled pixels into buffer
         scale_factor_w_for_zoom = max(1, tile_display_size // TILE_WIDTH)
         scale_factor_h_for_zoom = max(1, tile_display_size // TILE_HEIGHT)
 
-        # Loop through the grid cells that are (at least partially) in the current viewport
         for r_grid in range(start_grid_row_idx, end_grid_row_idx):
             for c_grid_logical in range(start_grid_col_idx_viewport, end_grid_col_idx_viewport):
                 # current_rom_tile_absolute_idx and tile_bytes_data fetching is the same
@@ -8727,85 +8716,52 @@ class TileEditorApp:
                 else:
                     tile_bytes_data = rom_data[rom_byte_start_pos : rom_byte_start_pos + TILE_WIDTH]
                 
-                # Populate temp_tile_image_unscaled (same)
-                for y_src_pixel in range(TILE_HEIGHT):
-                    # ...
-                    if y_src_pixel >= len(tile_bytes_data): continue
-                    row_byte = tile_bytes_data[y_src_pixel]
-                    one_tile_row_hex_colors = []
-                    for x_src_pixel in range(TILE_WIDTH):
-                        pixel_is_set = (row_byte >> (7 - x_src_pixel)) & 1
-                        hex_color = color_for_fg_pixel if pixel_is_set else color_for_bg_pixel
-                        one_tile_row_hex_colors.append(hex_color)
-                    try: temp_tile_image_unscaled.put("{" + " ".join(one_tile_row_hex_colors) + "}", to=(0, y_src_pixel))
-                    except tk.TclError: pass 
-                
-                # Calculate tile's top-left in CONTENT coordinates
+                # Calculate tile's top-left on the viewport-sized buffer
                 tile_content_x_logical = c_grid_logical * (tile_display_size + padding) + padding
                 tile_content_y_logical = r_grid * (tile_display_size + padding) + padding
-                
-                # Calculate where this tile's (0,0) should be on our VIEWPORT-SIZED full_canvas_image
-                # This is the offset from the top-left of the viewport image.
-                img_target_x_on_photoimage = round(tile_content_x_logical - view_content_x1)
-                img_target_y_on_photoimage = round(tile_content_y_logical - view_content_y1)
+                img_target_x_on_buffer = round(tile_content_x_logical - view_content_x1)
+                img_target_y_on_buffer = round(tile_content_y_logical - view_content_y1)
 
-                if current_rom_tile_absolute_idx == 1308: # Targeted debug
-                    self.debug(f"[DEBUG] TILE 1308 PUT: Abs Idx={current_rom_tile_absolute_idx}, (r_grid,c_log)=({r_grid},{c_grid_logical}), "
-                               f"content_logical=({tile_content_x_logical:.1f}, {tile_content_y_logical:.1f}), "
-                               f"view_offset=({view_content_x1:.1f}, {view_content_y1:.1f}), "
-                               f"target_on_photoimage=({img_target_x_on_photoimage}, {img_target_y_on_photoimage})")
-                
-                # Manual Scaled Put onto full_canvas_image at img_target_x/y_on_photoimage
-                for y_src_pixel_render in range(TILE_HEIGHT):
-                    # ... (inner loops for manual scaled put - same as Step 19)
-                    if y_src_pixel_render >= len(tile_bytes_data): continue
-                    row_byte_render = tile_bytes_data[y_src_pixel_render]
-                    one_tile_row_hex_colors_render = []
-                    for x_src_pixel_render in range(TILE_WIDTH):
-                        pixel_is_set_render = (row_byte_render >> (7 - x_src_pixel_render)) & 1
-                        hex_color_render = color_for_fg_pixel if pixel_is_set_render else color_for_bg_pixel
-                        one_tile_row_hex_colors_render.append(hex_color_render)
-
-                    for y_scaled_offset_render in range(scale_factor_h_for_zoom):
-                        photo_img_y_coord_render = img_target_y_on_photoimage + (y_src_pixel_render * scale_factor_h_for_zoom) + y_scaled_offset_render
-                        if not (0 <= photo_img_y_coord_render < canvas_height): continue
-
-                        scaled_put_data_for_row_render = []
-                        for hex_val_src_render in one_tile_row_hex_colors_render:
-                            scaled_put_data_for_row_render.extend([hex_val_src_render] * scale_factor_w_for_zoom)
+                # Draw this tile's scaled pixels into viewport_pixel_buffer
+                for y_src_pixel in range(TILE_HEIGHT):
+                    if y_src_pixel >= len(tile_bytes_data): continue
+                    row_byte = tile_bytes_data[y_src_pixel]
+                    for x_src_pixel in range(TILE_WIDTH):
+                        pixel_is_set = (row_byte >> (7 - x_src_pixel)) & 1
+                        hex_color_to_set = color_for_fg_pixel if pixel_is_set else color_for_bg_pixel
                         
-                        photo_img_x_start_for_put_render = img_target_x_on_photoimage
-                        data_to_put_clipped_x_render = scaled_put_data_for_row_render
-                        # X-clipping for data_to_put_clipped_x_render
-                        if photo_img_x_start_for_put_render < 0:
-                            clip_amount_left_render = abs(photo_img_x_start_for_put_render)
-                            if clip_amount_left_render < len(data_to_put_clipped_x_render):
-                                data_to_put_clipped_x_render = data_to_put_clipped_x_render[clip_amount_left_render:]
-                                photo_img_x_start_for_put_render = 0
-                            else: continue
-                        if photo_img_x_start_for_put_render + len(data_to_put_clipped_x_render) > canvas_width:
-                            clip_amount_right_render = (photo_img_x_start_for_put_render + len(data_to_put_clipped_x_render)) - canvas_width
-                            if clip_amount_right_render < len(data_to_put_clipped_x_render):
-                                data_to_put_clipped_x_render = data_to_put_clipped_x_render[:-clip_amount_right_render]
-                            else: continue
-                        if not data_to_put_clipped_x_render: continue
+                        for y_scaled_offset in range(scale_factor_h_for_zoom):
+                            buffer_y = img_target_y_on_buffer + (y_src_pixel * scale_factor_h_for_zoom) + y_scaled_offset
+                            if 0 <= buffer_y < canvas_height: # Check Y bounds for buffer
+                                for x_scaled_offset in range(scale_factor_w_for_zoom):
+                                    buffer_x = img_target_x_on_buffer + (x_src_pixel * scale_factor_w_for_zoom) + x_scaled_offset
+                                    if 0 <= buffer_x < canvas_width: # Check X bounds for buffer
+                                        viewport_pixel_buffer[buffer_y][buffer_x] = hex_color_to_set
+        # --- End of loops for populating viewport_pixel_buffer ---
 
-                        try:
-                            full_canvas_image.put("{" + " ".join(data_to_put_clipped_x_render) + "}", to=(photo_img_x_start_for_put_render, photo_img_y_coord_render))
-                        except tk.TclError: pass # Simplified fallback
-        # --- End of loops ---
+        # --- Put the viewport_pixel_buffer onto full_canvas_image ---
+        self.debug(f"[DEBUG] Populated viewport_pixel_buffer. Now putting to PhotoImage.")
+        for y_idx, row_hex_data in enumerate(viewport_pixel_buffer):
+            if not row_hex_data: continue
+            try:
+                if y_idx < full_canvas_image.height():
+                     full_canvas_image.put("{" + " ".join(row_hex_data) + "}", to=(0, y_idx))
+            except tk.TclError as e_put_buffer:
+                self.debug(f"[DEBUG] TclError putting buffer row {y_idx}: {e_put_buffer}")
+                try: # Fallback for the row
+                    if y_idx < full_canvas_image.height() and row_hex_data:
+                        full_canvas_image.put(row_hex_data[0], to=(0, y_idx, len(row_hex_data), y_idx+1))
+                except tk.TclError: pass
+                continue
+        self.debug(f"[DEBUG] Finished putting buffer to PhotoImage.")
 
+        # Place the populated full_canvas_image onto the canvas at content coordinates
         try:
             if canvas.winfo_exists():
-                # --- MODIFICATION: Place the image at the current scroll offset ---
-                # The full_canvas_image contains what should be visible starting at view_content_x1, view_content_y1.
-                # So, the image item on the canvas should be created at these content coordinates.
                 canvas.create_image(view_content_x1, view_content_y1, 
                                     image=full_canvas_image, anchor=tk.NW, 
                                     tags=("rom_content_image", "all_rom_content"))
-                self.debug(f"[DEBUG] Canvas create_image for full_canvas_image at content coords: ({view_content_x1:.1f}, {view_content_y1:.1f})")
-        except tk.TclError:
-            self.debug("[DEBUG] TclError creating main content image."); return
+        except tk.TclError: self.debug("[DEBUG] TclError creating main content image."); return
 
         self._draw_rom_import_selection_highlight(grid_cols_for_this_draw=current_draw_grid_cols)
         self._update_rom_importer_info_labels()
@@ -8813,7 +8769,7 @@ class TileEditorApp:
         if canvas.winfo_exists():
             canvas.update_idletasks()
 
-        self.debug("[DEBUG] ### _draw_rom_importer_canvas END ### Place full_canvas_image at content coords")
+        self.debug("[DEBUG] ### _draw_rom_importer_canvas END ### Python List Buffer Strategy")
 
     def _draw_rom_import_selection_highlight(self, grid_cols_for_this_draw=None):
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
