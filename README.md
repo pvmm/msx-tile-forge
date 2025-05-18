@@ -1,5 +1,5 @@
 # MSX Tile Forge
-v0.0.33
+v0.0.34
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and TkMyinter.
 
@@ -26,8 +26,7 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Copy/Paste functionality for tile patterns and row colors.
     *   "Mark Unused" feature to highlight tiles not referenced in any supertile.
     *   Save/Load tilesets as `.SC4Tiles` binary files.
-    *   **ROM Importer:** Import 8x8 1bpp tile data directly from ROM files. Features a visual browser with fine offset control, live preview, advanced multi-selection (Click, Shift+Click, Ctrl+Click, Ctrl+Shift+Click), and per-selection configurable preview/import colors from the active palette.
-      
+
 *   **Supertile Editor (Project-Configurable Dimensions, e.g., 2x2, 4x4, 8x2 tiles):**
     *   Define supertiles by arranging existing tiles in a grid of **user-defined width and height** (1-32 tiles per dimension, set per project).
     *   Tileset viewer for selecting component tiles from the current tileset.
@@ -60,6 +59,12 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Paste Preview: When map data is on the clipboard, a semi-transparent preview of the paste area follows the mouse cursor.
     *   Save/Load maps as `.SC4Map` binary files.
 
+*   **ROM Importer:** 
+    * Imports 8x8 tiles data directly from ROM files. Features a visual browser, live preview, advanced multi-selection (Click, Shift+Click, Ctrl+Click, Ctrl+Shift+Click), base colors control and a fine tile start offset control.
+    * **Per-Selection Properties:**
+        * For each selected tile (or group of tiles) in the ROM grid, the **fine offset** and **base FG/BG colors** configurations are captured.
+        * These stored properties (offset and colors) are used for both previewing selected tiles and for the actual import process.
+    
 *   **Project Management:**
     *   Projects bundle all asset types: palettes, tilesets, supertiles and maps.
     *   Ability to save and load individual asset components (palette, tileset, supertiles, map) separately.
@@ -251,28 +256,22 @@ For arranging supertiles to construct game maps.
 This feature (accessible via `File -> Import Tiles from ROM...`) allows loading an external binary file (e.g., a game ROM) to extract 8x8 pixel, 1-bit-per-pixel (1bpp) tile data and add it to the current project's tileset.
 
 **Importer Dialog Features:**
-
 *   **Layout:** The dialog is split into a left pane (controls and single tile preview) and a right pane (scrollable grid of tiles from the ROM).
 *   **Live Preview (Left Pane):** Magnified view of the tile currently under the mouse cursor in the main ROM grid.
-*   **Fine Offset Slider (Left Pane):** Adjusts the starting byte offset (0-7 bytes) within the ROM for tile decoding. The slider thumb snaps to integer values, with tick marks (0-7) displayed below.
-*   **Preview/Import Colors (Left Pane):**
-    *   Two clickable color swatches ("FG (1-bits)" and "BG (0-bits)") allow choosing two colors from the main application's 16-color active palette. These are the "current importer rendering colors."
+*   **Fine Offset Slider (Left Pane):** Adjusts the **global default** starting byte offset (0-7 bytes) within the ROM for interpreting tile data. This offset will be captured when new tile selections are made, and will be remembered for those tiles even if you change the slide position afterwards, allowing for capturing tiles with different offsets.
+*   **Preview/Import Colors (Left Pane):** Two clickable color swatches (FG (1-bits) and BG (0-bits)) allow choosing two colors from the main application's 16-color active palette. These settings will be captured when new tile selections are made, and will be remembered for those tiles even if you choose different colors afterwards, allowing for capturing tiles with different base colors.
 *   **Status Information (Left Pane):** Displays "Grid Top-Left Byte" offset, hover information (ROM offset and grid index of tile under mouse), and "Tiles Selected" count.
 *   **ROM Tile Grid (Right Pane):** Shows ROM data interpreted as a sequence of 8x8 1bpp tiles. Scrollable via scrollbars or keyboard.
-*   **Rendering Colors in Previews:**
-    *   **Unselected Tiles** in the grid and the live preview (when hovering an unselected tile) use the "current importer rendering colors."
-    *   **Selected Tiles** in the grid and the live preview (when hovering a selected tile) use the FG/BG colors that were active in the "Preview/Import Colors" swatches *at the moment they were selected*. These colors are "locked-in" for each selected tile's preview.
-    *   Changing the "Preview/Import Colors" swatches immediately updates unselected tiles; selected tiles retain their locked-in preview colors.
 *   **Multi-Selection in Grid:**
-    *   **Click (LMB):** Clears previous selection; selects the clicked tile; sets it as the "anchor"; associates current importer FG/BG colors.
-    *   **Shift + Click (LMB):** Clears previous selection; selects a range from the anchor to the clicked tile; associates current importer FG/BG colors with this new range.
-    *   **Ctrl + Click (LMB):** Toggles selection of the clicked tile without clearing others; associates current importer FG/BG colors if adding; updates the "anchor."
-    *   **Ctrl + Shift + Click (LMB):** Adds a range (from anchor to clicked tile) to the existing selection; newly added tiles use colors associated with the anchor (or current importer colors if anchor wasn't specifically colored).
+    *   **Click (LMB):** Clears previous selection; selects the clicked tile, associating it with current settings for colors and offset; sets it as the "anchor".
+    *   **Shift + Click (LMB):** Clears previous selection; selects a range from the anchor to the clicked tile, associating the tiles with current settings for colors and offset.
+    *   **Ctrl + Click (LMB):** Toggles selection of the clicked tile without clearing others, associating it with current settings for colors and offset; updates the "anchor."
+    *   **Ctrl + Shift + Click (LMB):** Adds a range (from anchor to clicked tile) to the existing selection, associating the tiles with current settings for colors and offset.
     *   **Right-Click / Escape Key:** Clears current selection.
     *   Selected tiles are highlighted with a yellow border.
 *   **Importing:**
     *   The "Import" button (active when tiles are selected) appends selected tiles to the project's tileset.
-    *   Each imported tile's default row colors are set using the FG/BG palette indices stored with it at its time of selection in the importer.
+    *   Each imported tile's row colors are set using the offset and FG/BG palette indices stored with it at its time of selection in the importer.
     *   Import stops if the tileset limit (256 tiles) is reached.
 *   **Cancel:** Closes the dialog without importing.
 
