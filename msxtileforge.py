@@ -155,15 +155,13 @@ class TileEditorApp:
         with suppress(tk.TclError):
             self.root.state("zoomed")
 
-        # --- ADD BINDING FOR ROOT WINDOW RESIZE ---
         self.root.bind("<Configure>", self._on_main_window_configure)
-        # This timer will be used by _on_main_window_configure for debouncing
         self._main_window_configure_timer = None 
-        # --- END ADD BINDING ---
+        self._map_canvas_configure_timer = None # Initialize this timer attribute
+        self._palette_pane_resize_timer = None # For palette selector redraw
 
 
         self.current_project_base_path = None
-        # ... (rest of your __init__ method remains the same) ...
         self.project_modified = False
 
         self.supertile_grid_width = SUPERTILE_GRID_DIM 
@@ -237,7 +235,7 @@ class TileEditorApp:
         self.marked_unused_supertiles = set()
 
         self.rom_import_dialog = None
-        self.map_controls_min_width = 0 
+        self.map_controls_min_width = 0 # Will be calculated in create_map_editor_widgets
 
 
         self.debug("[DEBUG] TileEditorApp __init__ started.")
@@ -260,10 +258,10 @@ class TileEditorApp:
         self.create_palette_editor_widgets(self.tab_palette_editor)
         self.create_tile_editor_widgets(self.tab_tile_editor)
         self.create_supertile_editor_widgets(self.tab_supertile_editor)
-        self.create_map_editor_widgets(self.tab_map_editor) # This will now calculate self.map_controls_min_width
+        self.create_map_editor_widgets(self.tab_map_editor) 
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
-        self._setup_map_canvas_bindings() 
+        self._setup_map_canvas_bindings() # This might be a good place to add map_canvas configure bind if canvas exists
 
         self._update_window_title() 
         self.update_all_displays(changed_level="all") 
@@ -1143,7 +1141,6 @@ class TileEditorApp:
         
         controls_frame = ttk.Frame(map_area_frame)
         controls_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
-        # ... (all map controls, map canvas frame, map canvas - no changes here) ...
         size_label = ttk.Label(controls_frame, text="Map Size:")
         size_label.grid(row=0, column=0, padx=(0, 5), pady=2)
         self.map_size_label = ttk.Label(controls_frame, text=f"{map_width} x {map_height}")
@@ -1182,6 +1179,14 @@ class TileEditorApp:
         grid_controls_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
         st_grid_check = ttk.Checkbutton(grid_controls_frame,text="Show Supertile Grid (Press 'G' to Cycle Colors)",variable=self.show_supertile_grid,command=self.toggle_supertile_grid)
         st_grid_check.grid(row=0, column=0, padx=5, sticky="w")
+        
+        # Ensure map_area_frame's layout is processed before querying child reqwidth
+        map_area_frame.update_idletasks() 
+        controls_frame_width = controls_frame.winfo_reqwidth()
+        win_controls_frame_width = win_controls_frame.winfo_reqwidth()
+        grid_controls_frame_width = grid_controls_frame.winfo_reqwidth()
+        self.map_controls_min_width = max(controls_frame_width, win_controls_frame_width, grid_controls_frame_width) + 10 
+        self.debug(f"[DEBUG] create_map_editor_widgets: Calculated map_controls_min_width = {self.map_controls_min_width}")
 
         map_canvas_frame = ttk.LabelFrame(map_area_frame, text="Map")
         map_canvas_frame.grid(row=3, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
@@ -1195,19 +1200,18 @@ class TileEditorApp:
         self.map_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         self.map_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.map_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
-        
+
+        self.map_canvas.bind("<Configure>", self._on_map_canvas_configure)
+
         palette_area_frame.grid_rowconfigure(0, weight=1)
         palette_area_frame.grid_columnconfigure(0, weight=1)
-
         st_selector_frame = ttk.LabelFrame(palette_area_frame, text="Supertile Palette (Click to select for map)")
         st_selector_frame.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E), pady=(0,5))
         st_selector_frame.grid_rowconfigure(0, weight=1)
         st_selector_frame.grid_columnconfigure(0, weight=1)
-
         padding = 1 
         min_one_supertile_preview_width = (self.supertile_grid_width * TILE_WIDTH) + (2 * padding)
         min_one_supertile_preview_width = max(32, min_one_supertile_preview_width) 
-
         self.map_supertile_selector_canvas = tk.Canvas(st_selector_frame,bg="lightgrey", scrollregion=(0, 0, 1, 1), width=min_one_supertile_preview_width)
         map_st_sel_hbar = ttk.Scrollbar(st_selector_frame, orient=tk.HORIZONTAL)
         map_st_sel_vbar = ttk.Scrollbar(st_selector_frame, orient=tk.VERTICAL)
@@ -1217,10 +1221,8 @@ class TileEditorApp:
         self.map_supertile_selector_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         map_st_sel_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         map_st_sel_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
-
         self.map_supertile_select_label = ttk.Label(palette_area_frame, text=f"Selected Supertile for Painting: {selected_supertile_for_map}")
         self.map_supertile_select_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 0))
-
         self.map_supertile_selector_canvas.bind("<Button-1>", self.handle_map_supertile_selector_click)
         self.map_supertile_selector_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
         self.map_supertile_selector_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
@@ -2052,50 +2054,70 @@ class TileEditorApp:
         # Zoom label updated in draw_map_canvas
 
     def on_tab_change(self, event):
-        self._clear_marked_unused(trigger_redraw=False)
+        self._clear_marked_unused(trigger_redraw=False) # Clear marks on any tab change
 
-        current_tab_index = -1
+        current_tab_index = -1 # Used for debugging or specific tab logic if needed later
         new_tab_index = -1
+        selected_tab_widget = None # Store the actual widget of the selected tab
+
         try:
             if self.notebook and self.notebook.winfo_exists():
-                selected_tab_name = self.notebook.select()
-                if selected_tab_name:
-                    new_tab_index = self.notebook.index(selected_tab_name)
+                selected_tab_path = self.notebook.select()
+                if selected_tab_path:
+                    new_tab_index = self.notebook.index(selected_tab_path)
+                    selected_tab_widget = self.notebook.nametowidget(selected_tab_path)
         except tk.TclError:
-            pass
+            self.debug("[DEBUG] on_tab_change: TclError getting current tab info.")
+            pass # Proceed with generic updates if tab info fails
 
-        if self.map_paste_preview_rect_id:
+        if self.map_paste_preview_rect_id: # Clear map paste preview if switching away or to map
             self._clear_paste_preview_rect()
 
-        self.update_all_displays(changed_level="all")
+        # Always update all displays based on the newly selected tab's needs
+        self.update_all_displays(changed_level="all") # This will draw the content of the new tab
+
         self._update_edit_menu_state()
         self._update_editor_button_states()
-        self._update_supertile_rotate_button_state() # Update rotate button based on current ST dims
+        self._update_supertile_rotate_button_state()
 
+        # Manage global key bindings or focus specific to the new tab
         try:
-            self.root.unbind("<KeyPress-g>")
+            self.root.unbind("<KeyPress-g>") # Unbind from any previous tab that might have used it
             self.root.unbind("<KeyPress-G>")
         except tk.TclError:
-            pass
+            pass # In case bindings weren't set
 
-        if new_tab_index == 3:  # Map Editor Tab
+        if selected_tab_widget == self.tab_map_editor: # Check using the stored tab frame widget
+            self.debug("[DEBUG] on_tab_change: Map Editor tab selected.")
+            # Bind 'g' for grid color cycling only when map tab is active
             self.root.bind("<KeyPress-g>", self.handle_map_tab_keypress, add="+")
             self.root.bind("<KeyPress-G>", self.handle_map_tab_keypress, add="+")
+            
+            # Ensure canvas gets focus for keyboard events (pan, zoom hints, etc.)
             if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
-                self.root.after(50, self.map_canvas.focus_set)
+                # Use after_idle to ensure tab is fully visible and canvas can take focus
+                self.root.after_idle(self.map_canvas.focus_set)
 
-            if self.map_clipboard_data:
-                try:
-                    if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
-                        pointer_x = self.map_canvas.winfo_pointerx() - self.map_canvas.winfo_rootx()
-                        pointer_y = self.map_canvas.winfo_pointery() - self.map_canvas.winfo_rooty()
-                        if (0 <= pointer_x < self.map_canvas.winfo_width() and
-                            0 <= pointer_y < self.map_canvas.winfo_height()):
-                             canvas_x = self.map_canvas.canvasx(pointer_x)
-                             canvas_y = self.map_canvas.canvasy(pointer_y)
-                             self._draw_paste_preview_rect(canvas_coords=(canvas_x, canvas_y))
-                except Exception:
-                     pass
+            # --- ADDED: Schedule enforcement of pane minimums ---
+            def enforce_map_pane_minimums_after_tab_change():
+                self.debug("[DEBUG] on_tab_change: Map tab visible, performing delayed pane minimum check.")
+                # Check if map_paned_window actually exists and is visible now
+                if hasattr(self, 'map_paned_window') and self.map_paned_window.winfo_exists() and self.map_paned_window.winfo_ismapped():
+                    self._do_check_and_enforce_palette_min_width()
+                else:
+                    self.debug("[DEBUG] on_tab_change: Map paned window not ready for min width enforcement yet.")
+            
+            # Use after_idle to ensure PanedWindow and its panes have their geometry updated
+            self.root.after_idle(enforce_map_pane_minimums_after_tab_change)
+            # --- END ADDED ---
+
+            # Draw paste preview if applicable (already handled by _update_map_cursor_and_coords on Motion/Enter)
+            # but an explicit call here after tab switch might be desired if mouse is already over canvas.
+            # For now, let motion/enter handle it.
+
+        # Update cursor for the map canvas if it's the active tab, or reset otherwise
+        # This is a general cursor update based on context.
+        self.root.after_idle(self._update_map_cursor) # update_map_cursor checks for map_canvas focus
 
     # --- Palette Editor Handlers ---
     def handle_current_palette_click(self, event):
@@ -3966,11 +3988,7 @@ class TileEditorApp:
         """Prompts user for a base project name and saves all four component files.
         Returns True if all saves are successful and not cancelled by user, False otherwise.
         """
-        # Prompt for a base name. The user can type just a name, and the dialog
-        # will place it in the selected directory.
-        # We don't use a specific project extension here, as it's a conceptual project.
         base_path_from_dialog = filedialog.asksaveasfilename(
-            # defaultextension="", # Option 1: No default extension
             title="Save Project As (Enter Base Name for Components)",
             filetypes=[("All Files", "*.*")], # Allows user to type any name
             parent=self.root
@@ -3980,14 +3998,8 @@ class TileEditorApp:
             self.debug("[DEBUG] save_project_as: User cancelled 'Save As' dialog.")
             return False # User cancelled
 
-        # The base_path_from_dialog might include an extension if the user typed one
-        # or if the OS dialog added one based on the "All Files" filter (e.g., ".txt" on some systems if typed without one).
-        # We want to use the part *before* any such trailing extension as our true base.
-        # os.path.splitext will split "path/filename.ext" into ("path/filename", ".ext")
         true_base_path, _ = os.path.splitext(base_path_from_dialog)
         
-        # If splitext resulted in an empty base_path (e.g., user typed only ".txt"),
-        # then use the original dialog path. This is an edge case.
         if not true_base_path: 
             true_base_path = base_path_from_dialog
 
@@ -4028,13 +4040,9 @@ class TileEditorApp:
             return False
     
     def open_project(self):
-        """Prompts user to select ONE project file, then loads all four components."""
         filepath = filedialog.askopenfilename(
             filetypes=[
-                (
-                    "MSX Tileset File (*.SC4Tiles)", # Default to a common component
-                    "*.SC4Tiles",
-                ),  
+                ("MSX Tileset File (*.SC4Tiles)", "*.SC4Tiles"),  
                 ("MSX Palette File (*.msxpal)", "*.msxpal"),
                 ("MSX Supertile File (*.SC4Super)", "*.SC4Super"),
                 ("MSX Map File (*.SC4Map)", "*.SC4Map"),
@@ -4056,91 +4064,75 @@ class TileEditorApp:
         map_path = base_path + ".SC4Map"
 
         missing_files = []
-        if not os.path.exists(pal_path):
-            missing_files.append(os.path.basename(pal_path))
-        if not os.path.exists(til_path):
-            missing_files.append(os.path.basename(til_path))
-        if not os.path.exists(sup_path):
-            missing_files.append(os.path.basename(sup_path))
-        if not os.path.exists(map_path):
-            missing_files.append(os.path.basename(map_path))
+        if not os.path.exists(pal_path): missing_files.append(os.path.basename(pal_path))
+        if not os.path.exists(til_path): missing_files.append(os.path.basename(til_path))
+        if not os.path.exists(sup_path): missing_files.append(os.path.basename(sup_path))
+        if not os.path.exists(map_path): missing_files.append(os.path.basename(map_path))
 
         if missing_files:
-            messagebox.showerror(
-                "Open Project Error",
-                f"Cannot open project '{base_name}'.\n"
-                f"Missing component file(s):\n" + "\n".join(missing_files),
-            )
+            messagebox.showerror("Open Project Error", f"Cannot open project '{base_name}'.\nMissing component file(s):\n" + "\n".join(missing_files))
             return
 
         if self.project_modified:
-            confirm_discard = messagebox.askokcancel(
-                "Unsaved Changes",
-                f"Discard current unsaved changes and open project '{base_name}'?",
-                icon="warning"
-            )
+            confirm_discard = messagebox.askokcancel("Unsaved Changes", f"Discard current unsaved changes and open project '{base_name}'?", icon="warning")
             if not confirm_discard:
                 return
         
-        self.is_ctrl_pressed = False
-        self.is_shift_pressed = False
-        self.current_mouse_action = None
-        
+        self.is_ctrl_pressed = False; self.is_shift_pressed = False; self.current_mouse_action = None
         global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data
-        tile_clipboard_pattern = None
-        tile_clipboard_colors = None
-        supertile_clipboard_data = None
+        tile_clipboard_pattern = None; tile_clipboard_colors = None; supertile_clipboard_data = None
         self.map_clipboard_data = None
-        self._clear_map_selection() 
-        self._clear_paste_preview_rect() 
-
-        # Clear marked unused state BEFORE loading new data
+        self._clear_map_selection(); self._clear_paste_preview_rect() 
         self._clear_marked_unused(trigger_redraw=False)
-
         self.clear_all_caches()
         self.invalidate_minimap_background_cache()
 
         success = True
-        print(f"Loading project '{base_name}'...")
-
-        # Load palette first, then tileset (STs depend on tiles, Map depends on STs)
-        if success:
-            print(f"  Loading palette: {pal_path}")
-            success = self.open_palette(pal_path)
-        if success:
-            print(f"  Loading tileset: {til_path}")
-            success = self.open_tileset(til_path) # Needs num_tiles_in_set for ST validation
-        if success:
-            print(f"  Loading supertiles: {sup_path}")
-            success = self.open_supertiles(sup_path) # Needs num_supertiles for Map validation
-        if success:
-            print(f"  Loading map: {map_path}")
-            success = self.open_map(map_path)
-
-        self.is_ctrl_pressed = False
-        self.is_shift_pressed = False
-        self.current_mouse_action = None
+        self.debug(f"Loading project '{base_name}'...")
+        if success: self.debug(f"  Loading palette: {pal_path}"); success = self.open_palette(pal_path)
+        if success: self.debug(f"  Loading tileset: {til_path}"); success = self.open_tileset(til_path)
+        if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path)
+        if success: self.debug(f"  Loading map: {map_path}"); success = self.open_map(map_path)
         
         if success:
             self.project_modified = False 
             self.current_project_base_path = base_path
             self._update_window_title()
             self._update_editor_button_states()
-            self.notebook.select(self.tab_map_editor) 
-            self.update_all_displays(changed_level="all")
+            self._update_supertile_rotate_button_state()
             self._update_edit_menu_state()
-            self.root.after(10, self._update_map_cursor) 
+
+            self.notebook.select(self.tab_map_editor)
+            
+            self.debug("[DEBUG] open_project: Tab selected. Forcing root.update().")
+            try:
+                self.root.update() 
+            except tk.TclError as e_update: 
+                self.debug(f"[DEBUG] open_project: TclError during root.update(): {e_update}")
+                return 
+
+            self.debug("[DEBUG] open_project: Performing updates immediately after root.update().")
+            
+            if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
+                self.debug(f"[DEBUG] open_project: Map canvas WxH after root.update(): {self.map_canvas.winfo_width()}x{self.map_canvas.winfo_height()}")
+            
+            self.update_all_displays(changed_level="all") 
+            
+            if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
+                self.map_canvas.focus_set() 
+            self.draw_minimap() 
+            self._update_map_cursor() 
+            self.debug("[DEBUG] open_project: Direct updates complete.")
+
         else:
-            messagebox.showerror(
-                "Project Open Error",
-                f"Failed to load one or more components for project '{base_name}'. The application state might be inconsistent.",
-            )
+            messagebox.showerror("Project Open Error", f"Failed to load one or more components for project '{base_name}'. The application state might be inconsistent.")
             self.project_modified = True 
             self._update_window_title()
             self._update_editor_button_states()
+            self._update_supertile_rotate_button_state()
             self.update_all_displays(changed_level="all")
             self._update_edit_menu_state()
-            self.root.after(10, self._update_map_cursor)
+            self.root.after(10, self._update_map_cursor) # Keep a small after for cursor if load fails
 
     # --- Edit Menu Commands ---
 
@@ -7984,7 +7976,7 @@ class TileEditorApp:
         name_label.pack(anchor="w", pady=(0, 5))
 
         # Version and Author
-        info_text = "Version: 0.0.34\nAuthor: Damned Angel + Gemini AI"
+        info_text = "Version: 0.0.35\nAuthor: Damned Angel + Gemini AI"
         info_label = ttk.Label(text_frame, text=info_text, justify=tk.LEFT)
         info_label.pack(anchor="w")
 
@@ -9709,76 +9701,108 @@ class TileEditorApp:
         self.debug(f"[DEBUG] === _enforce_palette_min_width_on_release END (check scheduled) ===")
 
     def _do_check_and_enforce_palette_min_width(self):
-        # Actual logic to check and enforce, called after a short delay from ButtonRelease
         self.debug(f"\n[DEBUG] --- _do_check_and_enforce_palette_min_width ---")
 
-        map_pane_widget = getattr(self, 'map_editor_map_pane_container', None) # Left pane
-        palette_pane_widget = getattr(self, 'map_editor_palette_pane_container', None) # Right pane
+        map_pane_container = getattr(self, 'map_editor_map_pane_container', None)
+        palette_pane_container = getattr(self, 'map_editor_palette_pane_container', None)
         paned_window_widget = getattr(self, 'map_paned_window', None)
 
         if not paned_window_widget or not paned_window_widget.winfo_exists() or \
-           not palette_pane_widget or not palette_pane_widget.winfo_exists() or \
-           not map_pane_widget or not map_pane_widget.winfo_exists(): # Check map_pane_widget too
-            self.debug("[DEBUG] DoCheckEnforce: Required widgets missing. Aborting.")
+           not palette_pane_container or not palette_pane_container.winfo_exists() or \
+           not map_pane_container or not map_pane_container.winfo_exists():
+            self.debug("[DEBUG] DoCheckEnforce: Required paned window/pane widgets missing. Aborting.")
             return
 
         try:
-            current_palette_pane_actual_width = palette_pane_widget.winfo_width()
-            current_map_pane_actual_width = map_pane_widget.winfo_width() # Get current map pane width
             paned_window_total_width = paned_window_widget.winfo_width()
-            sash_thickness_approx = 8 # Approximation for sash
+            sash_thickness_approx = 8 
             
-            self.debug(f"[DEBUG] DoCheckEnforce: Current PalettePaneW={current_palette_pane_actual_width}, MapPaneW={current_map_pane_actual_width}, TotalPW={paned_window_total_width}")
+            if paned_window_total_width < 50: 
+                self.debug(f"[DEBUG] DoCheckEnforce: PanedWindow total width ({paned_window_total_width}) too small. Skipping enforcement.")
+                return
 
-            # --- Calculate Minimum for Right Pane (Palette) ---
-            padding_for_min_calc = 1 
+            self.debug(f"[DEBUG] DoCheckEnforce: PanedWindowTotalW={paned_window_total_width}")
+
+            # Min width for Left Pane (Map Area + Controls)
+            # Ensure self.map_controls_min_width has a sensible default if not yet calculated
+            # The value 400 worked for you.
+            min_left_pane_width = getattr(self, 'map_controls_min_width', 400) 
+            if min_left_pane_width <= 10: # If it was calculated as something tiny or was default 0
+                min_left_pane_width = 400 # Override with your known good fallback
+                self.debug(f"[DEBUG] DoCheckEnforce: Overriding min_left_pane_width to fallback {min_left_pane_width}")
+            min_left_pane_width = max(50, min_left_pane_width) # Absolute floor
+            self.debug(f"[DEBUG] DoCheckEnforce: Min Left Pane (Map Controls) Width Required: {min_left_pane_width}")
+
+            # Min width for Right Pane (Palette) Content
+            padding_for_palette_content = 1
+            frame_padding_palette_approx = 20
+            scrollbar_width_approx = 10 
             one_supertile_item_w = (self.supertile_grid_width * TILE_WIDTH)
-            min_canvas_content_width_palette = (1 * one_supertile_item_w) + (1 + 1) * padding_for_min_calc 
+            min_canvas_content_width_palette = (1 * one_supertile_item_w) + (1 + 1) * padding_for_palette_content 
             min_canvas_content_width_palette = max(32, min_canvas_content_width_palette)
-            frame_and_internal_padding_approx_palette = 15 
-            min_total_palette_pane_width = min_canvas_content_width_palette + frame_and_internal_padding_approx_palette
-            self.debug(f"[DEBUG] DoCheckEnforce: Min total palette pane width required: {min_total_palette_pane_width}")
+            min_total_right_pane_width = min_canvas_content_width_palette + frame_padding_palette_approx + scrollbar_width_approx
+            self.debug(f"[DEBUG] DoCheckEnforce: Min Total Right Pane (Palette) Width Required: {min_total_right_pane_width}")
 
-            min_total_map_pane_width = 400 # Approximate minimum width for map controls to be usable
-            self.debug(f"[DEBUG] DoCheckEnforce: Min total map (left) pane width required: {min_total_map_pane_width}")
+            current_sash_0_pos = paned_window_widget.sashpos(0)
+            final_target_sash_pos = current_sash_0_pos # Start with current, adjust if needed
+            self.debug(f"[DEBUG] DoCheckEnforce: Initial current_sash_pos(0) = {final_target_sash_pos}")
 
-            sash_pos_for_palette_min = paned_window_total_width - min_total_palette_pane_width - sash_thickness_approx
-            sash_pos_for_map_min = min_total_map_pane_width # Sash pos is width of left pane
-
-            target_sash_0_pos = paned_window_widget.sashpos(0) # Get current proposed position
-            corrected_sash_0_pos = target_sash_0_pos # Start with current
-
-            correction_needed = False
-
-            # Check if palette is too small
-            if current_palette_pane_actual_width < min_total_palette_pane_width:
-                self.debug(f"[DEBUG] DoCheckEnforce: Palette pane too small ({current_palette_pane_actual_width} < {min_total_palette_pane_width}).")
-                # Try to move sash left to give palette its min width
-                corrected_sash_0_pos = sash_pos_for_palette_min
-                correction_needed = True
+            # Calculate desired sash position to satisfy right pane's minimum
+            sash_for_right_min = paned_window_total_width - min_total_right_pane_width - sash_thickness_approx
             
-            # Check if map area is too small, potentially overriding previous correction
-            # (width of left pane is sash_pos)
-            if corrected_sash_0_pos < min_total_map_pane_width:
-                self.debug(f"[DEBUG] DoCheckEnforce: Map pane would be too small ({corrected_sash_0_pos} < {min_total_map_pane_width}).")
-                corrected_sash_0_pos = min_total_map_pane_width
-                correction_needed = True # Even if palette was fine, map might now need adjustment
+            # Calculate desired sash position to satisfy left pane's minimum
+            sash_for_left_min = min_left_pane_width
 
-            # Final sanity check: ensure sash is within paned window bounds
-            # (e.g., if total window is smaller than sum of both minimums + sash)
-            corrected_sash_0_pos = max(0, corrected_sash_0_pos) # Cannot be less than 0
-            corrected_sash_0_pos = min(paned_window_total_width - sash_thickness_approx, corrected_sash_0_pos) # Cannot be more than total width
+            needs_correction = False
 
-            self.debug(f"[DEBUG] DoCheckEnforce: CurrentSash0={target_sash_0_pos}, CorrectedSash0AfterChecks={corrected_sash_0_pos}")
+            # If left pane is too small
+            if current_sash_0_pos < sash_for_left_min:
+                self.debug(f"[DEBUG] DoCheckEnforce: Left pane ({current_sash_0_pos}) is smaller than required ({sash_for_left_min}). Targetting {sash_for_left_min}.")
+                final_target_sash_pos = sash_for_left_min
+                needs_correction = True
+            
+            # Now, check if this 'final_target_sash_pos' makes the right pane too small
+            effective_right_pane_width = paned_window_total_width - final_target_sash_pos - sash_thickness_approx
+            if effective_right_pane_width < min_total_right_pane_width:
+                self.debug(f"[DEBUG] DoCheckEnforce: Giving left pane its min would make right pane ({effective_right_pane_width}) too small (min {min_total_right_pane_width}).")
+                # This means we might not be able to satisfy both. Prioritize left pane's minimum.
+                # The 'final_target_sash_pos' is already set to satisfy the left pane.
+                # If we wanted to prioritize right, we'd set: final_target_sash_pos = sash_for_right_min
+                # and then re-check if left became too small.
+                # The current logic: if left needs X, set sash to X. If this makes right too small, tough for right.
+                # Let's refine: try to satisfy both, but if conflict, choose.
+                
+                # Can we satisfy both?
+                if (sash_for_left_min + sash_thickness_approx + min_total_right_pane_width) <= paned_window_total_width:
+                    # Yes, there's enough space for both minimums and the sash.
+                    # Ensure left gets its min.
+                    final_target_sash_pos = max(final_target_sash_pos, sash_for_left_min)
+                    # Ensure right gets its min (adjust sash from left edge).
+                    final_target_sash_pos = min(final_target_sash_pos, sash_for_right_min)
+                    self.debug(f"[DEBUG] DoCheckEnforce: Enough space for both. Final target after considering both: {final_target_sash_pos}")
 
-            if correction_needed and abs(target_sash_0_pos - corrected_sash_0_pos) > 2: # Only if a meaningful change was calculated
-                self.debug(f"[DEBUG] DoCheckEnforce: Applying sash correction. Setting sashpos(0) to: {corrected_sash_0_pos}")
+                else: # Not enough space for both minimums
+                    self.debug(f"[DEBUG] DoCheckEnforce: Not enough total width for both minimums. Prioritizing left pane min.")
+                    final_target_sash_pos = sash_for_left_min # Prioritize left pane
+                needs_correction = True # A correction is likely needed if we entered this complex block
+
+            # Final clamping of the target sash position to valid PanedWindow bounds
+            final_target_sash_pos = max(0, final_target_sash_pos)
+            # Ensure right pane at least has space for sash thickness if target is too far right
+            final_target_sash_pos = min(final_target_sash_pos, paned_window_total_width - sash_thickness_approx) 
+                                          
+            self.debug(f"[DEBUG] DoCheckEnforce: OriginalSashPos={current_sash_0_pos}, FinalCalculatedTargetSashPos={final_target_sash_pos}")
+
+            if needs_correction and abs(current_sash_0_pos - final_target_sash_pos) > 2:
+                self.debug(f"[DEBUG] DoCheckEnforce: Applying final sashpos(0) to: {final_target_sash_pos}")
                 try:
-                    paned_window_widget.sashpos(0, corrected_sash_0_pos)
+                    paned_window_widget.sashpos(0, final_target_sash_pos)
                 except tk.TclError as e_sash:
                     self.debug(f"[DEBUG] DoCheckEnforce: TclError setting sashpos: {e_sash}")
-            else:
-                self.debug(f"[DEBUG] DoCheckEnforce: No sash correction needed or change too small.")
+            elif needs_correction: # Corrected value is too close to current, no actual sashpos call
+                 self.debug(f"[DEBUG] DoCheckEnforce: Correction calculated but change too small or already correct. Not calling sashpos.")
+            else: # No violation detected initially
+                self.debug(f"[DEBUG] DoCheckEnforce: No minimum width violations detected. No change to sash needed.")
         
         except tk.TclError as e:
             self.debug(f"[DEBUG] TclError in _do_check_and_enforce_palette_min_width: {e}")
@@ -9787,55 +9811,87 @@ class TileEditorApp:
         self.debug(f"[DEBUG] --- _do_check_and_enforce_palette_min_width END ---")
 
     def _on_main_window_configure(self, event=None):
-        # Called when the main application window is resized or moved.
-        # We are interested in resizes that might affect PanedWindow pane minimums.
-
-        # Check if the event is for the root window itself, not a child widget configure event
-        # that might bubble up (though less common for root).
-        # event.widget is the widget that received the event.
         if event and event.widget != self.root:
-            return # Only process configure events for the root window itself
+            return 
 
         self.debug(f"[DEBUG] _on_main_window_configure: Main window resized/moved (w={self.root.winfo_width()}, h={self.root.winfo_height()}).")
 
-        # Debounce the call to check and enforce pane minimums
         if hasattr(self, '_main_window_configure_timer') and self._main_window_configure_timer is not None:
             try:
                 self.root.after_cancel(self._main_window_configure_timer)
             except tk.TclError: pass
         
-        # Schedule the check. The same _do_check_and_enforce_palette_min_width can be used.
-        # This delay allows multiple Configure events during a drag-resize of the main window to pass.
-        self._main_window_configure_timer = self.root.after(300, self._do_check_and_enforce_palette_min_width_from_main_resize)
+        # Ensure this calls the correctly named method
+        self._main_window_configure_timer = self.root.after(300, self._call_enforce_min_width_logic_from_main_resize)
 
-    def _do_check_and_enforce_palette_min_width_from_main_resize(self):
+    def _call_enforce_min_width_logic_from_main_resize(self): # Renamed for clarity
         self.debug("[DEBUG] --- Main window resize: performing debounced pane minimum check ---")
-        if hasattr(self, '_main_window_configure_timer'): # Clear specific timer
+        if hasattr(self, '_main_window_configure_timer'): 
             self._main_window_configure_timer = None
         
-        # Call the existing enforcement logic
-        # This function will check if the map editor tab is active implicitly
-        # by checking if self.map_paned_window exists and is valid.
-        # If map editor tab is not active, map_paned_window might not be fully up-to-date
-        # or its winfo_width might be small if it's hidden.
-        # The checks within _do_check_and_enforce_palette_min_width for widget existence are important.
-        
-        # Only proceed if the map editor tab is currently visible,
-        # as PanedWindow dimensions are only reliable then.
         is_map_tab_active = False
         if self.notebook and self.notebook.winfo_exists():
             try:
-                selected_tab_widget = self.notebook.nametowidget(self.notebook.select())
-                if selected_tab_widget == self.tab_map_editor:
-                    is_map_tab_active = True
-            except tk.TclError: # select() might fail if no tab, or nametowidget
-                pass
+                # Check if the currently selected tab's frame widget is the map editor's frame widget
+                selected_tab_path = self.notebook.select()
+                if selected_tab_path: # Ensure a tab is actually selected
+                    selected_tab_widget = self.notebook.nametowidget(selected_tab_path)
+                    if selected_tab_widget == self.tab_map_editor:
+                        is_map_tab_active = True
+            except tk.TclError: 
+                self.debug("[DEBUG] Main resize check: TclError getting selected tab info.")
         
         if is_map_tab_active:
-            self.debug("[DEBUG] Main resize: Map tab is active, calling _do_check_and_enforce_palette_min_width.")
-            self._do_check_and_enforce_palette_min_width()
+            # Ensure map_paned_window exists and is mapped (visible) before calling enforce
+            if hasattr(self, 'map_paned_window') and \
+               self.map_paned_window.winfo_exists() and \
+               self.map_paned_window.winfo_ismapped():
+                self.debug("[DEBUG] Main resize: Map tab active and paned window mapped. Calling _do_check_and_enforce_palette_min_width.")
+                self._do_check_and_enforce_palette_min_width() # Call the core logic
+            else:
+                self.debug("[DEBUG] Main resize: Map tab active, but map_paned_window not ready/mapped. Skipping enforcement.")
         else:
-            self.debug("[DEBUG] Main resize: Map tab not active, skipping pane minimum enforcement.")
+            self.debug("[DEBUG] Main resize: Map tab not active. Skipping pane minimum enforcement.")
+
+    def _on_map_canvas_configure(self, event=None):
+        # Called when the map_canvas itself is resized (e.g., due to sash drag or window resize)
+        
+        map_canvas_widget = getattr(self, 'map_canvas', None)
+        if not map_canvas_widget or not map_canvas_widget.winfo_exists():
+            self.debug("[DEBUG] _on_map_canvas_configure: Map canvas not available. Skipping redraw.")
+            return
+
+        # event.width and event.height should give the new dimensions of self.map_canvas
+        # Fallback to winfo_width/height if event attributes are not present (though they should be for <Configure>)
+        new_width = getattr(event, 'width', map_canvas_widget.winfo_width())
+        new_height = getattr(event, 'height', map_canvas_widget.winfo_height())
+
+        self.debug(f"[DEBUG] _on_map_canvas_configure: Map canvas configured. New WxH: {new_width}x{new_height}.")
+
+        # We only want to trigger a full redraw if the size has actually changed meaningfully,
+        # as <Configure> can also fire for position changes.
+        # We can compare with the dimensions of our current Pillow viewport image.
+        viewport_changed_width = True # Assume changed unless proven otherwise
+        viewport_changed_height = True
+
+        if hasattr(self, 'pil_map_viewport_image') and self.pil_map_viewport_image:
+            if self.pil_map_viewport_image.width == new_width:
+                viewport_changed_width = False
+            if self.pil_map_viewport_image.height == new_height:
+                viewport_changed_height = False
+        
+        # Only redraw if dimensions are valid and have actually changed, or if no viewport image exists yet
+        if (new_width > 1 and new_height > 1) and \
+           (not hasattr(self, 'pil_map_viewport_image') or self.pil_map_viewport_image is None or viewport_changed_width or viewport_changed_height):
+            
+            if map_canvas_widget.winfo_ismapped(): # Ensure it's actually visible
+                self.debug("[DEBUG] _on_map_canvas_configure: Calling draw_map_canvas() due to size change or initial setup.")
+                self.draw_map_canvas() 
+                self.draw_minimap()    
+            else:
+                self.debug("[DEBUG] _on_map_canvas_configure: Map canvas not mapped, draw call skipped despite size change.")
+        else:
+            self.debug(f"[DEBUG] _on_map_canvas_configure: No significant size change or canvas too small/not ready. W={new_width}, H={new_height}, ViewportChangedW={viewport_changed_width}, ViewportChangedH={viewport_changed_height}. Draw call skipped.")
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -9903,3 +9959,4 @@ if __name__ == "__main__":
         app = TileEditorApp(root) # Using Option 1
 
     root.mainloop()
+    
