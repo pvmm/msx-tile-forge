@@ -1,11 +1,11 @@
 # MSX Tile Forge
-v0.0.34
+v0.0.37
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and TkMyinter.
 
 ## Introduction
 
-MSX Tile Forge is a desktop application created to assist in the development of graphical assets for MSX2 computers and similar retro systems that utilize tile-based graphics and have specific palette limitations. It provides an integrated environment for designing 16-color palettes, creating 8x8 pixel tiles with row-specific colors, composing 4x4 supertiles from these tiles, and arranging them into larger game maps. The tool aims to streamline the asset creation workflow for retro game developers and hobbyists.
+MSX Tile Forge is a desktop application created to assist in the development of graphical assets for MSX2 computers and similar retro systems that utilize tile-based graphics and have specific palette limitations. It provides an integrated environment for designing 16-color palettes, creating 8x8 pixel tiles with row-specific colors, composing supertiles (e.g., 4x4, but dimensions are project-configurable) from these tiles, and arranging them into larger game maps. The tool aims to streamline the asset creation workflow for retro game developers and hobbyists.
 
 All project components (palette, tiles, supertiles, map) can be saved and loaded individually or as a complete project, using custom binary file formats designed for ease of use and integration into MSX development pipelines.
 
@@ -74,10 +74,39 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
 
 This section explains how to set up your system and run MSX Tile Forge.
 
-### System Requirements
+### System Requirements & Dependencies
 
-*   **Python:** Version 3.x. The application has been developed and tested with Python 3.12, but it is expected to be compatible with other recent Python 3 releases.
-*   **Tkinter:** This is Python's standard GUI (Graphical User Interface) package and is typically included with most Python installations across Windows, macOS, and Linux. No other external Python libraries are required.
+To run MSX Tile Forge, your system will need the following:
+
+*   **Python:**
+    *   Version 3.x is required. The application has been primarily developed and tested with Python 3.12, but it is expected to be compatible with other recent Python 3 releases (e.g., Python 3.7 and newer).
+    *   Ensure Python 3 is installed on your system and that the `python` (or `python3` on some systems) command is accessible from your command line or terminal.
+
+*   **Tkinter (GUI Library):**
+    *   Tkinter is Python's standard GUI (Graphical User Interface) package and is essential for the application's interface.
+    *   It is typically included with most Python installations on Windows, macOS, and Linux.
+    *   On some Linux distributions, Tkinter (often named `python3-tk` or similar) might need to be installed separately via the system's package manager if it wasn't included in a minimal Python installation. For example, on Debian/Ubuntu-based systems, you can install it by running:
+        ```bash
+        sudo apt-get update
+        sudo apt-get install python3-tk
+        ```
+
+*   **Pillow (Python Imaging Library Fork):**
+    *   Pillow is required for various image processing tasks, including displaying the splash screen and efficiently rendering graphics in the map and ROM importer views.
+    *   If you do not have Pillow installed, you can install it using pip (Python's package installer). Open your terminal or command prompt and execute:
+        ```bash
+        pip install Pillow
+        ```
+    *   **Note:** If you have multiple Python versions or work with virtual environments, you might need to use `pip3` or specify the Python interpreter for pip:
+        ```bash
+        python -m pip install Pillow
+        ```
+        or
+        ```bash
+        python3 -m pip install Pillow
+        ```
+
+No other external Python libraries are required beyond a standard Python 3 installation with Tkinter and the Pillow library.
 
 ### Running the Application
 
@@ -294,7 +323,7 @@ All project assets are saved in custom binary file formats. Multi-byte numerical
 *   **Purpose:** Stores definitions for 8x8 pixel tiles, including their pixel patterns and per-row color attributes.
 *   **Structure:**
     *   **Header (1 byte):**
-        *   `num_tiles_in_set`: The number of tiles defined in this file (value 1-255. A value of 0 represents 256 tiles).
+        *   `num_tiles_in_set`: The number of tiles defined in this file (value 0-255. A value of 0 represents 256 tiles).
     *   **Tile Data Blocks (repeated `num_tiles_in_set` times):**
         *   Each tile block is 16 bytes:
             *   **Pattern Data (8 bytes):** One byte per row of the 8x8 tile.
@@ -310,7 +339,7 @@ All project assets are saved in custom binary file formats. Multi-byte numerical
 *   **Purpose:** Stores the definitions of supertiles, specifying which base tiles compose them and the supertile grid dimensions.
 *   **Structure:**
     *   **Header (3 bytes):**
-        *   `num_supertiles` (1 byte): Number of supertiles defined (value 1-255. A value of 0 represents 256 supertiles).
+        *   `num_supertiles` (1 byte): Number of supertiles defined (value 0-255. A value of 0 represents 256 supertiles).
         *   `supertile_grid_width` (1 byte): The width of each supertile in base tiles (value 1-32).
         *   `supertile_grid_height` (1 byte): The height of each supertile in base tiles (value 1-32).
     *   **Supertile Definition Blocks (repeated `num_supertiles` times):**
