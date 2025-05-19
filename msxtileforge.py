@@ -16,6 +16,8 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
+APP_VERSION = "0.0.35"
+
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
 EDITOR_PIXEL_SIZE = 30
@@ -38,6 +40,7 @@ MINIMAP_INITIAL_WIDTH = 256  # Default desired width of minimap window in pixels
 MINIMAP_INITIAL_HEIGHT = 212  # Default desired height of minimap window in pixels
 
 DRAG_THRESHOLD_PIXELS = 3 # Minimum pixels mouse must move to initiate a drag
+
 
 # --- Palette Editor Constants ---
 MSX2_PICKER_COLS = 32
@@ -7976,7 +7979,7 @@ class TileEditorApp:
         name_label.pack(anchor="w", pady=(0, 5))
 
         # Version and Author
-        info_text = "Version: 0.0.35\nAuthor: Damned Angel + Gemini AI"
+        info_text = f"Version: {APP_VERSION}\nAuthor: Damned Angel + Gemini AI"
         info_label = ttk.Label(text_frame, text=info_text, justify=tk.LEFT)
         info_label.pack(anchor="w")
 
@@ -9895,68 +9898,94 @@ class TileEditorApp:
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    import argparse # Import the argparse module
+    import argparse 
 
-    # --- Argument Parsing ---
     parser = argparse.ArgumentParser(description="MSX Tile Forge - Tile and Map Editor.")
-    parser.add_argument(
-        "--debug",
-        action="store_true", # Sets args.debug to True if --debug is present
-        help="Enable detailed debug console output."
-    )
+    parser.add_argument("--debug",action="store_true",help="Enable detailed debug console output.")
     args = parser.parse_args()
-    # --- End Argument Parsing ---
-
+    
     root = tk.Tk()
-    root.withdraw()
-
-    # --- Make debug state globally accessible or pass to app ---
-    # Option 1: Store on root and have app access it (simple)
+    root.withdraw() # Hide main window initially
     root.app_debug_mode = args.debug
-    if root.app_debug_mode:
-        print("[INFO] Debug mode enabled via --debug flag.")
+    if root.app_debug_mode: print("[INFO] Debug mode enabled via --debug flag.")
 
-    # Option 2: Pass directly to TileEditorApp constructor (if you modify it)
-    # For now, Option 1 is easier to integrate without changing constructor.
-
-    # ... (rest of your icon setup, splash screen, etc.) ...
-
-    # --- Splash Screen Setup ---
     splash_win = tk.Toplevel(root)
-    splash_win.overrideredirect(True)
+    splash_win.overrideredirect(True) # No window decorations
     splash_win.config(cursor="watch")
 
-    try:
-        image_data = base64.b64decode(SPLASH_IMAGE)
-        splash_photo = tk.PhotoImage(data=image_data)
-        splash_label = tk.Label(splash_win, image=splash_photo, borderwidth=0)
-        splash_label.pack()
-        img_width = splash_photo.width()
-        img_height = splash_photo.height()
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        x_pos = (screen_width // 2) - (img_width // 2)
-        y_pos = (screen_height // 2) - (img_height // 2)
-        splash_win.geometry(f'{img_width}x{img_height}+{x_pos}+{y_pos}')
+    splash_after_id = None # To store the ID of the 'after' job
 
-        def show_main_window():
+    def destroy_splash_and_show_main():
+        # This function is called either by timer or by Esc key
+        global splash_after_id
+        if tk.Toplevel.winfo_exists(splash_win): # Check if splash window still exists
+            if splash_after_id: # If a timer was set
+                try:
+                    splash_win.after_cancel(splash_after_id) # Try to cancel it
+                    print("Splash timer cancelled.")
+                except tk.TclError:
+                    pass # Timer might have already fired or window gone
+            splash_after_id = None
             splash_win.destroy()
+        
+        if root.winfo_exists(): # Check if root window still exists
             root.deiconify()
-            # If you choose Option 2 for debug_mode, pass it here:
-            # app = TileEditorApp(root, debug_mode=args.debug)
-            app = TileEditorApp(root) # Using Option 1 for now
-            if hasattr(app, 'debug') and callable(app.debug): # Check if debug method exists
-                 app.debug("[DEBUG] Main application initialized.")
+            app = TileEditorApp(root) # Create and show the main application
+            if hasattr(app, 'debug'): app.debug("[DEBUG] Main application initialized.")
 
+    def handle_splash_escape(event=None): # Added event=None for binding
+        print("Escape pressed on splash, skipping.")
+        destroy_splash_and_show_main()
 
-        root.after(3000, show_main_window)
-        splash_label.image = splash_photo
+    if not SPLASH_IMAGE or not isinstance(SPLASH_IMAGE, str) or len(SPLASH_IMAGE) < 20:
+        print("[WARNING] SPLASH_IMAGE is invalid or not defined. Skipping splash image display.")
+        if root.winfo_exists():
+            splash_after_id = root.after(100, destroy_splash_and_show_main) # Very short delay if no image
+        root.bind("<Escape>", handle_splash_escape) 
+        raise RuntimeError("Splash image data invalid") # Go to except block for fallback
 
-    except Exception as e:
-        print(f"Error displaying splash screen: {e}")
-        root.deiconify()
-        # app = TileEditorApp(root, debug_mode=args.debug) # If passing
-        app = TileEditorApp(root) # Using Option 1
+    image_data = base64.b64decode(SPLASH_IMAGE)
+    splash_photo_ref = tk.PhotoImage(data=image_data) # Keep reference directly
+
+    # Frame to hold image and text, to help with centering and layout
+    content_frame = ttk.Frame(splash_win)
+    content_frame.pack(expand=True, fill='both', padx=1, pady=1) # Add minimal padding if needed
+
+    splash_image_label = ttk.Label(content_frame, image=splash_photo_ref, borderwidth=0)
+    splash_image_label.pack(side=tk.TOP, padx=0, pady=0)
+    splash_image_label.image = splash_photo_ref # Keep reference on label
+
+    version_text_label = ttk.Label(
+        content_frame, 
+        text=f"v{APP_VERSION}", 
+        font=("Segoe UI", 7), # Small font for version
+    )
+    version_text_label.pack(side=tk.BOTTOM, pady=(2, 2)) # Small padding below image
+    splash_win.update_idletasks()
+    req_width = content_frame.winfo_reqwidth()
+    req_height = content_frame.winfo_reqheight()
+        
+    # Ensure positive dimensions, fallback to image size if frame calculation is off
+    img_w = splash_photo_ref.width() if splash_photo_ref else 100
+    img_h = splash_photo_ref.height() if splash_photo_ref else 50
+        
+    final_width = max(req_width, img_w, 1) # At least image width, or 1
+    final_height = max(req_height, img_h, 1) # At least image height + text, or 1
+
+    screen_width = splash_win.winfo_screenwidth()
+    screen_height = splash_win.winfo_screenheight()
+    x_pos = (screen_width // 2) - (final_width // 2)
+    y_pos = (screen_height // 2) - (final_height // 2)
+        
+    splash_win.geometry(f'{final_width}x{final_height}+{x_pos}+{y_pos}')
+
+    splash_win.bind("<Escape>", handle_splash_escape)
+    splash_win.focus_set() # Give splash window focus to receive Esc key
+
+    if root.winfo_exists():
+        splash_after_id = splash_win.after(3000, destroy_splash_and_show_main)
+    else: # Root closed before timer set
+        if tk.Toplevel.winfo_exists(splash_win): splash_win.destroy()
 
     root.mainloop()
     
