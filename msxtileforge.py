@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.35"
+APP_VERSION = "0.0.36"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -340,10 +340,10 @@ class TileEditorApp:
                                     used = True
                                     break
                             else: # Should not happen if width check above is good
-                                # print(f"Warning: Invalidate tile cache, ST {st_index} row {r_st_def} too short for width {self.supertile_grid_width}")
+                                self.debug(f"[DEBUG]Warning: Invalidate tile cache, ST {st_index} row {r_st_def} too short for width {self.supertile_grid_width}")
                                 break
                     else: # Should not happen if height check passed
-                        # print(f"Warning: Invalidate tile cache, ST {st_index} definition too short for height {self.supertile_grid_height}")
+                        self.debug(f"[DEBUG]Warning: Invalidate tile cache, ST {st_index} definition too short for height {self.supertile_grid_height}")
                         break
                     if used:
                         break
@@ -353,7 +353,7 @@ class TileEditorApp:
                 # This might happen if dimensions change but data isn't properly migrated/reinitialized.
                 # For now, we'll skip invalidating supertile cache if the structure is unexpected,
                 # or one could choose to invalidate all supertile caches as a precaution.
-                # print(f"Warning: Supertile {st_index} definition dimensions mismatch project settings during tile cache invalidation. Skipping ST cache invalidation for this ST.")
+                self.debug(f"[DEBUG]Warning: Supertile {st_index} definition dimensions mismatch project settings during tile cache invalidation. Skipping ST cache invalidation for this ST.")
                 pass # Or: self.invalidate_supertile_cache(st_index) if aggressive
 
 
@@ -450,7 +450,7 @@ class TileEditorApp:
         
         if len(definition) != src_st_tile_grid_h or \
            (src_st_tile_grid_h > 0 and (len(definition[0]) != src_st_tile_grid_w)):
-            # print(f"Warning: Supertile {supertile_index} internal dim mismatch for create_supertile_image. Expected {src_st_tile_grid_w}x{src_st_tile_grid_h}")
+            self.debug(f"[DEBUG]Warning: Supertile {supertile_index} internal dim mismatch for create_supertile_image. Expected {src_st_tile_grid_w}x{src_st_tile_grid_h}")
             img.put(INVALID_SUPERTILE_COLOR, to=(0, 0, safe_target_preview_width, safe_target_preview_height))
             self.supertile_image_cache[cache_key] = img
             return img
@@ -540,7 +540,7 @@ class TileEditorApp:
         )
         file_menu.add_command(
             label="Save Project As...",
-            command=self.save_project_as, # CORRECTED: Was self.save_project
+            command=self.save_project_as,
             accelerator="Ctrl+Shift+S",
         )
         file_menu.add_separator()
@@ -576,24 +576,42 @@ class TileEditorApp:
         )
 
         # --- Edit Menu (Modified) ---
-        self.edit_menu = tk.Menu(menubar, tearoff=0)
+        self.edit_menu = tk.Menu(menubar, tearoff=0) 
         menubar.add_cascade(label="Edit", menu=self.edit_menu)
 
+        # Add Copy command to self.edit_menu
         self.edit_menu.add_command(
             label="Copy",
             command=self.handle_generic_copy,
             state=tk.DISABLED,
             accelerator="Ctrl+C",
         )
-        self.copy_menu_item_index = self.edit_menu.index(tk.END)
+        self.copy_menu_item_index = 0 
 
+        # Add Paste command to self.edit_menu
         self.edit_menu.add_command(
             label="Paste",
             command=self.handle_generic_paste,
             state=tk.DISABLED,
             accelerator="Ctrl+V",
         )
-        self.paste_menu_item_index = self.edit_menu.index(tk.END)
+        self.paste_menu_item_index = 1
+
+        # --- ADD DEBUGGING HERE ---
+        if self.debug_enabled: 
+            try:
+                copy_type_at_creation = self.edit_menu.type(self.copy_menu_item_index)
+                paste_type_at_creation = self.edit_menu.type(self.paste_menu_item_index)
+                self.debug(f"[DEBUG] create_menu: Copy item at index {self.copy_menu_item_index} is type '{copy_type_at_creation}'. Label: '{self.edit_menu.entrycget(self.copy_menu_item_index, 'label')}'")
+                self.debug(f"[DEBUG] create_menu: Paste item at index {self.paste_menu_item_index} is type '{paste_type_at_creation}'. Label: '{self.edit_menu.entrycget(self.paste_menu_item_index, 'label')}'")
+                num_items_in_edit_menu = self.edit_menu.index(tk.END)
+                self.debug(f"[DEBUG] create_menu: Total items in edit_menu after adding Copy/Paste: {num_items_in_edit_menu + 1 if num_items_in_edit_menu is not None else 'Error reading count'}")
+                for i in range(max(0, num_items_in_edit_menu if num_items_in_edit_menu is not None else -1) + 1):
+                    self.debug(f"  [DEBUG] create_menu: Item {i}: Type='{self.edit_menu.type(i)}', Label='{self.edit_menu.entrycget(i, 'label') if self.edit_menu.type(i) == 'command' else 'N/A'}'")
+
+            except tk.TclError as e_debug:
+                self.debug(f"[DEBUG] create_menu: TclError during debug print: {e_debug}")
+        # --- END DEBUGGING ---
 
         self.edit_menu.add_separator()
         self.edit_menu.add_command(
@@ -1362,13 +1380,13 @@ class TileEditorApp:
         if current_tab_index == 0:
             # Widgets already updated above if palette_changed is True.
             # No other data changes directly affect only this tab's display.
-            pass  # print("Updating Palette Tab (Visible)")
+            self.debug("[DEBUG]Updating Palette Tab (Visible)")
 
         # Tile Editor Tab (Index 1)
         elif current_tab_index == 1:
             # Update if tile data changed OR palette changed (affects colors)
             if changed_level in ["all", "tile"] or palette_changed:
-                # print(f"Updating Tile Tab (Visible), Level: {changed_level}, PaletteChanged: {palette_changed}")
+                self.debug(f"[DEBUG]Updating Tile Tab (Visible), Level: {changed_level}, PaletteChanged: {palette_changed}")
                 self.draw_editor_canvas()
                 self.draw_attribute_editor()
                 self.draw_palette()  # Uses active_msx_palette
@@ -1383,7 +1401,7 @@ class TileEditorApp:
         elif current_tab_index == 2:
             # Update if supertile data changed, underlying tile data changed, OR palette changed
             if changed_level in ["all", "supertile", "tile"] or palette_changed:
-                # print(f"Updating Supertile Tab (Visible), Level: {changed_level}, PaletteChanged: {palette_changed}")
+                self.debug(f"[DEBUG]Updating Supertile Tab (Visible), Level: {changed_level}, PaletteChanged: {palette_changed}")
                 self.draw_supertile_definition_canvas()  # Uses tiles & palette
                 self.draw_tileset_viewer(
                     self.st_tileset_canvas, selected_tile_for_supertile
@@ -1398,7 +1416,7 @@ class TileEditorApp:
         elif current_tab_index == 3:
             # Update if map data changed, underlying supertile/tile data changed, OR palette changed
             if changed_level in ["all", "map", "supertile", "tile"] or palette_changed:
-                # print(f"Updating Map Tab (Visible), Level: {changed_level}, PaletteChanged: {palette_changed}")
+                self.debug(f"[DEBUG]Updating Map Tab (Visible), Level: {changed_level}, PaletteChanged: {palette_changed}")
                 # Map canvas redraw is complex, redraw if map changed OR dependencies changed
                 self.draw_map_canvas()  # Handles overlays, uses ST/Tiles/Palette
                 self.draw_supertile_selector(
@@ -1656,7 +1674,7 @@ class TileEditorApp:
         # This is a safeguard. Data should ideally be consistent.
         if not definition or len(definition) != self.supertile_grid_height or \
            (self.supertile_grid_height > 0 and (len(definition[0]) != self.supertile_grid_width)):
-            # print(f"Warning: Supertile {current_supertile_index} definition dimensions mismatch in draw_supertile_definition_canvas.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} definition dimensions mismatch in draw_supertile_definition_canvas.")
             # Optionally draw an error indicator on the canvas
             canvas_w = canvas.winfo_width()
             canvas_h = canvas.winfo_height()
@@ -1671,7 +1689,7 @@ class TileEditorApp:
                 try:
                     tile_idx = definition[r_def][c_def]
                 except IndexError: # Should be caught by the check above, but for safety
-                    # print(f"Error drawing ST def: index out of bounds for ST {current_supertile_index} at {r_def},{c_def}")
+                    self.debug(f"[DEBUG]Error drawing ST def: index out of bounds for ST {current_supertile_index} at {r_def},{c_def}")
                     tile_idx = 0 # Default to tile 0 on error
 
                 base_x = c_def * mini_tile_display_size
@@ -2624,8 +2642,6 @@ class TileEditorApp:
     def _paint_map_cell(self, canvas_x, canvas_y):
         global map_data, last_painted_map_cell, selected_supertile_for_map
 
-        canvas = self.map_canvas
-        
         # Get zoomed supertile pixel dimensions
         zoomed_st_w, zoomed_st_h = self._get_zoomed_supertile_pixel_dims()
         if zoomed_st_w <= 0 or zoomed_st_h <= 0:
@@ -2642,46 +2658,19 @@ class TileEditorApp:
         try:
             current_data_val = map_data[r_map][c_map]
         except IndexError:
-            # print(f"  ERROR: IndexError accessing map_data[{r_map}][{c_map}]. Map size: {map_width}x{map_height}")
+            self.debug(f"  ERROR: IndexError accessing map_data[{r_map}][{c_map}]. Map size: {map_width}x{map_height}")
             return
 
-        if current_cell_id != last_painted_map_cell:
+        if current_cell_id != last_painted_map_cell: # Prevent re-painting same cell on static drag
             if current_data_val != selected_supertile_for_map:
                 if self._clear_marked_unused(trigger_redraw=False):
-                    self.update_all_displays(changed_level="all")
+                    pass
 
                 self._mark_project_modified()
-                map_data[r_map][c_map] = selected_supertile_for_map
-                self.invalidate_minimap_background_cache()
-
-                base_x_draw = c_map * zoomed_st_w
-                base_y_draw = r_map * zoomed_st_h
+                map_data[r_map][c_map] = selected_supertile_for_map # Update the data model
                 
-                # Use the new rendering function for map display
-                img = self.create_map_render_of_supertile(
-                    selected_supertile_for_map, int(zoomed_st_w), int(zoomed_st_h)
-                )
-                tag_cell = f"map_cell_{r_map}_{c_map}"
-
-                items_found = canvas.find_withtag(tag_cell)
-                if items_found:
-                    canvas.itemconfig(items_found[0], image=img)
-                else:
-                    # This branch might not be strictly necessary if draw_map_canvas always pre-populates images
-                    # but good for robustness if an image was somehow missed.
-                    canvas.create_image(
-                        base_x_draw,
-                        base_y_draw,
-                        image=img,
-                        anchor=tk.NW,
-                        tags=(tag_cell, "map_supertile_image"),
-                    )
-                    # Ensure new image is below grid if grid is visible
-                    if self.show_supertile_grid.get():
-                        if canvas.find_withtag("supertile_grid"):
-                            canvas.tag_lower(tag_cell, "supertile_grid")
-                
-                self.draw_minimap()
+                self.draw_map_canvas() # This will re-render the viewport
+                self.draw_minimap()    # Update minimap as well
 
             last_painted_map_cell = current_cell_id
 
@@ -2719,7 +2708,6 @@ class TileEditorApp:
                     f"Window width must be {min_w}-{max_w}, height {min_h}-{max_h}.",
                 )
                 # Reset entries to current state if invalid
-                self.update_window_size_entries()
                 return
 
             # If size changed, redraw the map
@@ -2732,16 +2720,8 @@ class TileEditorApp:
                 "Invalid Input",
                 "Please enter valid integer numbers for width and height.",
             )
-            self.update_window_size_entries()  # Reset on error
         except Exception as e:
             messagebox.showerror("Error", f"Could not apply size: {e}")
-            self.update_window_size_entries()
-
-    def update_window_size_entries(self):
-        """Updates the W/H entry boxes to match the current state."""
-        # This ensures IntVars linked to entries have the correct value
-        self.window_view_tile_w.set(self.window_view_tile_w.get())
-        self.window_view_tile_h.set(self.window_view_tile_h.get())
 
     def _do_window_move_drag(self, current_canvas_x, current_canvas_y):
         zoomed_tile_size = self.get_zoomed_tile_size() # Base tile (8x8 MSX) zoomed size
@@ -3633,7 +3613,7 @@ class TileEditorApp:
                     # Basic check for consistency, though data should be correct by now
                     if len(definition) != self.supertile_grid_height or \
                        (self.supertile_grid_height > 0 and (len(definition[0]) != self.supertile_grid_width)):
-                        # print(f"Warning: Supertile {i} has inconsistent dimensions during save. Attempting to save what's there.")
+                        self.debug(f"[DEBUG]Warning: Supertile {i} has inconsistent dimensions during save. Attempting to save what's there.")
                         # This could lead to problems on load if not handled carefully.
                         # For robustness, one might choose to pad/truncate here, or skip saving this ST.
                         # For now, we proceed, assuming the loops below will handle "ragged" arrays gracefully
@@ -3698,7 +3678,7 @@ class TileEditorApp:
                         f"Invalid supertile count in file: {loaded_num_st_from_file} (must be 0-{MAX_SUPERTILES})"
                     )
                 if loaded_num_st_from_file == 0 : # Handle empty supertile set gracefully
-                    # print("Info: Loaded empty supertile set (0 supertiles).")
+                    self.debug("[DEBUG]Info: Loaded empty supertile set (0 supertiles).")
                     loaded_grid_width_from_file = SUPERTILE_GRID_DIM # Use default if file is empty of STs
                     loaded_grid_height_from_file = SUPERTILE_GRID_DIM
                     # temp_supertiles_data_from_file will remain empty
@@ -3734,7 +3714,7 @@ class TileEditorApp:
                                 tile_idx_read = st_bytes_read[byte_idx_val]
                                 byte_idx_val += 1
                                 if not (0 <= tile_idx_read < num_tiles_in_set):
-                                    # print(f"Warning: Invalid Tile index {tile_idx_read} in Supertile {i} at [{r_load},{c_load}]. Resetting to 0.")
+                                    self.debug(f"[DEBUG]Warning: Invalid Tile index {tile_idx_read} in Supertile {i} at [{r_load},{c_load}]. Resetting to 0.")
                                     temp_supertiles_data_from_file[i][r_load][c_load] = 0
                                 else:
                                     temp_supertiles_data_from_file[i][r_load][c_load] = tile_idx_read
@@ -3890,7 +3870,7 @@ class TileEditorApp:
                         supertile_index_val_read = struct.unpack("B", st_idx_byte_read)[0]
                         
                         if not (0 <= supertile_index_val_read < num_supertiles): # Validate against current num_supertiles
-                             # print(f"Warning: Invalid Supertile index {supertile_index_val_read} in Map at [{r_map_load},{c_map_load}]. Max is {num_supertiles-1}. Resetting to 0.")
+                             self.debug(f"[DEBUG]Warning: Invalid Supertile index {supertile_index_val_read} in Map at [{r_map_load},{c_map_load}]. Max is {num_supertiles-1}. Resetting to 0.")
                              new_map_data_from_file[r_map_load][c_map_load] = 0
                         else:
                             new_map_data_from_file[r_map_load][c_map_load] = supertile_index_val_read
@@ -4239,7 +4219,7 @@ class TileEditorApp:
                 messagebox.showerror("Invalid Input", "Please enter a valid whole number.")
             except Exception as e:
                 messagebox.showerror("Error", f"An error occurred: {e}")
-                # print(f"Error setting tileset size: {e}")
+                self.debug(f"[DEBUG]Error setting tileset size: {e}")
 
     def set_supertile_count(self):
         global num_supertiles, current_supertile_index, selected_supertile_for_map
@@ -4335,7 +4315,7 @@ class TileEditorApp:
                 messagebox.showerror("Invalid Input", "Please enter a valid whole number.")
             except Exception as e:
                 messagebox.showerror("Error", f"An error occurred: {e}")
-                # print(f"Error setting supertile count: {e}")
+                self.debug(f"[DEBUG]Error setting supertile count: {e}")
 
     def set_map_dimensions(self):
         global map_width, map_height, map_data
@@ -4564,67 +4544,6 @@ class TileEditorApp:
             if self.marked_unused_tiles or self.marked_unused_supertiles:
                  self.update_all_displays(changed_level="all")
 
-    def add_new_tile(self):
-        global num_tiles_in_set, current_tile_index, WHITE_IDX, BLACK_IDX
-        if num_tiles_in_set >= MAX_TILES:
-            messagebox.showwarning("Maximum Tiles", f"Max {MAX_TILES} tiles reached.")
-            return
-        num_tiles_in_set += 1
-        new_tile_idx = num_tiles_in_set - 1
-        self._mark_project_modified()
-        tileset_patterns[new_tile_idx] = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
-        tileset_colors[new_tile_idx] = [
-            (WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)
-        ]
-        current_tile_index = new_tile_idx
-        self.update_all_displays(changed_level="tile")
-        self.scroll_viewers_to_tile(current_tile_index)
-
-    def add_new_supertile(self):
-        global num_supertiles, current_supertile_index, supertiles_data # supertiles_data is global
-        if num_supertiles >= MAX_SUPERTILES:
-            messagebox.showwarning(
-                "Maximum Supertiles", f"Max {MAX_SUPERTILES} supertiles reached."
-            )
-            return
-        
-        if self._clear_marked_unused(trigger_redraw=False): # Clear marks before adding
-            pass # Redraw will happen as part of update_all_displays
-
-        num_supertiles += 1
-        new_st_idx = num_supertiles - 1
-        self._mark_project_modified()
-        
-        # Initialize new supertile with current project dimensions
-        # supertiles_data is pre-allocated to MAX_SUPERTILES length.
-        # We just need to set the definition for the new active supertile.
-        if new_st_idx < len(supertiles_data): # Should always be true if num_supertiles <= MAX_SUPERTILES
-            supertiles_data[new_st_idx] = [
-                [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
-            ]
-        else:
-            # This case means MAX_SUPERTILES was exceeded by num_supertiles increment,
-            # which should be caught by the check at the beginning.
-            # However, as a safeguard if supertiles_data wasn't fully pre-allocated:
-            # supertiles_data.append([
-            #    [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
-            # ])
-            print(f"Error: Attempted to add supertile beyond allocated 'supertiles_data' list size. Index: {new_st_idx}")
-            num_supertiles -=1 # Revert count
-            return
-
-
-        current_supertile_index = new_st_idx
-        
-        self.supertile_image_cache.clear() # New ST might affect others if they were copies
-        self.invalidate_minimap_background_cache() # Map data might change if this ST is used
-        self.update_all_displays(changed_level="all") # Update all displays
-        self.scroll_selectors_to_supertile(current_supertile_index)
-        self._update_editor_button_states()
-        self._update_supertile_rotate_button_state() # Though adding doesn't change W/H
-        print(f"Added new supertile {new_st_idx}")
-
-    # ... (shift methods unchanged) ...
     def shift_tile_up(self):
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
         if not (0 <= current_tile_index < num_tiles_in_set):
@@ -5004,14 +4923,14 @@ class TileEditorApp:
 
         # --- Check for active modifiers that override this handler ---
         if self.is_shift_pressed:
-            # print("Shift pressed, ignoring Button-1 for paint/window ops.")
+            self.debug("[DEBUG]Shift pressed, ignoring Button-1 for paint/window ops.")
             return "break"
         ctrl_pressed_at_click = event.state & 0x0004  # Check state at event time
         if ctrl_pressed_at_click:
-            # print("Ctrl pressed, ignoring Button-1 for paint/window ops.")
+            self.debug("[DEBUG]Ctrl pressed, ignoring Button-1 for paint/window ops.")
             return "break"
         if self.current_mouse_action is not None:
-            # print(f"Warning: Button-1 pressed while action '{self.current_mouse_action}' active.")
+            self.debug(f"[DEBUG]Warning: Button-1 pressed while action '{self.current_mouse_action}' active.")
             return "break"
         # --- End Modifier Check ---
 
@@ -5357,7 +5276,7 @@ class TileEditorApp:
                     outline=self.MINIMAP_VIEWPORT_COLOR, width=2, tags="minimap_viewport"
                 )
         except Exception as e:
-            # print(f"Error drawing minimap viewport: {e}")
+            self.debug(f"[DEBUG]Error drawing minimap viewport: {e}")
             pass
 
         if self.show_window_view.get():
@@ -5383,7 +5302,7 @@ class TileEditorApp:
                     outline=self.MINIMAP_WIN_VIEW_COLOR, width=2, dash=(4, 4), tags="minimap_window_view"
                 )
             except Exception as e:
-                # print(f"Error drawing minimap window view: {e}")
+                self.debug(f"[DEBUG]Error drawing minimap window view: {e}")
                 pass
 
     def _on_minimap_configure(self, event):
@@ -5431,16 +5350,16 @@ class TileEditorApp:
             if abs(current_height_mm_cfg - ideal_height_cfg) > 1: # Allow 1px tolerance
                 self._minimap_resizing_internally = True
                 new_geometry_cfg = f"{current_width_mm_cfg}x{ideal_height_cfg}"
-                # print(f"Minimap Configure: Forcing aspect ratio. New geometry: {new_geometry_cfg}")
+                self.debug(f"[DEBUG]Minimap Configure: Forcing aspect ratio. New geometry: {new_geometry_cfg}")
                 self.minimap_window.geometry(new_geometry_cfg)
                 self.root.after(50, setattr, self, "_minimap_resizing_internally", False)
                 # Redraw will be triggered by the geometry change causing another <Configure>
                 return 
         except Exception as e:
-            # print(f"Error during minimap aspect ratio enforcement: {e}")
+            self.debug(f"[DEBUG]Error during minimap aspect ratio enforcement: {e}")
             self._minimap_resizing_internally = False # Ensure flag is reset
 
-        # print(f"Minimap Configure: Aspect ratio OK or no change needed. Redrawing.")
+        self.debug(f"[DEBUG]Minimap Configure: Aspect ratio OK or no change needed. Redrawing.")
         self.invalidate_minimap_background_cache()
         self.draw_minimap()
 
@@ -5475,7 +5394,7 @@ class TileEditorApp:
         map_base_pixel_h = map_height * self.supertile_grid_height * TILE_HEIGHT
 
         if map_base_pixel_w <= 0 or map_base_pixel_h <= 0:
-            # print("Warning: Invalid base map pixel dimensions for minimap background.")
+            self.debug("[DEBUG]Warning: Invalid base map pixel dimensions for minimap background.")
             minimap_img_bg.put("black", to=(0, 0, target_width_mm, target_height_mm))
             # Update cache trackers even for fallback
             self.minimap_bg_rendered_width = target_width_mm
@@ -5550,7 +5469,7 @@ class TileEditorApp:
                                             # Validate palette indices
                                             if not (0 <= fg_idx_mm < len(self.active_msx_palette) and \
                                                     0 <= bg_idx_mm < len(self.active_msx_palette)):
-                                                # print(f"Warning: Invalid palette indices ({fg_idx_mm}, {bg_idx_mm}) in minimap render.")
+                                                self.debug(f"[DEBUG]Warning: Invalid palette indices ({fg_idx_mm}, {bg_idx_mm}) in minimap render.")
                                                 fg_idx_mm = WHITE_IDX; bg_idx_mm = BLACK_IDX # Fallback
 
                                             fg_color_mm = self.active_msx_palette[fg_idx_mm]
@@ -5569,11 +5488,11 @@ class TileEditorApp:
             try:
                 minimap_img_bg.put("{" + " ".join(row_hex_colors_mm) + "}", to=(0, y_pix_mm))
             except tk.TclError:
-                # print(f"Warning [Minimap BG]: TclError put row {y_pix_mm}: {e}")
+                self.debug(f"[DEBUG]Warning [Minimap BG]: TclError put row {y_pix_mm}: {e}")
                 if row_hex_colors_mm:
                     minimap_img_bg.put(row_hex_colors_mm[0], to=(0, y_pix_mm, target_width_mm, y_pix_mm + 1))
 
-        # print("Minimap background generated.")
+        self.debug("[DEBUG]Minimap background generated.")
         self.minimap_bg_rendered_width = target_width_mm
         self.minimap_bg_rendered_height = target_height_mm
         self.minimap_background_cache = minimap_img_bg
@@ -5677,7 +5596,7 @@ class TileEditorApp:
         """Handles the start of panning (Ctrl + Left Click) OR window dragging with Ctrl."""
         # --- Check for Shift modifier ---
         if self.is_shift_pressed:
-            # print("Shift pressed, ignoring Ctrl-Button-1 for pan/window drag.")
+            self.debug("[DEBUG]Shift pressed, ignoring Ctrl-Button-1 for pan/window drag.")
             return "break"
         # --- End Shift Check ---
 
@@ -5772,29 +5691,62 @@ class TileEditorApp:
             self._clear_paste_preview_rect()
 
     def _update_edit_menu_state(self):
-        """Updates the state (enabled/disabled) and labels of generic Edit menu items
-        based on the active tab and clipboard state.
-        """
         if not self.edit_menu:
-            return  # Menu not ready
-        if self.copy_menu_item_index == -1 or self.paste_menu_item_index == -1:
-            return  # Cannot proceed if indices weren't stored correctly
+            self.debug("[DEBUG] _update_edit_menu_state: self.edit_menu is None. Aborting.")
+            return
+        if not tk.Menu.winfo_exists(self.edit_menu): # Check if menu widget still exists
+            self.debug("[DEBUG] _update_edit_menu_state: self.edit_menu widget no longer exists. Aborting.")
+            return
 
-        selected_tab_index = 0  # Default
+        self.debug(f"[DEBUG] _update_edit_menu_state: Attempting to update. Copy index: {self.copy_menu_item_index}, Paste index: {self.paste_menu_item_index}")
+
+        if self.copy_menu_item_index == -1 or self.paste_menu_item_index == -1:
+            self.debug("[DEBUG] _update_edit_menu_state: Stored menu item indices are -1. Aborting.")
+            return
+
+        # --- ADD MORE DEBUGGING HERE ---
+        if self.debug_enabled: 
+            try:
+                actual_copy_type = self.edit_menu.type(self.copy_menu_item_index)
+                actual_paste_type = self.edit_menu.type(self.paste_menu_item_index)
+                self.debug(f"[DEBUG] _update_edit_menu_state: Actual type of item at copy_menu_item_index ({self.copy_menu_item_index}) is '{actual_copy_type}'")
+                self.debug(f"[DEBUG] _update_edit_menu_state: Actual type of item at paste_menu_item_index ({self.paste_menu_item_index}) is '{actual_paste_type}'")
+
+                num_items_now = self.edit_menu.index(tk.END) # This can be None if menu is empty
+                if num_items_now is not None:
+                    self.debug(f"[DEBUG] _update_edit_menu_state: Total items in edit_menu NOW: {num_items_now + 1}")
+                    for i in range(num_items_now + 1):
+                        item_type_str = self.edit_menu.type(i)
+                        item_label_str = 'N/A'
+                        if item_type_str == 'command':
+                            item_label_str = self.edit_menu.entrycget(i, 'label')
+                        elif item_type_str == 'cascade':
+                             item_label_str = self.edit_menu.entrycget(i, 'label') + " (Cascade)"
+                        # Add other types if necessary (checkbutton, radiobutton, separator)
+                        self.debug(f"  [DEBUG] _update_edit_menu_state: Item {i}: Type='{item_type_str}', Label='{item_label_str}'")
+                else:
+                    self.debug("[DEBUG] _update_edit_menu_state: edit_menu.index(tk.END) is None (menu might be empty or not fully formed).")
+
+
+            except tk.TclError as e_debug_update:
+                self.debug(f"[DEBUG] _update_edit_menu_state: TclError during debug print: {e_debug_update}")
+        # --- END MORE DEBUGGING ---
+
+        selected_tab_index = 0 
         try:
             if self.notebook and self.notebook.winfo_exists():
                 current_selection = self.notebook.select()
                 if current_selection:
                     selected_tab_index = self.notebook.index(current_selection)
         except tk.TclError:
-            selected_tab_index = 0
+            selected_tab_index = 0 
 
         can_copy = False
         can_paste = False
         copy_label = "Copy"
         paste_label = "Paste"
 
-        if selected_tab_index == 1:  # Tile Editor Tab (index 1)
+        if selected_tab_index == 1: 
             copy_label = "Copy Tile"
             paste_label = "Paste Tile"
             can_copy = 0 <= current_tile_index < num_tiles_in_set
@@ -5803,7 +5755,7 @@ class TileEditorApp:
                 and 0 <= current_tile_index < num_tiles_in_set
             )
 
-        elif selected_tab_index == 2:  # Supertile Editor Tab (index 2)
+        elif selected_tab_index == 2: 
             copy_label = "Copy Supertile"
             paste_label = "Paste Supertile"
             can_copy = 0 <= current_supertile_index < num_supertiles
@@ -5812,7 +5764,7 @@ class TileEditorApp:
                 and 0 <= current_supertile_index < num_supertiles
             )
 
-        elif selected_tab_index == 3:  # Map Editor Tab (index 3)
+        elif selected_tab_index == 3: 
             copy_label = "Copy Map Region"
             paste_label = "Paste Map Region"
             can_copy = (
@@ -5821,7 +5773,8 @@ class TileEditorApp:
             )
             can_paste = self.map_clipboard_data is not None
 
-        else:  # Palette (0) tab
+        else: 
+            self.debug(f"[DEBUG] _update_edit_menu_state: Tab index is {selected_tab_index}. Setting Copy/Paste disabled.")
             copy_label = "Copy"
             paste_label = "Paste"
             can_copy = False
@@ -5831,27 +5784,31 @@ class TileEditorApp:
         paste_state = tk.NORMAL if can_paste else tk.DISABLED
 
         try:
-            current_copy_type = self.edit_menu.type(self.copy_menu_item_index)
-            current_paste_type = self.edit_menu.type(self.paste_menu_item_index)
-            if current_copy_type == "command":
+            # Re-check types just before configuring, in case the debug prints above are misleading due to timing
+            current_copy_type_final_check = self.edit_menu.type(self.copy_menu_item_index)
+            current_paste_type_final_check = self.edit_menu.type(self.paste_menu_item_index)
+
+            if current_copy_type_final_check == "command":
                 self.edit_menu.entryconfig(
                     self.copy_menu_item_index, state=copy_state, label=copy_label
                 )
-            # else:
-            # print(f"  ERROR: Item at copy index {self.copy_menu_item_index} is not a 'command' type!")
+            else:
+                self.debug(f"[DEBUG] _update_edit_menu_state FINAL CHECK ERROR: Item at copy index {self.copy_menu_item_index} is type '{current_copy_type_final_check}', not 'command'.")
 
-            if current_paste_type == "command":
+
+            if current_paste_type_final_check == "command":
                 self.edit_menu.entryconfig(
                     self.paste_menu_item_index, state=paste_state, label=paste_label
                 )
-            # else:
-            # print(f"  ERROR: Item at paste index {self.paste_menu_item_index} is not a 'command' type!")
+            else:
+                self.debug(f"[DEBUG] _update_edit_menu_state FINAL CHECK ERROR: Item at paste index {self.paste_menu_item_index} is type '{current_paste_type_final_check}', not 'command'.")
+
 
         except tk.TclError as e:
-            # print(f"  ERROR during entryconfig: {e}")
+            self.debug(f"[DEBUG] _update_edit_menu_state: TclError during entryconfig: {e}")
             pass
         except Exception as e:
-            # print(f"  UNEXPECTED ERROR during menu update: {e}")
+            self.debug(f"[DEBUG] _update_edit_menu_state: UNEXPECTED ERROR during menu update: {e}")
             pass
 
     def handle_generic_copy(self):
@@ -6039,7 +5996,7 @@ class TileEditorApp:
         current_definition_place = supertiles_data[current_supertile_index]
         if not current_definition_place or len(current_definition_place) != self.supertile_grid_height or \
            (self.supertile_grid_height > 0 and (len(current_definition_place[0]) != self.supertile_grid_width)):
-            # print(f"Warning: Supertile {current_supertile_index} dim mismatch in _place_tile_in_supertile.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} dim mismatch in _place_tile_in_supertile.")
             return False
 
 
@@ -6143,7 +6100,7 @@ class TileEditorApp:
         # Ensure definition structure matches project settings before modification
         if not current_definition or len(current_definition) != self.supertile_grid_height or \
            (self.supertile_grid_height > 0 and (len(current_definition[0]) != self.supertile_grid_width)):
-            # print(f"Warning: Supertile {current_supertile_index} dimensions mismatch for horizontal flip.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} dimensions mismatch for horizontal flip.")
             # Optionally show error or skip
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                  self.update_all_displays(changed_level="supertile") # Redraw to show original if error
@@ -6181,7 +6138,7 @@ class TileEditorApp:
         
         # Optional: Check if current_definition_to_flip actual height matches self.supertile_grid_height
         if len(current_definition_to_flip) != self.supertile_grid_height:
-            # print(f"Warning: Supertile {current_supertile_index} height mismatch for vertical flip. Proceeding with actual length.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} height mismatch for vertical flip. Proceeding with actual length.")
             # This might indicate inconsistent data. For robustness, one might pad/truncate current_definition_to_flip
             # to self.supertile_grid_height before reversing, or create a new list.
             # For now, we reverse what's there.
@@ -6223,7 +6180,7 @@ class TileEditorApp:
         # Ensure definition structure matches before rotation
         if not current_definition_rotate or len(current_definition_rotate) != dim_rotate or \
            (dim_rotate > 0 and (len(current_definition_rotate[0]) != dim_rotate)):
-            # print(f"Warning: Supertile {current_supertile_index} dimensions mismatch for rotation.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} dimensions mismatch for rotation.")
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                  self.update_all_displays(changed_level="supertile")
             return
@@ -6262,7 +6219,7 @@ class TileEditorApp:
         
         # Ensure definition structure matches project settings
         if not current_definition_shift or len(current_definition_shift) != current_st_height:
-            # print(f"Warning: Supertile {current_supertile_index} height mismatch for shift up.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} height mismatch for shift up.")
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                  self.update_all_displays(changed_level="supertile")
             return
@@ -6301,7 +6258,7 @@ class TileEditorApp:
         current_definition_shift_d = supertiles_data[current_supertile_index]
 
         if not current_definition_shift_d or len(current_definition_shift_d) != current_st_height:
-            # print(f"Warning: Supertile {current_supertile_index} height mismatch for shift down.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} height mismatch for shift down.")
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                  self.update_all_displays(changed_level="supertile")
             return
@@ -6338,7 +6295,7 @@ class TileEditorApp:
         # Basic structure check
         if not current_definition_shift_l or len(current_definition_shift_l) != current_st_h or \
            (current_st_h > 0 and (len(current_definition_shift_l[0]) != current_st_w)):
-            # print(f"Warning: Supertile {current_supertile_index} dimensions mismatch for shift left.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} dimensions mismatch for shift left.")
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                  self.update_all_displays(changed_level="supertile")
             return
@@ -6380,7 +6337,7 @@ class TileEditorApp:
 
         if not current_definition_shift_r or len(current_definition_shift_r) != current_st_h or \
            (current_st_h > 0 and (len(current_definition_shift_r[0]) != current_st_w)):
-            # print(f"Warning: Supertile {current_supertile_index} dimensions mismatch for shift right.")
+            self.debug(f"[DEBUG]Warning: Supertile {current_supertile_index} dimensions mismatch for shift right.")
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                  self.update_all_displays(changed_level="supertile")
             return
@@ -6428,7 +6385,7 @@ class TileEditorApp:
                 definition_rc = supertiles_data[current_supertile_index]
                 if not definition_rc or len(definition_rc) != self.supertile_grid_height or \
                    (self.supertile_grid_height > 0 and (len(definition_rc[0]) != self.supertile_grid_width)):
-                    # print(f"Warning: ST def {current_supertile_index} dim mismatch in right_click.")
+                    self.debug(f"[DEBUG]Warning: ST def {current_supertile_index} dim mismatch in right_click.")
                     return
 
                 clicked_tile_index_val = definition_rc[row][col]
@@ -6436,20 +6393,20 @@ class TileEditorApp:
                 if 0 <= clicked_tile_index_val < num_tiles_in_set:
                     if selected_tile_for_supertile != clicked_tile_index_val:
                         selected_tile_for_supertile = clicked_tile_index_val
-                        # print(f"Right-click selected Tile: {selected_tile_for_supertile}")
+                        self.debug(f"[DEBUG]Right-click selected Tile: {selected_tile_for_supertile}")
                         self.draw_tileset_viewer(
                             self.st_tileset_canvas, selected_tile_for_supertile
                         )
                         self.update_supertile_info_labels()
                         self.scroll_viewers_to_tile(selected_tile_for_supertile)
                 # else:
-                    # print(f"Right-click: Tile index {clicked_tile_index_val} at ST def [{row},{col}] is out of tile bounds (max {num_tiles_in_set-1}).")
+                    self.debug(f"[DEBUG]Right-click: Tile index {clicked_tile_index_val} at ST def [{row},{col}] is out of tile bounds (max {num_tiles_in_set-1}).")
 
             except IndexError: # Should be caught by structure check above
-                # print(f"Right-click: IndexError accessing supertile data for ST {current_supertile_index} at def [{row},{col}].")
+                self.debug(f"[DEBUG]Right-click: IndexError accessing supertile data for ST {current_supertile_index} at def [{row},{col}].")
                 pass
             except Exception as e:
-                # print(f"Right-click: Unexpected error in supertile def handler: {e}")
+                self.debug(f"[DEBUG]Right-click: Unexpected error in supertile def handler: {e}")
                 pass
         # else: Click was outside the definition grid based on current W/H dimensions
 
@@ -6527,7 +6484,7 @@ class TileEditorApp:
             # Check consistency of this definition with project settings
             if not definition_check or len(definition_check) != self.supertile_grid_height or \
                (self.supertile_grid_height > 0 and (len(definition_check[0]) != self.supertile_grid_width)):
-                # print(f"Warning: Supertile {st_idx_check} has inconsistent dimensions in _check_tile_usage. Skipping.")
+                self.debug(f"[DEBUG]Warning: Supertile {st_idx_check} has inconsistent dimensions in _check_tile_usage. Skipping.")
                 continue # Skip this malformed supertile definition
 
             found_in_current_st = False
@@ -6569,7 +6526,7 @@ class TileEditorApp:
             # Basic check for definition consistency
             if not current_definition_update or len(current_definition_update) != self.supertile_grid_height or \
                (self.supertile_grid_height > 0 and (len(current_definition_update[0]) != self.supertile_grid_width)):
-                # print(f"Warning: Supertile {st_idx_update} has inconsistent dimensions in _update_supertile_refs. Skipping.")
+                self.debug(f"[DEBUG]Warning: Supertile {st_idx_update} has inconsistent dimensions in _update_supertile_refs. Skipping.")
                 continue
 
             for r_update in range(self.supertile_grid_height):
@@ -6708,10 +6665,10 @@ class TileEditorApp:
         global num_supertiles, supertiles_data # supertiles_data is global
 
         if not (0 <= index_to_insert_at <= num_supertiles):
-            # print(f"Error: Insert supertile index {index_to_insert_at} out of range [0, {num_supertiles}].")
+            self.debug(f"[DEBUG]Error: Insert supertile index {index_to_insert_at} out of range [0, {num_supertiles}].")
             return False
         if num_supertiles >= MAX_SUPERTILES:
-            # print("Error: Cannot insert supertile, maximum reached.")
+            self.debug("[DEBUG]Error: Cannot insert supertile, maximum reached.")
             return False
 
         # Create blank supertile data using current project dimensions
@@ -7048,7 +7005,7 @@ class TileEditorApp:
         global current_tile_index, selected_tile_for_supertile, supertiles_data # Globals
 
         if not (0 <= source_index_tile < num_tiles_in_set):
-            # print(f"Error: Invalid source index {source_index_tile} for tile move.")
+            self.debug(f"[DEBUG]Error: Invalid source index {source_index_tile} for tile move.")
             return False
         
         # Clamp target_index_tile to be within valid bounds for insertion [0, num_tiles_in_set]
@@ -7063,7 +7020,7 @@ class TileEditorApp:
                   return False # No move needed if source is already at target (and not the special end case)
 
 
-        # print(f"Repositioning Tile: From {source_index_tile} to {clamped_target_index_tile}")
+        self.debug(f"[DEBUG]Repositioning Tile: From {source_index_tile} to {clamped_target_index_tile}")
 
         moved_pattern_data = tileset_patterns.pop(source_index_tile)
         moved_colors_data = tileset_colors.pop(source_index_tile)
@@ -7082,7 +7039,7 @@ class TileEditorApp:
             definition_refo = supertiles_data[st_idx_refo] # global
             if not definition_refo or len(definition_refo) != self.supertile_grid_height or \
                (self.supertile_grid_height > 0 and (len(definition_refo[0]) != self.supertile_grid_width)):
-                # print(f"Warning: ST {st_idx_refo} dim mismatch in _reposition_tile. Skipping ref update.")
+                self.debug(f"[DEBUG]Warning: ST {st_idx_refo} dim mismatch in _reposition_tile. Skipping ref update.")
                 continue
 
             for r_refo in range(self.supertile_grid_height):
@@ -7123,7 +7080,7 @@ class TileEditorApp:
         self._mark_project_modified()
         self.clear_all_caches()
         self.invalidate_minimap_background_cache()
-        # print(f"  Successfully moved Tile {source_index_tile} to {actual_insert_idx}")
+        self.debug(f"[DEBUG]  Successfully moved Tile {source_index_tile} to {actual_insert_idx}")
         return True
 
     def _reposition_supertile(self, source_index_st, target_index_st): # Renamed
@@ -7131,7 +7088,7 @@ class TileEditorApp:
         global current_supertile_index, selected_supertile_for_map 
 
         if not (0 <= source_index_st < num_supertiles):
-            # print(f"Error: Invalid source index {source_index_st} for supertile move.")
+            self.debug(f"[DEBUG]Error: Invalid source index {source_index_st} for supertile move.")
             return False
         
         clamped_target_index_st = max(0, min(target_index_st, num_supertiles))
@@ -7143,7 +7100,7 @@ class TileEditorApp:
              elif source_index_st == clamped_target_index_st :
                   return False
 
-        # print(f"Repositioning Supertile: From {source_index_st} to {clamped_target_index_st}")
+        self.debug(f"[DEBUG]Repositioning Supertile: From {source_index_st} to {clamped_target_index_st}")
 
         moved_st_definition = supertiles_data.pop(source_index_st) # Global
 
@@ -7193,7 +7150,7 @@ class TileEditorApp:
         self._mark_project_modified()
         self.supertile_image_cache.clear() # Clear all ST cache as many could have effectively changed ID
         self.invalidate_minimap_background_cache()
-        # print(f"  Successfully moved Supertile {source_index_st} to {actual_insert_idx_st}")
+        self.debug(f"[DEBUG]  Successfully moved Supertile {source_index_st} to {actual_insert_idx_st}")
         return True
 
     def _get_index_from_canvas_coords(self, canvas, x_event, y_event, item_type_str): # Renamed parameters
@@ -7235,11 +7192,11 @@ class TileEditorApp:
                 else: current_items_across = 1 
             items_across_calc = max(1, current_items_across)
         else:
-            # print(f"Error: Invalid item_type '{item_type_str}' in _get_index_from_canvas_coords")
+            self.debug(f"[DEBUG]Error: Invalid item_type '{item_type_str}' in _get_index_from_canvas_coords")
             return -1
 
         if item_render_w <= 0 or item_render_h <= 0 or items_across_calc <= 0:
-            # print(f"Error: Invalid calculated layout params for {item_type_str}")
+            self.debug(f"[DEBUG]Error: Invalid calculated layout params for {item_type_str}")
             return -1
 
         try:
@@ -7782,7 +7739,7 @@ class TileEditorApp:
             self.map_selection_start_st is not None
             and self.map_selection_end_st is not None
         ):
-            # print(f"Selection finalized: {self.map_selection_start_st} to {self.map_selection_end_st}")
+            self.debug(f"[DEBUG]Selection finalized: {self.map_selection_start_st} to {self.map_selection_end_st}")
             # Final rectangle drawn by motion handler, redraw map to make it persistent
             self.draw_map_canvas()
             self._update_edit_menu_state()
@@ -7795,7 +7752,7 @@ class TileEditorApp:
 
     def handle_map_escape(self, event):
         """Handles Escape key press on map canvas to clear clipboard, paste preview, and selection."""
-        # print("Escape pressed, clearing clipboard, paste preview, and selection.")
+        self.debug("[DEBUG]Escape pressed, clearing clipboard, paste preview, and selection.")
 
         # Check what was active before clearing
         cleared_clipboard = self.map_clipboard_data is not None
@@ -8035,13 +7992,13 @@ class TileEditorApp:
         for r_idx in range(map_height): # Renamed r
             for c_idx in range(map_width): # Renamed c
                 used_st_indices.add(map_data[r_idx][c_idx])
-        # # print(f"DEBUG: Used Supertile Indices from map_data: {used_st_indices}") # DEBUG
+        # self.debug(f"[DEBUG]DEBUG: Used Supertile Indices from map_data: {used_st_indices}") # DEBUG
 
         unused_supertiles = set()
         for i in range(1, num_supertiles): # Start from 1
             if i not in used_st_indices:
                 unused_supertiles.add(i)
-        # print(f"DEBUG: Found Unused Supertiles (indices): {unused_supertiles}") # DEBUG
+        self.debug(f"[DEBUG]DEBUG: Found Unused Supertiles (indices): {unused_supertiles}") # DEBUG
         return unused_supertiles
 
     def _clear_marked_unused(self, trigger_redraw=True):
@@ -8407,7 +8364,7 @@ class TileEditorApp:
             # Slider changes are handled by _on_fine_offset_slider_change which has its own debounce.
             # If this function were to be called directly for an immediate update by something else,
             # then that calling code would be responsible for the context.
-            # self.debug("[DEBUG] _on_rom_importer_setting_change: Non-configure event. No action taken here directly.")
+            self.debug("[DEBUG] _on_rom_importer_setting_change: Non-configure event. No action taken here directly.")
             pass
 
     def _draw_rom_importer_canvas(self):
@@ -8653,7 +8610,7 @@ class TileEditorApp:
         # ... (logic to determine tiles_across_content_final using grid_cols_for_this_draw or fallback - same) ...
         if grid_cols_for_this_draw is not None and grid_cols_for_this_draw > 0:
             tiles_across_content_final = grid_cols_for_this_draw
-            # self.debug(f"[DEBUG] Highlight: Using passed grid_cols_for_this_draw: {tiles_across_content_final}")
+            self.debug(f"[DEBUG] Highlight: Using passed grid_cols_for_this_draw: {tiles_across_content_final}")
         else:
             self.debug("[DEBUG] Highlight: CRITICAL - grid_cols_for_this_draw not provided or invalid. Using fallback.")
             tiles_across_content_final = getattr(dialog, 'rom_importer_grid_cols', 1) 
@@ -8833,7 +8790,7 @@ class TileEditorApp:
         self.debug(f"[DEBUG] Shift: {is_shift_pressed}, Ctrl: {is_ctrl_pressed}")
         self.debug(f"[DEBUG] Current Anchor: {current_anchor_idx}")
         self.debug(f"[DEBUG] Props to associate: {properties_tuple_to_associate}")
-        # self.debug(f"[DEBUG] Selection BEFORE: {dict(selection_dict)}") # Less verbose
+        self.debug(f"[DEBUG] Selection BEFORE: {dict(selection_dict)}") # Less verbose
 
         selection_changed_in_dict = False # More specific flag
 
@@ -8909,7 +8866,7 @@ class TileEditorApp:
         # Check if anchor changed, that also means UI state change
         anchor_state_changed = (dialog.rom_importer_anchor_idx != current_anchor_idx)
         
-        # self.debug(f"[DEBUG] Selection AFTER: {dict(selection_dict)}")
+        self.debug(f"[DEBUG] Selection AFTER: {dict(selection_dict)}")
         self.debug(f"[DEBUG] New Anchor: {dialog.rom_importer_anchor_idx}")
 
         # If selection dict content or anchor changed, then update UI
@@ -9059,7 +9016,7 @@ class TileEditorApp:
         
         dialog = self.rom_import_dialog # Get dialog reference
         key_pressed = event.keysym
-        # self.debug(f"[DEBUG] Keypress: {key_pressed}") # Keep for now if needed
+        self.debug(f"[DEBUG] Keypress: {key_pressed}") # Keep for now if needed
 
         action_taken = False
         native_scroll_performed = False 
@@ -9286,10 +9243,10 @@ class TileEditorApp:
 
                 self.draw_supertile_definition_canvas() # Redraw content after resize
             except tk.TclError:
-                # print("TclError during supertile definition canvas reconfiguration.")
+                self.debug("[DEBUG]TclError during supertile definition canvas reconfiguration.")
                 pass
             except Exception as e:
-                # print(f"Error reconfiguring supertile definition canvas: {e}")
+                self.debug(f"[DEBUG]Error reconfiguring supertile definition canvas: {e}")
                 pass
         # else: canvas not yet created or already destroyed.
 
@@ -9667,7 +9624,7 @@ class TileEditorApp:
             self._palette_pane_resize_timer = None
             
         self._palette_pane_resize_timer = self.root.after(100, self._redraw_map_supertile_selector_debounced)
-        # self.debug(f"[DEBUG] === _on_palette_pane_configure_for_redraw_only END ===") # Optional: reduce log noise
+        self.debug(f"[DEBUG] === _on_palette_pane_configure_for_redraw_only END ===") # Optional: reduce log noise
 
     def _redraw_map_supertile_selector_debounced(self):
         # Actual redraw function called by the debouncer.
