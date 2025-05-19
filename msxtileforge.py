@@ -8331,15 +8331,11 @@ class TileEditorApp:
         self._create_rom_importer_dialog(rom_filepath, rom_data)
 
     def _create_rom_importer_dialog(self, rom_filepath, rom_data):
-        # Creates and displays the modal dialog for ROM tile importing.
+        # ... (initial setup, dialog var init, widgets, etc. - same as Step 13) ...
         self.rom_import_dialog = tk.Toplevel(self.root)
-        self.rom_import_dialog.title(f"Import Tiles from: {os.path.basename(rom_filepath)}")
-        self.rom_import_dialog.transient(self.root)
-        self.rom_import_dialog.grab_set()
-        self.rom_import_dialog.resizable(True, True)
-        self.rom_import_dialog.minsize(550, 400) # This sets the minimums
-
+        # ... (dialog properties, vars, frames ...)
         dialog = self.rom_import_dialog 
+        # ...
         dialog.rom_data = rom_data
         dialog.rom_filepath = rom_filepath
         dialog.fine_offset_var = tk.IntVar(value=0)
@@ -8350,8 +8346,8 @@ class TileEditorApp:
         dialog.hover_info_text_var = tk.StringVar(value="Offset: N/A | Grid Index: N/A")
         dialog.selection_info_text_var = tk.StringVar(value="Tiles Selected: 0")
         dialog.top_left_grid_byte_offset_text_var = tk.StringVar(value="Grid Top-Left Byte: N/A")
-        dialog.redraw_timer_id = None
-        dialog.slider_redraw_timer_id = None
+        dialog.redraw_timer_id = None # For Configure and Keypress/Scrollbar general redraw
+        dialog.slider_redraw_timer_id = None # Specifically for slider
         dialog.rom_importer_grid_cols = 1 
         try:
             safe_tile_w = max(1, TILE_WIDTH)
@@ -8360,7 +8356,7 @@ class TileEditorApp:
         except tk.TclError as e_photo:
             self.debug(f"[DEBUG] CRITICAL: Failed to create temp_tile_image_unscaled_ref: {e_photo}")
             messagebox.showerror("Importer Init Error", "Failed to initialize image resources for importer.", parent=dialog)
-            if tk.Toplevel.winfo_exists(dialog): # Check if dialog still exists before destroying
+            if tk.Toplevel.winfo_exists(dialog): 
                 dialog.destroy()
             return 
 
@@ -8371,6 +8367,7 @@ class TileEditorApp:
         main_dialog_frame.grid_rowconfigure(0, weight=1)    
         main_dialog_frame.grid_rowconfigure(1, weight=0)    
 
+        # ... (left_column_frame and its contents - same as Step 13) ...
         left_column_frame = ttk.Frame(main_dialog_frame)
         left_column_frame.grid(row=0, column=0, sticky="nswe", padx=(0, 10))
         
@@ -8430,7 +8427,7 @@ class TileEditorApp:
         hover_label.pack(side=tk.TOP, fill=tk.X)
         selection_label = ttk.Label(info_bar_frame, textvariable=dialog.selection_info_text_var, anchor="w", justify=tk.LEFT)
         selection_label.pack(side=tk.TOP, fill=tk.X)
-        
+
         canvas_frame = ttk.Frame(main_dialog_frame)
         canvas_frame.grid(row=0, column=1, sticky="nswe")
         canvas_frame.grid_rowconfigure(0, weight=1)
@@ -8447,38 +8444,48 @@ class TileEditorApp:
             highlightthickness=0
         )
         
-        def yview_wrapper(*args):
-            # Check if dialog and canvas still exist before calling methods on them
+        # --- MODIFIED SCROLLBAR COMMANDS with DEBOUNCE ---
+        def _schedule_debounced_draw_from_scroll():
+            # Ensure dialog and timer attribute exist
+            current_dialog = getattr(self, 'rom_import_dialog', None)
+            if not current_dialog or not tk.Toplevel.winfo_exists(current_dialog): return
+            if not hasattr(current_dialog, 'redraw_timer_id'): current_dialog.redraw_timer_id = None
+
+            if current_dialog.redraw_timer_id is not None:
+                current_dialog.after_cancel(current_dialog.redraw_timer_id)
+            # Use _perform_debounced_rom_canvas_draw which clears its own timer ID
+            current_dialog.redraw_timer_id = current_dialog.after(30, self._perform_debounced_rom_canvas_draw) # 30ms delay
+
+        def yview_wrapper_debounced(*args):
             current_dialog = getattr(self, 'rom_import_dialog', None)
             if not current_dialog or not tk.Toplevel.winfo_exists(current_dialog): return
             current_canvas = getattr(current_dialog, 'canvas', None)
             if not current_canvas or not current_canvas.winfo_exists(): return
             
-            current_canvas.yview(*args)
-            self._draw_rom_importer_canvas()
+            current_canvas.yview(*args) # Native scroll
+            _schedule_debounced_draw_from_scroll() # Schedule our redraw
 
-        def xview_wrapper(*args):
+        def xview_wrapper_debounced(*args):
             current_dialog = getattr(self, 'rom_import_dialog', None)
             if not current_dialog or not tk.Toplevel.winfo_exists(current_dialog): return
             current_canvas = getattr(current_dialog, 'canvas', None)
             if not current_canvas or not current_canvas.winfo_exists(): return
 
-            current_canvas.xview(*args)
-            self._draw_rom_importer_canvas()
+            current_canvas.xview(*args) # Native scroll
+            _schedule_debounced_draw_from_scroll() # Schedule our redraw
 
-        rom_v_scroll.config(command=yview_wrapper)
-        rom_h_scroll.config(command=xview_wrapper)
+        rom_v_scroll.config(command=yview_wrapper_debounced)
+        rom_h_scroll.config(command=xview_wrapper_debounced)
+        # --- END MODIFIED SCROLLBAR COMMANDS ---
 
-        rom_v_scroll.unbind("<B1-Motion>")
-        rom_v_scroll.unbind("<ButtonRelease-1>")
-        rom_h_scroll.unbind("<B1-Motion>")
-        rom_h_scroll.unbind("<ButtonRelease-1>")
+        # Direct B1-Motion/Release bindings on scrollbars are already removed from Step 11.
 
         dialog.canvas.grid(row=0, column=0, sticky="nsew")
         rom_v_scroll.grid(row=0, column=1, sticky="ns")
         rom_h_scroll.grid(row=1, column=0, sticky="ew")
 
         buttons_frame = ttk.Frame(main_dialog_frame)
+        # ... (rest of button setup and dialog finalization - same as Step 13) ...
         buttons_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10,0))
         buttons_frame.grid_columnconfigure(0, weight=1) 
         buttons_frame.grid_columnconfigure(1, weight=0) 
@@ -8494,21 +8501,21 @@ class TileEditorApp:
         dialog.import_button.grid(row=0, column=1, padx=(0,5))
         cancel_button.grid(row=0, column=2, padx=(5,0))
 
-        dialog.canvas.bind("<Configure>", lambda e: self._on_rom_importer_setting_change(configure_event=True))
+        dialog.canvas.bind("<Configure>", lambda e: self._on_rom_importer_setting_change(configure_event=True)) # This uses its own debounce
         dialog.canvas.bind("<Motion>", self._on_rom_canvas_motion)
         dialog.canvas.bind("<Leave>", self._on_rom_canvas_leave)
         dialog.canvas.bind("<Button-1>", self._on_rom_canvas_left_click)
         dialog.canvas.bind("<Button-3>", self._on_rom_canvas_right_click)
         dialog.bind("<Escape>", lambda e: self._clear_rom_import_selection())
         dialog.canvas.bind("<FocusIn>", lambda e: None)
-        dialog.canvas.bind("<Key>", self._on_rom_canvas_keypress)
+        dialog.canvas.bind("<Key>", self._on_rom_canvas_keypress) # Keypress now also uses debounce
         dialog.canvas.focus_set()
         dialog.protocol("WM_DELETE_WINDOW", self._close_rom_importer_dialog)
 
         self._update_importer_color_swatches()
+        dialog.after(50, lambda: self._on_rom_importer_setting_change(configure_event=True)) # Initial draw call
 
-        dialog.after(50, lambda: self._on_rom_importer_setting_change(configure_event=True))
-
+        # ... (dialog geometry setting - same as Step 13) ...
         dialog.update_idletasks()
         root_w = self.root.winfo_width()
         root_h = self.root.winfo_height()
@@ -8516,12 +8523,9 @@ class TileEditorApp:
         root_y = self.root.winfo_y()
 
         dialog.update_idletasks()
-        dialog_w = dialog.winfo_reqwidth() # This gets the requested width
-        dialog_h = dialog.winfo_reqheight() # This gets the requested height
+        dialog_w = dialog.winfo_reqwidth() 
+        dialog_h = dialog.winfo_reqheight() 
         
-        # No need for max(dialog_w, dialog.winfo_minwidth()) because minsize() was already set
-        # and winfo_reqwidth() should respect it if content is smaller.
-
         x_pos = root_x + (root_w // 2) - (dialog_w // 2)
         y_pos = root_y + (root_h // 2) - (dialog_h // 2)
         
@@ -8548,83 +8552,55 @@ class TileEditorApp:
 
         if configure_event:
             self.debug("[DEBUG] _on_rom_importer_setting_change: Configure event triggered.")
-            # --- TEMPORARY CHANGE FOR TESTING ---
-            # Bypass debouncing for configure events to see if it's the source of the "double scroll"
-            # Ensure canvas has valid dimensions before drawing directly
-            canvas = getattr(dialog, 'canvas', None)
-            if canvas and canvas.winfo_exists() and canvas.winfo_width() > 1 and canvas.winfo_height() > 1:
-                self.debug("[DEBUG] Configure event: Drawing directly.")
-                self._draw_rom_importer_canvas() # Direct call for testing
-            else:
-                self.debug("[DEBUG] Configure event: Canvas not ready for direct draw, will rely on next scheduled draw if any.")
-            # --- END TEMPORARY CHANGE ---
+            
+            if not hasattr(dialog, 'redraw_timer_id'): # Ensure attribute exists
+                dialog.redraw_timer_id = None
 
-            # Original debouncing logic (commented out for test):
-            # if not hasattr(dialog, 'redraw_timer_id'):
-            #     dialog.redraw_timer_id = None
-            # if dialog.redraw_timer_id is not None:
-            #     dialog.after_cancel(dialog.redraw_timer_id)
-            # dialog.redraw_timer_id = dialog.after(150, self._perform_debounced_rom_canvas_draw)
-            return # For testing, we handled it directly or skipped.
-        else:
-            # For non-configure events (like slider change), draw more directly.
-            # This part was already drawing directly or via its own slider debounce.
-            # If slider calls this, it should go to its own debounce.
-            # The _on_fine_offset_slider_change handles its own debouncing.
-            # This 'else' branch might not even be strictly necessary if slider has its own handler.
-            # For safety, if it's NOT a configure event, let's assume it might be an explicit call
-            # that wants an immediate (or slider-debounced) redraw.
-            # The most direct non-configure call to this is probably not happening.
-            # Let's assume slider changes are handled by _on_fine_offset_slider_change.
-            self.debug("[DEBUG] _on_rom_importer_setting_change: Non-configure event. Current logic for slider handles its own debounce.")
-            # If you intend other non-configure events to call this, they might need drawing logic here.
-            # For now, if slider change is the only non-configure path, it's handled by its own debounce.
-            # If _draw_rom_importer_canvas is called directly by slider, it will draw.
-            # self._draw_rom_importer_canvas() # Or rely on slider's debounce mechanism.
+            if dialog.redraw_timer_id is not None:
+                dialog.after_cancel(dialog.redraw_timer_id)
+            # _perform_debounced_rom_canvas_draw handles clearing its own timer ID
+            dialog.redraw_timer_id = dialog.after(150, self._perform_debounced_rom_canvas_draw) # Standard debounce for configure
+            return 
+        # else:
+            # Non-configure events (e.g., direct calls if any, or slider)
+            # Slider changes are handled by _on_fine_offset_slider_change which has its own debounce.
+            # If this function were to be called directly for an immediate update by something else,
+            # then that calling code would be responsible for the context.
+            # self.debug("[DEBUG] _on_rom_importer_setting_change: Non-configure event. No action taken here directly.")
+            pass
 
     def _draw_rom_importer_canvas(self):
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
-        self.debug(f"\n[DEBUG] ### _draw_rom_importer_canvas ### Python List Buffer Strategy")
+        self.debug(f"\n[DEBUG] ### _draw_rom_importer_canvas ### Pre-scale Tile Rows Strategy")
 
         dialog = self.rom_import_dialog
         canvas = getattr(dialog, 'canvas', None)
-        if not canvas or not canvas.winfo_exists():
-            self.debug("[DEBUG] Canvas widget no longer exists. Aborting.")
-            return
-
+        # ... (initial setup, canvas checks, rom_data, offsets, colors, selection_dict - same as Step 23) ...
+        if not canvas or not canvas.winfo_exists(): self.debug("[D] Canvas gone."); return
         rom_data = dialog.rom_data
         global_fine_offset_for_grid = dialog.fine_offset_var.get()
         current_fg_render_idx = getattr(dialog, 'current_importer_fg_idx', WHITE_IDX)
         current_bg_render_idx = getattr(dialog, 'current_importer_bg_idx', BLACK_IDX)
         selection_dict = getattr(dialog, 'rom_importer_selection', {})
-
-        canvas_width = canvas.winfo_width() 
-        canvas_height = canvas.winfo_height() 
-
-        if canvas_width <= 1 or canvas_height <= 1:
-            self.debug("[DEBUG] Canvas not yet sized. Aborting.")
-            return
+        canvas_width = canvas.winfo_width(); canvas_height = canvas.winfo_height()
+        if canvas_width <= 1 or canvas_height <= 1: self.debug("[D] Canvas small."); return
 
         if not hasattr(dialog, 'full_canvas_image_ref') or \
            getattr(dialog.full_canvas_image_ref, 'width', lambda: -1)() != canvas_width or \
            getattr(dialog.full_canvas_image_ref, 'height', lambda: -1)() != canvas_height:
             try:
-                safe_img_width = max(1, canvas_width)
-                safe_img_height = max(1, canvas_height)
+                safe_img_width = max(1, canvas_width); safe_img_height = max(1, canvas_height)
                 dialog.full_canvas_image_ref = tk.PhotoImage(width=safe_img_width, height=safe_img_height)
-            except tk.TclError as e:
-                 self.debug(f"[DEBUG] TclError creating full_canvas_image_ref: {e}. Aborting.")
-                 return
+            except tk.TclError as e: self.debug(f"[D] TclError full_canvas_image: {e}."); return
         full_canvas_image = dialog.full_canvas_image_ref
         
         try:
             if canvas.winfo_exists(): canvas.delete("all_rom_content")
-        except tk.TclError: self.debug("[DEBUG] TclError deleting canvas items. Aborting."); return
+        except tk.TclError: self.debug("[D] TclError delete."); return
 
-        tile_display_size = VIEWER_TILE_SIZE
-        padding = 1
+        tile_display_size = VIEWER_TILE_SIZE; padding = 1
         current_draw_grid_cols = max(1, canvas_width // (tile_display_size + padding))
         dialog.rom_importer_grid_cols = current_draw_grid_cols
         
@@ -8632,21 +8608,25 @@ class TileEditorApp:
         else: total_potential_tiles = (len(rom_data) - global_fine_offset_for_grid) // TILE_WIDTH
 
         if total_potential_tiles <= 0:
-            # ... (empty canvas handling - same, ensure it calls update_idletasks)
+            # ... (empty canvas handling - same) ...
             try:
                 if canvas.winfo_exists():
                     canvas.config(scrollregion=(0,0,1,1))
                     bg_fill_color_hex_empty = canvas.cget("bg")
                     full_canvas_image.put(bg_fill_color_hex_empty, to=(0, 0, canvas_width, canvas_height))
-                    canvas.create_image(view_content_x1_empty, view_content_y1_empty, image=full_canvas_image, anchor=tk.NW, tags=("rom_content_image", "all_rom_content")) # Use 0,0 for empty
+                    # Ensure view_content_x1_empty and view_content_y1_empty are defined if used, default to 0,0
+                    view_content_x1_empty, view_content_y1_empty = 0,0 
+                    try: # Attempt to get current scroll if canvas is queryable
+                        view_content_x1_empty = canvas.canvasx(0)
+                        view_content_y1_empty = canvas.canvasy(0)
+                    except tk.TclError: pass
+
+                    canvas.create_image(view_content_x1_empty, view_content_y1_empty, image=full_canvas_image, anchor=tk.NW, tags=("rom_content_image", "all_rom_content"))
                     canvas.update_idletasks() 
-            except NameError: # If view_content_x1_empty not defined (should be if this path taken early)
-                if canvas.winfo_exists(): canvas.create_image(0,0, image=full_canvas_image, anchor=tk.NW, tags=("rom_content_image", "all_rom_content")); canvas.update_idletasks()
             except tk.TclError: pass
             self._update_rom_importer_info_labels()
             self.debug("[DEBUG] ### _draw_rom_importer_canvas END (no tiles) ###")
             return
-
 
         num_total_content_rows = math.ceil(total_potential_tiles / current_draw_grid_cols) if current_draw_grid_cols > 0 else 0
         scroll_region_width = current_draw_grid_cols * (tile_display_size + padding) + padding
@@ -8655,11 +8635,10 @@ class TileEditorApp:
 
         try:
             if canvas.winfo_exists(): canvas.config(scrollregion=(0, 0, scroll_region_width, scroll_region_height))
-        except tk.TclError: self.debug("[DEBUG] TclError configuring scrollregion. Aborting."); return
+        except tk.TclError: self.debug("[D] TclError scrollregion."); return
 
-        view_content_x1 = canvas.canvasx(0)
-        view_content_y1 = canvas.canvasy(0)
-        self.debug(f"[DEBUG] DRAW: grid_cols={current_draw_grid_cols}, scroll_offset=({view_content_x1:.1f}, {view_content_y1:.1f})")
+        view_content_x1 = canvas.canvasx(0); view_content_y1 = canvas.canvasy(0)
+        # self.debug(f"[D] DRAW: grid_cols={current_draw_grid_cols}, scroll=({view_content_x1:.1f}, {view_content_y1:.1f})")
 
         start_grid_col_idx_viewport = max(0, int(view_content_x1 // (tile_display_size + padding)))
         end_grid_col_idx_viewport = min(current_draw_grid_cols, int(math.ceil((view_content_x1 + canvas_width) / (tile_display_size + padding))))
@@ -8668,7 +8647,7 @@ class TileEditorApp:
         end_grid_row_idx = min(num_total_content_rows, int(math.ceil((view_content_y1 + canvas_height) / (tile_display_size + padding))))
         end_grid_row_idx = max(start_grid_row_idx, end_grid_row_idx)
         
-        # ... (top_left_grid_byte_offset update logic - same) ...
+        # ... (top_left_grid_byte_offset update - same) ...
         actual_first_visible_tile_idx_in_data = (start_grid_row_idx * current_draw_grid_cols) + start_grid_col_idx_viewport
         if not hasattr(dialog, 'top_left_grid_byte_offset'): dialog.top_left_grid_byte_offset = 0
         dialog.top_left_grid_byte_offset = global_fine_offset_for_grid + (actual_first_visible_tile_idx_in_data * TILE_WIDTH)
@@ -8678,24 +8657,21 @@ class TileEditorApp:
             except tk.TclError: pass
 
 
-        # --- Create Python list buffer for the viewport pixels ---
         bg_fill_color_hex = canvas.cget("bg")
-        # viewport_pixel_buffer[y][x] will store the hex color string
         viewport_pixel_buffer = [[bg_fill_color_hex] * canvas_width for _ in range(canvas_height)]
-        self.debug(f"[DEBUG] Initialized viewport_pixel_buffer: {canvas_height} rows, {canvas_width} cols")
+        # self.debug(f"[D] Initialized viewport_pixel_buffer: {canvas_height}x{canvas_width}")
 
-        # temp_tile_image_unscaled is not needed if we directly calculate scaled pixels into buffer
-        scale_factor_w_for_zoom = max(1, tile_display_size // TILE_WIDTH)
-        scale_factor_h_for_zoom = max(1, tile_display_size // TILE_HEIGHT)
+        scale_factor_w = max(1, tile_display_size // TILE_WIDTH) # Renamed from _for_zoom
+        scale_factor_h = max(1, tile_display_size // TILE_HEIGHT) # Renamed
 
         for r_grid in range(start_grid_row_idx, end_grid_row_idx):
             for c_grid_logical in range(start_grid_col_idx_viewport, end_grid_col_idx_viewport):
-                # current_rom_tile_absolute_idx and tile_bytes_data fetching is the same
                 current_rom_tile_absolute_idx = r_grid * current_draw_grid_cols + c_grid_logical
                 if current_rom_tile_absolute_idx >= total_potential_tiles: continue
                 
+                # --- Tile data fetching (same) ---
                 tile_fg_idx, tile_bg_idx, fine_offset_for_this_tile_render = -1,-1,-1
-                # ... (tile property fetching) ...
+                # ...
                 if current_rom_tile_absolute_idx in selection_dict:
                     stored_props = selection_dict[current_rom_tile_absolute_idx]
                     tile_fg_idx, tile_bg_idx, fine_offset_for_this_tile_render = stored_props[0], stored_props[1], stored_props[2]
@@ -8715,6 +8691,7 @@ class TileEditorApp:
                     tile_bytes_data = rom_data[rom_byte_start_pos:] + bytes(TILE_WIDTH - (len(rom_data) - rom_byte_start_pos))
                 else:
                     tile_bytes_data = rom_data[rom_byte_start_pos : rom_byte_start_pos + TILE_WIDTH]
+
                 
                 # Calculate tile's top-left on the viewport-sized buffer
                 tile_content_x_logical = c_grid_logical * (tile_display_size + padding) + padding
@@ -8722,24 +8699,57 @@ class TileEditorApp:
                 img_target_x_on_buffer = round(tile_content_x_logical - view_content_x1)
                 img_target_y_on_buffer = round(tile_content_y_logical - view_content_y1)
 
-                # Draw this tile's scaled pixels into viewport_pixel_buffer
+                # --- OPTIMIZATION: Pre-scale the 8 (TILE_HEIGHT) rows of the current tile ---
+                # scaled_tile_rows_data will be a list of TILE_HEIGHT lists,
+                # where each inner list contains (TILE_WIDTH * scale_factor_w) hex color strings.
+                scaled_tile_rows_data = []
                 for y_src_pixel in range(TILE_HEIGHT):
-                    if y_src_pixel >= len(tile_bytes_data): continue
+                    if y_src_pixel >= len(tile_bytes_data): # Should not happen if tile_bytes_data is TILE_HEIGHT long
+                        scaled_tile_rows_data.append([bg_fill_color_hex] * (TILE_WIDTH * scale_factor_w)) # Fill with BG on error/short data
+                        continue
+                    
                     row_byte = tile_bytes_data[y_src_pixel]
+                    one_src_tile_row_hex_colors = []
                     for x_src_pixel in range(TILE_WIDTH):
                         pixel_is_set = (row_byte >> (7 - x_src_pixel)) & 1
-                        hex_color_to_set = color_for_fg_pixel if pixel_is_set else color_for_bg_pixel
-                        
-                        for y_scaled_offset in range(scale_factor_h_for_zoom):
-                            buffer_y = img_target_y_on_buffer + (y_src_pixel * scale_factor_h_for_zoom) + y_scaled_offset
-                            if 0 <= buffer_y < canvas_height: # Check Y bounds for buffer
-                                for x_scaled_offset in range(scale_factor_w_for_zoom):
-                                    buffer_x = img_target_x_on_buffer + (x_src_pixel * scale_factor_w_for_zoom) + x_scaled_offset
-                                    if 0 <= buffer_x < canvas_width: # Check X bounds for buffer
-                                        viewport_pixel_buffer[buffer_y][buffer_x] = hex_color_to_set
+                        hex_color = color_for_fg_pixel if pixel_is_set else color_for_bg_pixel
+                        one_src_tile_row_hex_colors.append(hex_color)
+                    
+                    # Scale this single source row horizontally
+                    scaled_single_row = []
+                    for hex_val_src in one_src_tile_row_hex_colors:
+                        scaled_single_row.extend([hex_val_src] * scale_factor_w)
+                    scaled_tile_rows_data.append(scaled_single_row)
+                
+                # --- Now blit these pre-scaled rows into viewport_pixel_buffer ---
+                # Each pre-scaled row in scaled_tile_rows_data needs to be written scale_factor_h times.
+                for y_src_row_idx, scaled_row_hex_data in enumerate(scaled_tile_rows_data): # y_src_row_idx is 0-7
+                    for y_scaled_offset in range(scale_factor_h):
+                        buffer_y = img_target_y_on_buffer + (y_src_row_idx * scale_factor_h) + y_scaled_offset
+                        if 0 <= buffer_y < canvas_height: # Check Y bounds for buffer
+                            # Blit the scaled_row_hex_data into viewport_pixel_buffer at (img_target_x_on_buffer, buffer_y)
+                            # Handling X clipping for this row
+                            target_x = img_target_x_on_buffer
+                            data_to_blit = scaled_row_hex_data
+                            
+                            if target_x < 0: # Clip left
+                                clip_amount = abs(target_x)
+                                if clip_amount < len(data_to_blit):
+                                    data_to_blit = data_to_blit[clip_amount:]
+                                    target_x = 0
+                                else: # Entirely off-screen
+                                    continue 
+                            
+                            if target_x + len(data_to_blit) > canvas_width: # Clip right
+                                data_to_blit = data_to_blit[:canvas_width - target_x]
+                            
+                            if data_to_blit: # If anything is left to blit
+                                # viewport_pixel_buffer[buffer_y] is a list
+                                # We replace a slice of it
+                                viewport_pixel_buffer[buffer_y][target_x : target_x + len(data_to_blit)] = data_to_blit
         # --- End of loops for populating viewport_pixel_buffer ---
 
-        # --- Put the viewport_pixel_buffer onto full_canvas_image ---
+        # --- Put the viewport_pixel_buffer onto full_canvas_image (same as before) ---
         self.debug(f"[DEBUG] Populated viewport_pixel_buffer. Now putting to PhotoImage.")
         for y_idx, row_hex_data in enumerate(viewport_pixel_buffer):
             if not row_hex_data: continue
@@ -8748,20 +8758,20 @@ class TileEditorApp:
                      full_canvas_image.put("{" + " ".join(row_hex_data) + "}", to=(0, y_idx))
             except tk.TclError as e_put_buffer:
                 self.debug(f"[DEBUG] TclError putting buffer row {y_idx}: {e_put_buffer}")
-                try: # Fallback for the row
+                try: 
                     if y_idx < full_canvas_image.height() and row_hex_data:
                         full_canvas_image.put(row_hex_data[0], to=(0, y_idx, len(row_hex_data), y_idx+1))
                 except tk.TclError: pass
                 continue
         self.debug(f"[DEBUG] Finished putting buffer to PhotoImage.")
 
-        # Place the populated full_canvas_image onto the canvas at content coordinates
+        # Place the populated full_canvas_image onto the canvas (same as before)
         try:
             if canvas.winfo_exists():
                 canvas.create_image(view_content_x1, view_content_y1, 
                                     image=full_canvas_image, anchor=tk.NW, 
                                     tags=("rom_content_image", "all_rom_content"))
-        except tk.TclError: self.debug("[DEBUG] TclError creating main content image."); return
+        except tk.TclError: self.debug("[D] TclError create_image."); return
 
         self._draw_rom_import_selection_highlight(grid_cols_for_this_draw=current_draw_grid_cols)
         self._update_rom_importer_info_labels()
@@ -8769,7 +8779,7 @@ class TileEditorApp:
         if canvas.winfo_exists():
             canvas.update_idletasks()
 
-        self.debug("[DEBUG] ### _draw_rom_importer_canvas END ### Python List Buffer Strategy")
+        self.debug("[DEBUG] ### _draw_rom_importer_canvas END ### Pre-scale Tile Rows Strategy")
 
     def _draw_rom_import_selection_highlight(self, grid_cols_for_this_draw=None):
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
@@ -9206,88 +9216,62 @@ class TileEditorApp:
         if not canvas or not canvas.winfo_exists():
             return
         
+        dialog = self.rom_import_dialog # Get dialog reference
         key_pressed = event.keysym
-        self.debug(f"[DEBUG] Keypress: {key_pressed}")
+        # self.debug(f"[DEBUG] Keypress: {key_pressed}") # Keep for now if needed
 
         action_taken = False
-        native_scroll_performed = False # Flag to indicate if a canvas.x/yview_scroll happened
+        native_scroll_performed = False 
 
         if key_pressed == "Up":
             canvas.yview_scroll(-1, "units")
-            action_taken = True
-            native_scroll_performed = True
+            action_taken = True; native_scroll_performed = True
         elif key_pressed == "Down":
             canvas.yview_scroll(1, "units")
-            action_taken = True
-            native_scroll_performed = True
+            action_taken = True; native_scroll_performed = True
         elif key_pressed == "Left":
             canvas.xview_scroll(-1, "units")
-            action_taken = True
-            native_scroll_performed = True
+            action_taken = True; native_scroll_performed = True
         elif key_pressed == "Right":
             canvas.xview_scroll(1, "units")
-            action_taken = True
-            native_scroll_performed = True
+            action_taken = True; native_scroll_performed = True
         elif key_pressed == "Prior": # PageUp
             canvas.yview_scroll(-1, "pages")
-            action_taken = True
-            native_scroll_performed = True
+            action_taken = True; native_scroll_performed = True
         elif key_pressed == "Next": # PageDown
             canvas.yview_scroll(1, "pages")
-            action_taken = True
-            native_scroll_performed = True
+            action_taken = True; native_scroll_performed = True
         elif key_pressed == "Home":
-            # For Home/End, moveto might not trigger the same immediate feedback
-            # as scroll for canvasx/y updates within the same event tick.
-            # We'll call redraw directly after.
             current_x_frac, _ = canvas.xview()
-            if current_x_frac != 0.0: # Check if already at home for Y
-                 canvas.xview_moveto(0.0)
-                 native_scroll_performed = True # A scroll-like action occurred
+            if current_x_frac != 0.0: canvas.xview_moveto(0.0); native_scroll_performed = True
             current_y_frac, _ = canvas.yview()
-            if current_y_frac != 0.0: # Check if already at home for Y
-                 canvas.yview_moveto(0.0)
-                 native_scroll_performed = True # A scroll-like action occurred
-            action_taken = True # Always consider action taken for Home/End if keys are pressed
+            if current_y_frac != 0.0: canvas.yview_moveto(0.0); native_scroll_performed = True
+            action_taken = True
         elif key_pressed == "End":
             current_x_frac, _ = canvas.xview()
-            if current_x_frac < 1.0: # Check if not already at end for X
-                canvas.xview_moveto(1.0) # This will try to go to the very end of content
-                native_scroll_performed = True
+            if current_x_frac < 1.0: canvas.xview_moveto(1.0); native_scroll_performed = True
             current_y_frac, _ = canvas.yview()
-            if current_y_frac < 1.0: # Check if not already at end for Y
-                canvas.yview_moveto(1.0) # This will try to go to the very end of content
-                native_scroll_performed = True
+            if current_y_frac < 1.0: canvas.yview_moveto(1.0); native_scroll_performed = True
             action_taken = True
         else:
-            return # Not a handled key
+            return 
 
         if action_taken:
-            # If a native scroll was performed, the canvas's internal view offsets
-            # (affecting canvasx/y) should be updated. We can then redraw immediately.
-            # The `after_idle` was causing the "double scroll" by delaying our redraw.
-            if native_scroll_performed or key_pressed in ["Home", "End"]: # Also redraw for Home/End
-                self.debug(f"[DEBUG] Keypress '{key_pressed}': Calling _draw_rom_importer_canvas directly.")
-                # It's crucial that _draw_rom_importer_canvas can reliably get the
-                # *new* scroll position immediately after canvas.yview_scroll etc.
-                # Tkinter usually processes these changes within the same event loop iteration
-                # before Python code continues, but complex interactions can sometimes be tricky.
-                # A canvas.update_idletasks() *before* calling draw might be needed
-                # A canvas.update_idletasks() *before* calling draw might be needed
-                # if canvasx/y still return stale values, but try without first.
-                # canvas.update_idletasks() # POTENTIALLY ADD THIS if direct draw still uses old scroll values
-                self._draw_rom_importer_canvas()
-            # The old after_idle logic:
-            # def check_and_redraw_after_scroll(key_for_debug=key_pressed):
-            #     if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
-            #         return
-            #     current_canvas_after = getattr(self.rom_import_dialog, 'canvas', None)
-            #     if not current_canvas_after or not current_canvas_after.winfo_exists():
-            #         return
-            #     self.rom_import_dialog.after_idle(self._draw_rom_importer_canvas)
-            # canvas.after_idle(check_and_redraw_after_scroll)
+            # If a native scroll was performed, or for Home/End, schedule a debounced redraw
+            if native_scroll_performed or key_pressed in ["Home", "End"]:
+                self.debug(f"[DEBUG] Keypress '{key_pressed}': Scheduling debounced _draw_rom_importer_canvas.")
+                
+                # Use dialog.redraw_timer_id for consistency with <Configure>
+                if not hasattr(dialog, 'redraw_timer_id'): # Should have been init in _create_dialog
+                    dialog.redraw_timer_id = None
 
-        return "break" # Consume the event
+                if dialog.redraw_timer_id is not None:
+                    dialog.after_cancel(dialog.redraw_timer_id)
+                
+                # Perform_debounced_rom_canvas_draw already exists and calls _draw_rom_importer_canvas
+                # It also clears its own timer ID.
+                dialog.redraw_timer_id = dialog.after(30, self._perform_debounced_rom_canvas_draw) # 30ms delay
+        return "break"
 
     def _execute_rom_tile_import(self):
         """Reads selected tile data from ROM and appends to the main tileset, using stored colors and offsets."""
