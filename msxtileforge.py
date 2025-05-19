@@ -13,6 +13,7 @@ import math
 import copy
 import base64
 import io
+from PIL import Image, ImageTk
 
 # --- Constants ---
 TILE_WIDTH = 8
@@ -148,17 +149,21 @@ class TileEditorApp:
         self.debug_enabled = getattr(root, 'app_debug_mode', False)
         
         self.root = root
-        # MODIFIED: Set WM_DELETE_WINDOW protocol here
         self.root.protocol("WM_DELETE_WINDOW", self.confirm_quit)
         
         self.root.title("MSX Tile Forge - Untitled") 
         with suppress(tk.TclError):
             self.root.state("zoomed")
 
-        # ... (rest of your __init__ method remains the same) ...
-        # ... (ensure all other initializations are present) ...
+        # --- ADD BINDING FOR ROOT WINDOW RESIZE ---
+        self.root.bind("<Configure>", self._on_main_window_configure)
+        # This timer will be used by _on_main_window_configure for debouncing
+        self._main_window_configure_timer = None 
+        # --- END ADD BINDING ---
+
 
         self.current_project_base_path = None
+        # ... (rest of your __init__ method remains the same) ...
         self.project_modified = False
 
         self.supertile_grid_width = SUPERTILE_GRID_DIM 
@@ -169,9 +174,12 @@ class TileEditorApp:
             self.active_msx_palette.append(self._rgb7_to_hex(r_pal, g_pal, b_pal))
         self.selected_palette_slot = 0
 
-        self.tile_image_cache = {}
-        self.supertile_image_cache = {}
-        self.map_render_cache = {} 
+        self.tile_image_cache = {}      
+        self.supertile_image_cache = {} 
+        self.map_render_cache = {}      
+
+        self.pil_map_viewport_image = None 
+        self.tk_map_photoimage = None      
 
         self.drag_active = False
         self.drag_item_type = None
@@ -229,6 +237,8 @@ class TileEditorApp:
         self.marked_unused_supertiles = set()
 
         self.rom_import_dialog = None
+        self.map_controls_min_width = 0 
+
 
         self.debug("[DEBUG] TileEditorApp __init__ started.")
 
@@ -250,7 +260,7 @@ class TileEditorApp:
         self.create_palette_editor_widgets(self.tab_palette_editor)
         self.create_tile_editor_widgets(self.tab_tile_editor)
         self.create_supertile_editor_widgets(self.tab_supertile_editor)
-        self.create_map_editor_widgets(self.tab_map_editor)
+        self.create_map_editor_widgets(self.tab_map_editor) # This will now calculate self.map_controls_min_width
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
         self._setup_map_canvas_bindings() 
@@ -1114,192 +1124,109 @@ class TileEditorApp:
         self.supertile_sel_info_label.pack(side=tk.LEFT, anchor=tk.W, padx=(10, 0))
 
     def create_map_editor_widgets(self, parent_frame):
-        # Create the main container frame for this tab
         main_frame = ttk.Frame(parent_frame)
         main_frame.pack(expand=True, fill="both")
 
-        # --- Create Left and Right Columns ---
-        left_frame = ttk.Frame(main_frame)
-        left_frame.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E), padx=(0, 10))
-        right_frame = ttk.Frame(main_frame)
-        right_frame.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.map_paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        self.map_paned_window.pack(expand=True, fill="both", padx=5, pady=5)
 
-        # --- Configure Main Frame Grid Weights ---
-        main_frame.grid_columnconfigure(0, weight=1)
-        main_frame.grid_columnconfigure(1, weight=0)
-        main_frame.grid_rowconfigure(0, weight=1)
+        map_area_frame = ttk.Frame(self.map_paned_window, padding=(0,0,5,0)) 
+        self.map_paned_window.add(map_area_frame, weight=3) 
+        self.map_editor_map_pane_container = map_area_frame 
 
-        # --- Configure Left Frame Contents ---
+        palette_area_frame = ttk.Frame(self.map_paned_window, padding=(5,0,0,0)) 
+        self.map_paned_window.add(palette_area_frame, weight=1) 
+        self.map_editor_palette_pane_container = palette_area_frame
 
-        # Row 0: Map Size and Zoom Controls
-        controls_frame = ttk.Frame(left_frame)
+        map_area_frame.grid_columnconfigure(0, weight=1)
+        map_area_frame.grid_rowconfigure(3, weight=1) 
+        
+        controls_frame = ttk.Frame(map_area_frame)
         controls_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+        # ... (all map controls, map canvas frame, map canvas - no changes here) ...
         size_label = ttk.Label(controls_frame, text="Map Size:")
         size_label.grid(row=0, column=0, padx=(0, 5), pady=2)
-        self.map_size_label = ttk.Label(
-            controls_frame, text=f"{map_width} x {map_height}"
-        )
+        self.map_size_label = ttk.Label(controls_frame, text=f"{map_width} x {map_height}")
         self.map_size_label.grid(row=0, column=1, padx=(0, 10), pady=2)
         zoom_frame = ttk.Frame(controls_frame)
         zoom_frame.grid(row=0, column=2, padx=(10, 0), pady=2)
-        zoom_out_button = ttk.Button(
-            zoom_frame,
-            text="-",
-            width=2,
-            command=lambda: self.change_map_zoom_mult(1 / 1.25),
-        )
+        zoom_out_button = ttk.Button(zoom_frame,text="-",width=2,command=lambda: self.change_map_zoom_mult(1 / 1.25))
         zoom_out_button.pack(side=tk.LEFT)
-        self.map_zoom_label = ttk.Label(
-            zoom_frame, text="100%", width=5, anchor=tk.CENTER
-        )
+        self.map_zoom_label = ttk.Label(zoom_frame, text="100%", width=5, anchor=tk.CENTER)
         self.map_zoom_label.pack(side=tk.LEFT, padx=2)
-        zoom_in_button = ttk.Button(
-            zoom_frame,
-            text="+",
-            width=2,
-            command=lambda: self.change_map_zoom_mult(1.25),
-        )
+        zoom_in_button = ttk.Button(zoom_frame,text="+",width=2,command=lambda: self.change_map_zoom_mult(1.25))
         zoom_in_button.pack(side=tk.LEFT)
-        zoom_reset_button = ttk.Button(
-            zoom_frame, text="Reset", width=5, command=lambda: self.set_map_zoom(1.0)
-        )
+        zoom_reset_button = ttk.Button(zoom_frame, text="Reset", width=5, command=lambda: self.set_map_zoom(1.0))
         zoom_reset_button.pack(side=tk.LEFT, padx=(5, 0))
-        self.map_coords_label = ttk.Label(
-            controls_frame, text="ST Coords: -, -", width=15
-        )
+        self.map_coords_label = ttk.Label(controls_frame, text="ST Coords: -, -", width=15)
         self.map_coords_label.grid(row=0, column=3, padx=(10, 5), sticky="w")
 
-        # Row 1: Window View Toggle and Size Inputs
-        win_controls_frame = ttk.Frame(left_frame)
+        win_controls_frame = ttk.Frame(map_area_frame)
         win_controls_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
-        win_view_check = ttk.Checkbutton(
-            win_controls_frame,
-            text="Show Window View",
-            variable=self.show_window_view,
-            command=self.toggle_window_view,
-        )
+        win_view_check = ttk.Checkbutton(win_controls_frame,text="Show Window View",variable=self.show_window_view,command=self.toggle_window_view)
         win_view_check.grid(row=0, column=0, padx=5, sticky="w")
         win_w_label = ttk.Label(win_controls_frame, text="Width:")
         win_w_label.grid(row=0, column=1, padx=(10, 0))
-        self.win_view_w_entry = ttk.Entry(
-            win_controls_frame, textvariable=self.window_view_tile_w, width=4
-        )
+        self.win_view_w_entry = ttk.Entry(win_controls_frame, textvariable=self.window_view_tile_w, width=4)
         self.win_view_w_entry.grid(row=0, column=2)
         win_h_label = ttk.Label(win_controls_frame, text="Height:")
         win_h_label.grid(row=0, column=3, padx=(5, 0))
-        self.win_view_h_entry = ttk.Entry(
-            win_controls_frame, textvariable=self.window_view_tile_h, width=4
-        )
+        self.win_view_h_entry = ttk.Entry(win_controls_frame, textvariable=self.window_view_tile_h, width=4)
         self.win_view_h_entry.grid(row=0, column=4)
-        win_apply_button = ttk.Button(
-            win_controls_frame,
-            text="Apply Size",
-            command=self.apply_window_size_from_entries,
-        )
+        win_apply_button = ttk.Button(win_controls_frame,text="Apply Size",command=self.apply_window_size_from_entries)
         win_apply_button.grid(row=0, column=5, padx=5)
-        self.win_view_w_entry.bind(
-            "<Return>", lambda e: self.apply_window_size_from_entries()
-        )
-        self.win_view_h_entry.bind(
-            "<Return>", lambda e: self.apply_window_size_from_entries()
-        )
+        self.win_view_w_entry.bind("<Return>", lambda e: self.apply_window_size_from_entries())
+        self.win_view_h_entry.bind("<Return>", lambda e: self.apply_window_size_from_entries())
 
-        # Row 2: Grid Controls
-        grid_controls_frame = ttk.Frame(left_frame)
+        grid_controls_frame = ttk.Frame(map_area_frame)
         grid_controls_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
-        st_grid_check = ttk.Checkbutton(
-            grid_controls_frame,
-            text="Show Supertile Grid (Press 'G' to Cycle Colors)",
-            variable=self.show_supertile_grid,
-            command=self.toggle_supertile_grid,
-        )
+        st_grid_check = ttk.Checkbutton(grid_controls_frame,text="Show Supertile Grid (Press 'G' to Cycle Colors)",variable=self.show_supertile_grid,command=self.toggle_supertile_grid)
         st_grid_check.grid(row=0, column=0, padx=5, sticky="w")
 
-        # Row 3: Map Canvas Frame
-        map_canvas_frame = ttk.LabelFrame(left_frame, text="Map")
+        map_canvas_frame = ttk.LabelFrame(map_area_frame, text="Map")
         map_canvas_frame.grid(row=3, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
-
-        # --- Configure Left Frame Grid Weights ---
-        left_frame.grid_rowconfigure(0, weight=0)
-        left_frame.grid_rowconfigure(1, weight=0)
-        left_frame.grid_rowconfigure(2, weight=0)
-        left_frame.grid_rowconfigure(3, weight=1)
-        left_frame.grid_columnconfigure(0, weight=1)
-
-        # --- Create Map Canvas and Scrollbars ---
+        map_canvas_frame.grid_rowconfigure(0, weight=1)
+        map_canvas_frame.grid_columnconfigure(0, weight=1)
         self.map_hbar = ttk.Scrollbar(map_canvas_frame, orient=tk.HORIZONTAL)
         self.map_vbar = ttk.Scrollbar(map_canvas_frame, orient=tk.VERTICAL)
-        self.map_canvas = tk.Canvas(
-            map_canvas_frame,
-            bg="black", # Keep black background for map itself
-            xscrollcommand=self.map_hbar.set,
-            yscrollcommand=self.map_vbar.set,
-        )
+        self.map_canvas = tk.Canvas(map_canvas_frame,bg="black", xscrollcommand=self.map_hbar.set,yscrollcommand=self.map_vbar.set)
         self.map_hbar.config(command=self.map_canvas.xview)
         self.map_vbar.config(command=self.map_canvas.yview)
         self.map_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         self.map_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.map_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        
+        palette_area_frame.grid_rowconfigure(0, weight=1)
+        palette_area_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Configure Map Canvas Frame Grid Weights ---
-        map_canvas_frame.grid_rowconfigure(0, weight=1)
-        map_canvas_frame.grid_columnconfigure(0, weight=1)
-        map_canvas_frame.grid_rowconfigure(1, weight=0) # Scrollbar
-        map_canvas_frame.grid_columnconfigure(1, weight=0) # Scrollbar
+        st_selector_frame = ttk.LabelFrame(palette_area_frame, text="Supertile Palette (Click to select for map)")
+        st_selector_frame.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E), pady=(0,5))
+        st_selector_frame.grid_rowconfigure(0, weight=1)
+        st_selector_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Configure Right Frame Contents ---
-        st_selector_frame = ttk.LabelFrame(
-            right_frame, text="Supertile Palette (Click to select for map)"
-        )
-        st_selector_frame.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E)) # Allow it to use available space
-        right_frame.grid_rowconfigure(0, weight=1) # Allow selector frame to expand vertically
-        right_frame.grid_rowconfigure(1, weight=0) # Label below
-        right_frame.grid_columnconfigure(0, weight=1) # Allow selector frame to expand horizontally (though its content aims for 256px)
+        padding = 1 
+        min_one_supertile_preview_width = (self.supertile_grid_width * TILE_WIDTH) + (2 * padding)
+        min_one_supertile_preview_width = max(32, min_one_supertile_preview_width) 
 
-        # Supertile Palette Canvas Setup (Map Tab)
-        # Scrollregion will be set dynamically in draw_supertile_selector
-        target_selector_width_map = 256 # Matches the desired target layout width
-        self.map_supertile_selector_canvas = tk.Canvas(
-            st_selector_frame,
-            bg="lightgrey", # Background for the selector grid
-            scrollregion=(0, 0, 1, 1), # Placeholder, will be updated
-            width=target_selector_width_map # Request this width
-        )
+        self.map_supertile_selector_canvas = tk.Canvas(st_selector_frame,bg="lightgrey", scrollregion=(0, 0, 1, 1), width=min_one_supertile_preview_width)
         map_st_sel_hbar = ttk.Scrollbar(st_selector_frame, orient=tk.HORIZONTAL)
         map_st_sel_vbar = ttk.Scrollbar(st_selector_frame, orient=tk.VERTICAL)
-        self.map_supertile_selector_canvas.config(
-             xscrollcommand=map_st_sel_hbar.set,
-             yscrollcommand=map_st_sel_vbar.set
-        )
+        self.map_supertile_selector_canvas.config(xscrollcommand=map_st_sel_hbar.set, yscrollcommand=map_st_sel_vbar.set)
         map_st_sel_hbar.config(command=self.map_supertile_selector_canvas.xview)
         map_st_sel_vbar.config(command=self.map_supertile_selector_canvas.yview)
-
-        self.map_supertile_selector_canvas.grid(
-            row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E)
-        )
+        self.map_supertile_selector_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         map_st_sel_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         map_st_sel_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
 
-        st_selector_frame.grid_rowconfigure(0, weight=1) # Canvas takes most space
-        st_selector_frame.grid_columnconfigure(0, weight=1) # Canvas takes most space
-        st_selector_frame.grid_rowconfigure(1, weight=0) # Scrollbar
-        st_selector_frame.grid_columnconfigure(1, weight=0) # Scrollbar
+        self.map_supertile_select_label = ttk.Label(palette_area_frame, text=f"Selected Supertile for Painting: {selected_supertile_for_map}")
+        self.map_supertile_select_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 0))
 
-        self.map_supertile_selector_canvas.bind(
-            "<Button-1>", self.handle_map_supertile_selector_click
-        )
-        self.map_supertile_selector_canvas.bind(
-            "<B1-Motion>", self.handle_viewer_drag_motion
-        )
-        self.map_supertile_selector_canvas.bind(
-            "<ButtonRelease-1>", self.handle_viewer_drag_release
-        )
-
-        self.map_supertile_select_label = ttk.Label(
-            right_frame,
-            text=f"Selected Supertile for Painting: {selected_supertile_for_map}",
-        )
-        self.map_supertile_select_label.grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
+        self.map_supertile_selector_canvas.bind("<Button-1>", self.handle_map_supertile_selector_click)
+        self.map_supertile_selector_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
+        self.map_supertile_selector_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
+        
+        self.map_editor_palette_pane_container.bind("<Configure>", self._on_palette_pane_configure_for_redraw_only)
+        self.map_paned_window.bind("<ButtonRelease-1>", self._enforce_palette_min_width_on_release)
 
     # --- Use this as the SINGLE definition for setting up bindings ---
     def _setup_map_canvas_bindings(self):
@@ -1760,39 +1687,44 @@ class TileEditorApp:
         try:
             if not canvas.winfo_exists():
                 return
-            canvas.delete("all")
+            canvas.delete("all") # Clear previous items
             
-            # Item (preview) pixel dimensions are now the *actual* pixel dimensions of the supertile
             item_pixel_w = self.supertile_grid_width * TILE_WIDTH
             item_pixel_h = self.supertile_grid_height * TILE_HEIGHT
             padding = 1 
 
             if item_pixel_w <= 0 or item_pixel_h <= 0:
+                self.debug(f"[DEBUG] draw_supertile_selector: Invalid item_pixel_w/h ({item_pixel_w}x{item_pixel_h}). Aborting.")
                 return
 
-            target_layout_width = 256
             actual_canvas_width = canvas.winfo_width()
             if actual_canvas_width <= 1: 
-                 canvas.after(50, lambda: self.draw_supertile_selector(canvas, highlighted_supertile_index))
+                 # Canvas not yet sized, reschedule.
+                 # Ensure we don't get into an infinite after loop if it never gets size.
+                 # Add a counter or a flag if this becomes an issue.
+                 canvas.after(100, lambda: self.draw_supertile_selector(canvas, highlighted_supertile_index))
                  return
-
-            effective_layout_width = min(target_layout_width, actual_canvas_width)
             
-            items_across = 0
-            for p_o_2 in [32, 16, 8, 4, 2, 1]: # Check powers of 2
-                if p_o_2 == 0: continue
-                required_width_for_po2 = (p_o_2 * item_pixel_w) + ((p_o_2 + 1) * padding)
-                if required_width_for_po2 <= effective_layout_width:
-                    items_across = p_o_2
-                    break
-            
-            if items_across == 0: 
-                if item_pixel_w + 2 * padding <= effective_layout_width: items_across = 1
-                elif item_pixel_w <= effective_layout_width: items_across = 1
-                else: items_across = 1 
-            items_across = max(1, items_across)
+            self.debug(f"[DEBUG] draw_supertile_selector: Actual Canvas Width: {actual_canvas_width}, Item Pixel W: {item_pixel_w}")
 
-            num_logical_rows = math.ceil(num_supertiles / items_across) if items_across > 0 else 0
+            # Calculate how many items can fit, ensuring at least one if possible.
+            if item_pixel_w + 2 * padding > actual_canvas_width : # Not even one fits with padding on both sides
+                items_across = 0 # Or 1 if you want to force one and let it clip/be tiny
+                if item_pixel_w <= actual_canvas_width : # Fits without padding
+                    items_across = 1
+                # else: it's wider than canvas, items_across remains 0 (or handle as error/special case)
+            else:
+                # Calculate max integer number of items that can fit
+                items_across = (actual_canvas_width - padding) // (item_pixel_w + padding)
+            
+            items_across = max(1, items_across) # Ensure at least 1 item is planned if possible, even if it overflows slightly
+                                                # or if the canvas is very narrow. If item_pixel_w itself is > canvas_width,
+                                                # it will still draw 1 item that will be clipped by the canvas viewport.
+
+            self.debug(f"[DEBUG] draw_supertile_selector: Calculated items_across: {items_across}")
+
+            num_logical_rows = math.ceil(num_supertiles / items_across) if items_across > 0 else num_supertiles
+            # Scrollregion width should be based on the calculated items_across to fit them snugly
             scroll_content_width = (items_across * item_pixel_w) + ((items_across + 1) * padding)
             scroll_content_height = (num_logical_rows * item_pixel_h) + ((num_logical_rows + 1) * padding)
             scroll_content_width = max(1.0, float(scroll_content_width))
@@ -1808,12 +1740,22 @@ class TileEditorApp:
             if current_scroll_val_str != str_scroll :
                 try:
                     canvas.config(scrollregion=(0, 0, scroll_content_width, scroll_content_height))
-                except tk.TclError: return
+                    self.debug(f"[DEBUG] draw_supertile_selector: Scrollregion set to: {scroll_content_width}x{scroll_content_height}")
+                except tk.TclError: self.debug("[DEBUG] draw_supertile_selector: TclError setting scrollregion."); return
 
+            # Optimized drawing for visible rows (same as before)
             view_y1 = canvas.canvasy(0)
             view_y2 = canvas.canvasy(canvas.winfo_height())
+            # For a vertically scrolling list, start_draw_col is always 0, end_draw_col is items_across
             start_draw_row = max(0, int(view_y1 // (item_pixel_h + padding)))
             end_draw_row = min(num_logical_rows, int(math.ceil(view_y2 / (item_pixel_h + padding))))
+            # Ensure at least one row is attempted if there's content, and end_draw_row covers partials
+            if num_logical_rows > 0 and end_draw_row == start_draw_row and view_y2 > view_y1:
+                 end_draw_row = max(end_draw_row, start_draw_row +1) # Ensure at least one iteration if content exists and view is valid
+            end_draw_row = min(num_logical_rows, end_draw_row) # Clamp to actual rows
+
+            self.debug(f"[DEBUG] draw_supertile_selector: Drawing rows {start_draw_row} to {end_draw_row-1}")
+
 
             for r_grid in range(start_draw_row, end_draw_row):
                 for c_grid in range(items_across):
@@ -1823,7 +1765,6 @@ class TileEditorApp:
                     base_x = (c_grid * (item_pixel_w + padding)) + padding
                     base_y = (r_grid * (item_pixel_h + padding)) + padding
 
-                    # Call create_supertile_image with actual target width and height
                     img = self.create_supertile_image(st_idx, item_pixel_w, item_pixel_h) 
                     
                     if not canvas.winfo_exists(): return
@@ -1831,24 +1772,23 @@ class TileEditorApp:
                         base_x, base_y, image=img, anchor=tk.NW, tags=(f"st_img_{st_idx}", "st_image")
                     )
 
-                    outline_color = "grey"
-                    outline_width = 1
+                    outline_color = "grey"; outline_width = 1
                     if st_idx == dragged_supertile_index: outline_color = "yellow"; outline_width = 3
                     elif st_idx == highlighted_supertile_index: outline_color = "red"; outline_width = 2
                     elif st_idx in self.marked_unused_supertiles: outline_color = "blue"; outline_width = 3
                     
                     bx1 = base_x - (padding / 2 if padding > 0 else 0.5) 
                     by1 = base_y - (padding / 2 if padding > 0 else 0.5)
-                    bx2 = base_x + item_pixel_w + (padding / 2 if padding > 0 else 0.5) # Use item_pixel_w for border
-                    by2 = base_y + item_pixel_h + (padding / 2 if padding > 0 else 0.5) # Use item_pixel_h for border
+                    bx2 = base_x + item_pixel_w + (padding / 2 if padding > 0 else 0.5)
+                    by2 = base_y + item_pixel_h + (padding / 2 if padding > 0 else 0.5)
                     
                     if not canvas.winfo_exists(): return
                     canvas.create_rectangle(
                         bx1, by1, bx2, by2, outline=outline_color, width=outline_width, tags=f"st_border_{st_idx}"
                     )
-                if st_idx >= num_supertiles -1 : break
-        except tk.TclError: pass
-        except Exception as e: print(f"Unexpected error during draw_supertile_selector: {e}")
+                if st_idx >= num_supertiles -1 : break # Break outer loop if all STs processed
+        except tk.TclError as e: self.debug(f"[DEBUG] TclError in draw_supertile_selector: {e}")
+        except Exception as e: self.debug(f"[DEBUG] Unexpected error in draw_supertile_selector: {e}")
 
     def update_supertile_info_labels(self):
         self.supertile_def_info_label.config(
@@ -1863,117 +1803,193 @@ class TileEditorApp:
         canvas = self.map_canvas
         if not canvas.winfo_exists():
             return
-        canvas.delete("all")
+        
+        # Delete old canvas items first (specifically map content, not overlays yet)
+        # The main image will be tagged "map_render_image", selection and grids are separate.
+        canvas.delete("map_render_image") # Delete only the main rendered image for now
+
+        self.debug(f"[DEBUG] draw_map_canvas: Start. Zoom: {self.map_zoom_level:.2f}")
 
         # --- 1. Calculate Sizes ---
         zoomed_tile_size = self.get_zoomed_tile_size() 
-        if zoomed_tile_size <= 0: return
+        if zoomed_tile_size <= 0: 
+            self.debug("[DEBUG] draw_map_canvas: zoomed_tile_size <= 0. Aborting.")
+            return
 
-        # Supertile dimensions in current zoom (pixels)
-        # Uses self.supertile_grid_width/height from project settings
         zoomed_supertile_pixel_width, zoomed_supertile_pixel_height = self._get_zoomed_supertile_pixel_dims()
-        if zoomed_supertile_pixel_width <= 0 or zoomed_supertile_pixel_height <= 0: return
-
-        # --- 2. Update Scroll Region ---
-        map_pixel_width_total = map_width * zoomed_supertile_pixel_width
-        map_pixel_height_total = map_height * zoomed_supertile_pixel_height
+        if zoomed_supertile_pixel_width <= 0 or zoomed_supertile_pixel_height <= 0:
+            self.debug("[DEBUG] draw_map_canvas: zoomed_supertile_pixel_width/height <= 0. Aborting.")
+            return
         
-        safe_scroll_width = max(1.0, float(map_pixel_width_total))
-        safe_scroll_height = max(1.0, float(map_pixel_height_total))
-        str_scroll = f"0 0 {safe_scroll_width} {safe_scroll_height}"
-        current_scroll = ""
-        try:
-            current_scroll_val = canvas.cget("scrollregion")
-            if isinstance(current_scroll_val, tuple):
-                current_scroll = " ".join(map(str, current_scroll_val))
-            else:
-                current_scroll = str(current_scroll_val)
-        except tk.TclError: pass
+        self.debug(f"[DEBUG] draw_map_canvas: Zoomed ST dims (WxH): {zoomed_supertile_pixel_width}x{zoomed_supertile_pixel_height}")
 
-        if current_scroll != str_scroll:
+
+        # --- 2. Update Scroll Region (based on total map content size at current zoom) ---
+        map_content_pixel_width_total = map_width * zoomed_supertile_pixel_width
+        map_content_pixel_height_total = map_height * zoomed_supertile_pixel_height
+        
+        safe_scroll_width = max(1.0, float(map_content_pixel_width_total))
+        safe_scroll_height = max(1.0, float(map_content_pixel_height_total))
+        
+        # Only update scrollregion if it actually changed to avoid unnecessary internal Tk processing
+        current_scroll_region_str = ""
+        try:
+            sr = canvas.cget("scrollregion")
+            if sr and isinstance(sr, str) and len(sr.split()) == 4: # Basic check for valid format
+                current_scroll_region_str = sr
+        except tk.TclError: pass # Canvas might not be fully ready on first call
+
+        new_scroll_region_str = f"0 0 {safe_scroll_width} {safe_scroll_height}"
+        if current_scroll_region_str != new_scroll_region_str:
             try:
                 canvas.config(scrollregion=(0, 0, safe_scroll_width, safe_scroll_height))
-            except tk.TclError: pass
+                self.debug(f"[DEBUG] draw_map_canvas: Scrollregion set to {new_scroll_region_str}")
+            except tk.TclError: 
+                self.debug("[DEBUG] draw_map_canvas: TclError setting scrollregion.")
+                return # Cannot proceed if scrollregion fails
         
-        # --- 3. Draw Supertile Images ---
-        # Determine visible supertile range for optimized drawing
-        view_x1_map_draw = canvas.canvasx(0)
-        view_y1_map_draw = canvas.canvasy(0)
-        view_x2_map_draw = canvas.canvasx(canvas.winfo_width())
-        view_y2_map_draw = canvas.canvasy(canvas.winfo_height())
+        # --- 3. Get Viewport Info ---
+        canvas_viewport_width = canvas.winfo_width()
+        canvas_viewport_height = canvas.winfo_height()
 
-        start_col_map_draw = max(0, int(view_x1_map_draw // zoomed_supertile_pixel_width))
-        start_row_map_draw = max(0, int(view_y1_map_draw // zoomed_supertile_pixel_height))
-        end_col_map_draw = min(map_width, int(math.ceil(view_x2_map_draw / zoomed_supertile_pixel_width)))
-        end_row_map_draw = min(map_height, int(math.ceil(view_y2_map_draw / zoomed_supertile_pixel_height)))
+        if canvas_viewport_width <= 0 or canvas_viewport_height <= 0:
+            self.debug("[DEBUG] draw_map_canvas: Viewport width/height <= 0. Aborting.")
+            return
+
+        view_content_x1 = canvas.canvasx(0) # Top-left X of visible part of content
+        view_content_y1 = canvas.canvasy(0) # Top-left Y of visible part of content
+        self.debug(f"[DEBUG] draw_map_canvas: Viewport WxH: {canvas_viewport_width}x{canvas_viewport_height}, Content scroll: ({view_content_x1:.1f}, {view_content_y1:.1f})")
 
 
-        for r_map in range(start_row_map_draw, end_row_map_draw):
-            for c_map in range(start_col_map_draw, end_col_map_draw):
+        # --- 4. Create/Resize Pillow Viewport Image Buffer ---
+        # self.pil_map_viewport_image stores the Pillow Image
+        # self.tk_map_photoimage stores the Tk PhotoImage for display (and keeps a reference)
+        if self.pil_map_viewport_image is None or \
+           self.pil_map_viewport_image.width != canvas_viewport_width or \
+           self.pil_map_viewport_image.height != canvas_viewport_height:
+            try:
+                self.pil_map_viewport_image = Image.new('RGB', 
+                                                        (max(1,canvas_viewport_width), max(1,canvas_viewport_height)), 
+                                                        canvas.cget("bg")) # Fill with canvas BG
+                self.debug(f"[DEBUG] draw_map_canvas: Created/Resized self.pil_map_viewport_image to {canvas_viewport_width}x{canvas_viewport_height}")
+            except ValueError as e_pil_new:
+                self.debug(f"[DEBUG] draw_map_canvas: Error creating pil_map_viewport_image: {e_pil_new}")
+                return
+        else:
+            # Fill existing image with background color
+            try:
+                self.pil_map_viewport_image.paste(canvas.cget("bg"), (0,0,canvas_viewport_width,canvas_viewport_height) )
+            except Exception as e_fill: # Catch potential errors if canvas.cget("bg") is not a valid color for paste
+                self.debug(f"[DEBUG] draw_map_canvas: Error filling pil_map_viewport_image: {e_fill}. Filling with black.")
+                self.pil_map_viewport_image.paste("black", (0,0,canvas_viewport_width,canvas_viewport_height) )
+
+
+        # --- 5. Determine Visible Supertile Range & Composite onto Pillow Viewport Image ---
+        start_st_col = max(0, int(view_content_x1 // zoomed_supertile_pixel_width))
+        start_st_row = max(0, int(view_content_y1 // zoomed_supertile_pixel_height))
+        
+        # End column/row (exclusive) needed to cover the viewport
+        end_st_col = min(map_width, int(math.ceil((view_content_x1 + canvas_viewport_width) / zoomed_supertile_pixel_width)))
+        end_st_row = min(map_height, int(math.ceil((view_content_y1 + canvas_viewport_height) / zoomed_supertile_pixel_height)))
+        
+        self.debug(f"[DEBUG] draw_map_canvas: Visible STs - Cols: {start_st_col}-{end_st_col-1}, Rows: {start_st_row}-{end_st_row-1}")
+
+        rendered_st_count = 0
+        for r_map in range(start_st_row, end_st_row):
+            for c_map in range(start_st_col, end_st_col):
+                if not (0 <= r_map < map_height and 0 <= c_map < map_width): # Should be redundant due to loop bounds
+                    continue
+                
                 try:
                     supertile_idx = map_data[r_map][c_map]
-                    base_x = c_map * zoomed_supertile_pixel_width
-                    base_y = r_map * zoomed_supertile_pixel_height
                     
-                    img = self.create_map_render_of_supertile(
-                        supertile_idx, int(zoomed_supertile_pixel_width), int(zoomed_supertile_pixel_height)
+                    # Get the scaled Pillow Image for this supertile
+                    pil_supertile_render = self.create_map_render_of_supertile(
+                        supertile_idx, 
+                        round(zoomed_supertile_pixel_width), # Pass rounded int sizes
+                        round(zoomed_supertile_pixel_height)
                     )
-                    
-                    item_id = canvas.create_image(
-                        base_x, base_y, image=img, anchor=tk.NW, tags=("map_supertile_image", f"map_cell_{r_map}_{c_map}")
-                    )
-                except IndexError:
-                    pass
-                except Exception as e:
-                    pass
 
-        # --- 4. Draw Supertile Grid (if enabled) ---
+                    if pil_supertile_render:
+                        # Calculate paste position on the pil_map_viewport_image
+                        # Target X,Y on the viewport image is the ST's content position MINUS the scroll offset
+                        content_st_x = c_map * zoomed_supertile_pixel_width
+                        content_st_y = r_map * zoomed_supertile_pixel_height
+                        
+                        paste_x_on_viewport_img = round(content_st_x - view_content_x1)
+                        paste_y_on_viewport_img = round(content_st_y - view_content_y1)
+                        
+                        # Paste (Pillow handles clipping if ST partially outside viewport bounds for paste)
+                        self.pil_map_viewport_image.paste(pil_supertile_render, (paste_x_on_viewport_img, paste_y_on_viewport_img))
+                        rendered_st_count +=1
+                except IndexError:
+                    self.debug(f"[DEBUG] draw_map_canvas: IndexError for map_data[{r_map}][{c_map}]")
+                except Exception as e_render_st:
+                    self.debug(f"[DEBUG] draw_map_canvas: Error rendering/pasting ST ({r_map},{c_map}): {e_render_st}")
+        
+        self.debug(f"[DEBUG] draw_map_canvas: Rendered {rendered_st_count} supertiles onto Pillow viewport image.")
+
+        # --- 6. Convert Pillow Viewport Image to Tk PhotoImage and Display ---
+        try:
+            self.tk_map_photoimage = ImageTk.PhotoImage(self.pil_map_viewport_image)
+        except Exception as e_photoimg:
+            self.debug(f"[DEBUG] draw_map_canvas: Error converting PIL to Tk PhotoImage: {e_photoimg}")
+            return
+
+        # Place the single viewport image onto the canvas at the current scroll position
+        # This ensures it aligns with other canvas items drawn using content coordinates.
+        try:
+            if canvas.winfo_exists():
+                canvas.create_image(view_content_x1, view_content_y1, 
+                                    image=self.tk_map_photoimage, 
+                                    anchor=tk.NW, 
+                                    tags=("map_render_image", "all_map_content")) # New specific tag
+        except tk.TclError as e_create_img:
+            self.debug(f"[DEBUG] draw_map_canvas: TclError creating canvas image: {e_create_img}")
+
+
+        # --- 7. Re-draw Overlays (Grid, Selection, Window View, Paste Preview) ---
+        # These are drawn directly on the canvas, on top of the "map_render_image".
+        # They need to be deleted and redrawn if their appearance depends on zoom or position.
+        
+        canvas.delete("supertile_grid") # Delete old grid lines
         if self.show_supertile_grid.get():
             grid_color = GRID_COLOR_CYCLE[self.grid_color_index]
-            
-            # Vertical lines: Iterate through columns that *could* have a line
-            # Draw lines from 0 to map_pixel_height_total (map content boundary)
-            # Tkinter canvas will clip lines that are partially or fully outside the visible area.
-            for c_grid in range(map_width + 1): # Iterate all possible lines for the map width
+            # Draw vertical lines
+            for c_grid in range(map_width + 1):
                 x_line = c_grid * zoomed_supertile_pixel_width
-                # Only draw if the line itself is within the current view for minor optimization
-                if x_line >= view_x1_map_draw and x_line <= view_x2_map_draw:
-                     canvas.create_line(x_line, 0, x_line, map_pixel_height_total, 
+                if x_line >= view_content_x1 and x_line <= view_content_x1 + canvas_viewport_width + zoomed_supertile_pixel_width : # Optimization for visibility
+                     canvas.create_line(x_line, 0, x_line, map_content_pixel_height_total, 
                                         fill=grid_color, dash=GRID_DASH_PATTERN, tags="supertile_grid")
-                # Optimization: if x_line is already past the view, no need to check further c_grid for this specific view
-                # However, this optimization is complex if scroll changes rapidly. Simpler to let Tkinter clip.
-                # For small maps smaller than canvas, the loop range itself (map_width+1) limits lines.
-
-            # Horizontal lines: Iterate through rows that *could* have a line
-            # Draw lines from 0 to map_pixel_width_total (map content boundary)
-            for r_grid in range(map_height + 1): # Iterate all possible lines for the map height
+            # Draw horizontal lines
+            for r_grid in range(map_height + 1):
                 y_line = r_grid * zoomed_supertile_pixel_height
-                if y_line >= view_y1_map_draw and y_line <= view_y2_map_draw:
-                    canvas.create_line(0, y_line, map_pixel_width_total, y_line,
+                if y_line >= view_content_y1 and y_line <= view_content_y1 + canvas_viewport_height + zoomed_supertile_pixel_height: # Optimization
+                    canvas.create_line(0, y_line, map_content_pixel_width_total, y_line,
                                        fill=grid_color, dash=GRID_DASH_PATTERN, tags="supertile_grid")
+            if canvas.find_withtag("map_render_image"): # Ensure grid is above map image if both exist
+                canvas.tag_raise("supertile_grid", "map_render_image")
 
-        # --- 5. Draw FINAL Selection Rectangle ---
-        self._draw_selection_rectangle()
 
-        # --- 6. Draw Window View Overlay (if enabled) ---
+        self._draw_selection_rectangle() # This deletes old and draws new selection_rect_id
+
+        canvas.delete("window_view_item") # Delete all old window view components
         if self.show_window_view.get():
-            grid_color_win = GRID_COLOR_CYCLE[self.grid_color_index] 
-            win_tx = self.window_view_tile_x 
-            win_ty = self.window_view_tile_y
-            win_tw = self.window_view_tile_w.get() 
-            win_th = self.window_view_tile_h.get() 
-
-            win_px_start = win_tx * zoomed_tile_size
-            win_py_start = win_ty * zoomed_tile_size
-            win_pixel_width_total = win_tw * zoomed_tile_size
-            win_pixel_height_total = win_th * zoomed_tile_size
+            # ... (Window View drawing logic - largely same, ensure coordinates are content coords) ...
+            # (Make sure it uses zoomed_tile_size, window_view_tile_x/y/w/h for its calculations)
+            # Example for main rectangle:
+            win_px_start = self.window_view_tile_x * zoomed_tile_size
+            win_py_start = self.window_view_tile_y * zoomed_tile_size
+            win_pixel_width_total = self.window_view_tile_w.get() * zoomed_tile_size
+            win_pixel_height_total = self.window_view_tile_h.get() * zoomed_tile_size
+            win_color = GRID_COLOR_CYCLE[self.grid_color_index] # Or a dedicated window view color
 
             canvas.create_rectangle(win_px_start, win_py_start, 
                                     win_px_start + win_pixel_width_total, 
                                     win_py_start + win_pixel_height_total, 
-                                    outline=grid_color_win, width=2, tags=("window_view_rect", "window_view_item"))
-            
-            if win_th == MAX_WIN_VIEW_HEIGHT_TILES: 
+                                    outline=win_color, width=2, tags=("window_view_rect", "window_view_item"))
+            # ... (half-row shading and handles drawing, using content coordinates)
+            if self.window_view_tile_h.get() == MAX_WIN_VIEW_HEIGHT_TILES: 
                 half_tile_h_px_zoomed = zoomed_tile_size / 2
                 dark_y1 = win_py_start + win_pixel_height_total - half_tile_h_px_zoomed
                 dark_y2 = win_py_start + win_pixel_height_total
@@ -1981,13 +1997,13 @@ class TileEditorApp:
                                         win_px_start + win_pixel_width_total, dark_y2, 
                                         fill="gray50", stipple="gray50", outline="", tags=("window_view_overscan", "window_view_item"))
             
-            handle_size = WIN_VIEW_HANDLE_SIZE
-            hs2 = handle_size // 2
-            handle_fill = grid_color_win
-            handle_outline = "black" if grid_color_win != "#000000" else "white"
+            handle_size = WIN_VIEW_HANDLE_SIZE; hs2 = handle_size // 2
+            handle_fill = win_color
+            handle_outline = "black" if win_color != "#000000" else "white"
             handles_coords = { 
                 "nw": (win_px_start, win_py_start), 
                 "n": (win_px_start + win_pixel_width_total / 2, win_py_start), 
+                # ... all 8 handles ...
                 "ne": (win_px_start + win_pixel_width_total, win_py_start),
                 "w": (win_px_start, win_py_start + win_pixel_height_total / 2),
                 "e": (win_px_start + win_pixel_width_total, win_py_start + win_pixel_height_total / 2),
@@ -1999,30 +2015,29 @@ class TileEditorApp:
                 x1h, y1h, x2h, y2h = cx_handle - hs2, cy_handle - hs2, cx_handle + hs2, cy_handle + hs2
                 canvas.create_rectangle(x1h, y1h, x2h, y2h, fill=handle_fill, outline=handle_outline, width=1, tags=("window_view_handle", f"handle_{tag_handle}", "window_view_item"))
 
-        # --- 7. Draw Paste Preview Rectangle ---
-        self._clear_paste_preview_rect() 
-        if self.map_clipboard_data:
-            is_map_tab_active = False
-            if self.notebook and self.notebook.winfo_exists():
-                try:
-                    if self.notebook.index(self.notebook.select()) == 3: # Map editor index
-                        is_map_tab_active = True
-                except tk.TclError: pass
+            if canvas.find_withtag("map_render_image"): # Ensure window view is on top
+                canvas.tag_raise("window_view_item", "map_render_image")
+            if canvas.find_withtag("selection_rect"):
+                canvas.tag_raise("window_view_item", "selection_rect") # Window view on top of selection
+            if canvas.find_withtag("supertile_grid"):
+                 canvas.tag_raise("window_view_item", "supertile_grid")
 
-            if is_map_tab_active:
-                try:
-                    pointer_x_widget = canvas.winfo_pointerx() - canvas.winfo_rootx()
-                    pointer_y_widget = canvas.winfo_pointery() - canvas.winfo_rooty()
-                    if (0 <= pointer_x_widget < canvas.winfo_width() and
-                        0 <= pointer_y_widget < canvas.winfo_height()):
-                        canvas_x_content = canvas.canvasx(pointer_x_widget)
-                        canvas_y_content = canvas.canvasy(pointer_y_widget)
-                        self._draw_paste_preview_rect(canvas_coords=(canvas_x_content, canvas_y_content))
-                except Exception: pass 
+
+        # Paste preview should be drawn last if active
+        # It deletes and redraws itself based on mouse position, handled by _update_map_cursor_and_coords
+        # but we might need to trigger its redraw if it was previously cleared by canvas.delete("all")
+        # This part is tricky - better to let its own handler manage it.
+        # For now, ensure it's on top if it exists.
+        if self.map_paste_preview_rect_id:
+            canvas.tag_raise(self.map_paste_preview_rect_id)
+
 
         # --- 8. Update Zoom Label ---
         if hasattr(self, 'map_zoom_label') and self.map_zoom_label.winfo_exists():
             self.map_zoom_label.config(text=f"{int(self.map_zoom_level * 100)}%")
+        
+        # canvas.update_idletasks() # Already called by the invoking function if needed (e.g. scroll/keypress handlers)
+        self.debug("[DEBUG] draw_map_canvas: End.")
 
     def update_map_info_labels(self):
         self.map_size_label.config(text=f"{map_width} x {map_height}")
@@ -2873,110 +2888,40 @@ class TileEditorApp:
 
     # --- Map Zoom Handlers ---
     def handle_map_zoom_scroll(self, event):
+        # Handles Ctrl+MouseWheel zooming, centered on cursor, with dynamic factor.
         canvas = self.map_canvas
+        current_zoom = self.map_zoom_level # Get current zoom level
+
+        # Determine dynamic zoom factor based on current_zoom
         factor = 0.0
-        if event.num == 4 or event.delta > 0: # Zoom In
-            factor = 1.1
-        elif event.num == 5 or event.delta < 0: # Zoom Out
-            factor = 1 / 1.1
-        else:
-            return
+        zoom_direction_in = (event.num == 4 or event.delta > 0) # True if zooming in
 
-        # --- Step 1: Get map coordinates under cursor BEFORE zoom ---
-        # These are in the map's content coordinate system at the current zoom
-        map_x_under_cursor_before_zoom = canvas.canvasx(event.x)
-        map_y_under_cursor_before_zoom = canvas.canvasy(event.y)
-
-        current_zoom_before = self.map_zoom_level # Store old zoom level
-
-        # --- Step 2: Update zoom level (delegated) ---
-        # zoom_map_at_point will set self.map_zoom_level and call draw_map_canvas,
-        # which updates the scrollregion and redraws content.
-        # The previous scroll adjustment logic within zoom_map_at_point was complex
-        # and is now simplified. We will apply the scroll adjustment here.
+        if current_zoom < 0.25: # Zoomed out
+            factor = 1.75 if zoom_direction_in else 1 / 1.75
+        elif current_zoom < 0.75: # Zoomed out
+            factor = 1.5 if zoom_direction_in else 1 / 1.5
+        elif current_zoom < 1.5:  # Near 100%
+            factor = 1.25 if zoom_direction_in else 1 / 1.25
+        elif current_zoom < 3.0:  # Zoomed in
+            factor = 1.15 if zoom_direction_in else 1 / 1.15
+        else: # Very zoomed in
+            factor = 1.1 if zoom_direction_in else 1 / 1.1
         
-        # Call a variant or directly update zoom level and then redraw.
-        # For simplicity, let's assume zoom_map_at_point now primarily sets self.map_zoom_level
-        # and calls draw_map_canvas. The point-fixing scroll is done here.
+        if factor == 0.0: # Should not happen with the logic above, but as a safe guard
+             self.debug("[DEBUG] handle_map_zoom_scroll: Factor is 0, aborting zoom.")
+             return
 
-        min_zoom, max_zoom = 0.1, 6.0
-        new_zoom_level = max(min_zoom, min(max_zoom, current_zoom_before * factor))
+        self.debug(f"[DEBUG] handle_map_zoom_scroll: Current zoom={current_zoom:.3f}, DirectionIn={zoom_direction_in}, Calculated factor={factor:.3f}")
 
-        if abs(new_zoom_level - current_zoom_before) < 1e-9:
-            return # No significant zoom change
+        # Get mouse position relative to canvas content (scrolled coords)
+        # These are the content coordinates of the point to keep fixed.
+        zoom_x_canvas_content = canvas.canvasx(event.x)
+        zoom_y_canvas_content = canvas.canvasy(event.y)
 
-        self.map_zoom_level = new_zoom_level # Update the zoom level
-
-        # --- Step 3: Redraw map with new zoom (updates scrollregion) ---
-        # This is important so that subsequent calculations of total map dimensions are correct.
-        self.draw_map_canvas() 
-        # self.draw_minimap() will be called at the end
-
-        # --- Step 4: Calculate new scroll position to keep point under cursor ---
-        # After zoom and redraw (which set new scrollregion), the total map dimensions have changed.
-        # We want the 'map_x_under_cursor_before_zoom' (which is a fixed point on the map's drawing)
-        # to now appear under the screen coordinate event.x.
-
-        # Total pixel dimensions of map content at the NEW zoom level
-        # (get_zoomed_tile_size uses the new self.map_zoom_level)
-        zoomed_tile_size_after = self.get_zoomed_tile_size()
-        map_total_w_new = map_width * self.supertile_grid_width * zoomed_tile_size_after
-        map_total_h_new = map_height * self.supertile_grid_height * zoomed_tile_size_after
-        
-        map_total_w_new = max(1.0, map_total_w_new) # Avoid division by zero
-        map_total_h_new = max(1.0, map_total_h_new)
-
-        # The desired new top-left of the viewport (scroll position in map units)
-        # so that map_x_under_cursor_before_zoom appears at screen coordinate event.x
-        # new_scroll_x_map_units = map_x_under_cursor_before_zoom - event.x # This is conceptual
-        # We need to convert event.x (screen pixels) to how many map units it represents at new zoom.
-        # Pixels per map unit at new zoom: self.map_zoom_level (if base is 1px=1unit) or related factor.
-        # Here, "map units" are the scaled pixels used by canvasx.
-
-        # Desired canvas.canvasx(0) = map_x_under_cursor_before_zoom - event.x
-        # (No, this is not right. event.x is widget relative, canvasx is content relative)
-        #
-        # We want the map coordinate 'map_x_under_cursor_before_zoom'
-        # to be at screen position 'event.x' after zooming.
-        # Let new_vx = new canvas.canvasx(0).
-        # event.x = map_x_under_cursor_before_zoom - new_vx  (if 1 screen pixel = 1 map unit at current zoom)
-        # This is not quite right as canvasx itself depends on zoom.
-
-        # Simpler scroll target using fractions, adapted from Tkinter examples:
-        # The point on the map content (map_x_under_cursor_before_zoom) should now be
-        # positioned at widget coordinate event.x.
-        # The amount of canvas content to the left of event.x should be map_x_under_cursor_before_zoom.
-        # So, canvas.canvasx(event.x) should ideally be map_x_under_cursor_before_zoom.
-        #
-        # canvas.xview_moveto(fraction)
-        # fraction = (map_coord_of_interest - screen_coord_of_interest_relative_to_viewport_edge) / total_content_width
-        
-        # Target x-scroll fraction:
-        # We want the content coordinate `map_x_under_cursor_before_zoom` to appear at `event.x` on screen.
-        # The distance from the left edge of the content to `map_x_under_cursor_before_zoom` is `map_x_under_cursor_before_zoom`.
-        # The distance from the left edge of the viewport to `event.x` is `event.x`.
-        # So, the amount of content hidden to the left of the viewport should be:
-        # `map_x_under_cursor_before_zoom - event.x` (if assuming 1:1 pixel mapping between content and screen for this formula part)
-        # This is the new canvas.canvasx(0).
-        
-        new_scroll_offset_x = map_x_under_cursor_before_zoom - event.x
-        new_scroll_offset_y = map_y_under_cursor_before_zoom - event.y
-        
-        # Convert absolute scroll offset to fraction for xview_moveto
-        target_frac_x = new_scroll_offset_x / map_total_w_new
-        target_frac_y = new_scroll_offset_y / map_total_h_new
-
-        # Clamp fractions
-        target_frac_x = max(0.0, min(1.0 - (canvas.winfo_width() / map_total_w_new), target_frac_x)) if map_total_w_new > canvas.winfo_width() else 0.0
-        target_frac_y = max(0.0, min(1.0 - (canvas.winfo_height() / map_total_h_new), target_frac_y)) if map_total_h_new > canvas.winfo_height() else 0.0
-        
-        # Apply the scroll
-        canvas.xview_moveto(target_frac_x)
-        canvas.yview_moveto(target_frac_y)
-
-        # Final redraw might be needed if moveto didn't trigger it, or to update minimap
-        # self.draw_map_canvas() # Already called once, this might be redundant unless moveto is async
-        self.draw_minimap()
+        # Perform zoom centered on the cursor using the determined factor
+        # The zoom_map_at_point function already contains the logic to check
+        # if the new zoom level will result in a visual change.
+        self.zoom_map_at_point(factor, zoom_x_canvas_content, zoom_y_canvas_content)
 
     def change_map_zoom_mult(self, factor):
         """Applies multiplicative zoom, centered on the current canvas center."""
@@ -2988,17 +2933,56 @@ class TileEditorApp:
         self.zoom_map_at_point(factor, cx, cy)
 
     def set_map_zoom(self, new_zoom_level):
-        """Sets absolute zoom level, centered on current canvas center."""
-        safe_zoom = max(0.1, min(6.0, float(new_zoom_level)))  # Clamp to new limits
-        current_zoom = self.map_zoom_level
-        if current_zoom != safe_zoom:
-            factor = safe_zoom / current_zoom
-            # Calculate center point to zoom around
+        # Sets absolute zoom level, centered on current canvas center.
+        min_zoom, max_zoom = 0.2, 6.0  # Definitive min_zoom
+        
+        try:
+            requested_zoom_float = float(new_zoom_level)
+        except ValueError:
+            self.debug(f"[DEBUG] set_map_zoom: Invalid new_zoom_level '{new_zoom_level}'. Cannot convert to float.")
+            return
+
+        # Clamp the requested zoom to min/max bounds immediately
+        safe_target_zoom = max(min_zoom, min(max_zoom, requested_zoom_float))
+        
+        current_actual_zoom = self.map_zoom_level
+
+        self.debug(f"[DEBUG] set_map_zoom: Requested={requested_zoom_float:.4f}, SafeClampedTarget={safe_target_zoom:.4f}, CurrentActual={current_actual_zoom:.4f}")
+
+        # Check if a significant change is even requested after clamping
+        if abs(current_actual_zoom - safe_target_zoom) > 1e-9: 
+            # Calculate the factor needed to get from current_actual_zoom to safe_target_zoom
+            factor = 1.0
+            if abs(current_actual_zoom) > 1e-9: # Avoid division by zero
+                factor = safe_target_zoom / current_actual_zoom
+            elif abs(safe_target_zoom) > 1e-9: # If current is ~0, but target isn't, it's a large change
+                 # Factor doesn't make sense here, zoom_map_at_point will handle it by directly setting to potential_new_zoom_float
+                 # We can pass a factor that will result in safe_target_zoom,
+                 # or let zoom_map_at_point handle it if current_actual_zoom is too small for factor.
+                 # The call to zoom_map_at_point will use its internal current_zoom_float.
+                 # The factor is relative to *that*.
+                 pass # zoom_map_at_point will effectively set it to safe_target_zoom via its own logic
+
+            self.debug(f"[DEBUG] set_map_zoom: Factor to apply (approx): {factor:.4f}")
+            
             canvas = self.map_canvas
-            cx = canvas.canvasx(canvas.winfo_width() / 2)
-            cy = canvas.canvasy(canvas.winfo_height() / 2)
-            # Apply zoom using the calculated factor
-            self.zoom_map_at_point(factor, cx, cy)  # zoom_map_at_point handles redraw
+            if not canvas or not canvas.winfo_exists(): return
+
+            center_x_content = canvas.canvasx(canvas.winfo_width() / 2)
+            center_y_content = canvas.canvasy(canvas.winfo_height() / 2)
+            self.debug(f"[DEBUG] set_map_zoom: Centering on content coords: ({center_x_content:.2f}, {center_y_content:.2f})")
+            
+            # Call zoom_map_at_point. It will calculate its own potential_new_zoom_float
+            # based on its current_zoom_float and the passed factor.
+            # This potential_new_zoom_float should end up being very close to our safe_target_zoom.
+            self.zoom_map_at_point(factor, center_x_content, center_y_content)
+        else:
+            # Zoom level is already very close to target, ensure UI label is accurate based on the actual state
+            self.debug(f"[DEBUG] set_map_zoom: No significant change needed or already at target. Current zoom: {self.map_zoom_level*100:.1f}%")
+            if hasattr(self, 'map_zoom_label') and self.map_zoom_label.winfo_exists():
+                try:
+                    self.map_zoom_label.config(text=f"{int(self.map_zoom_level * 100)}%")
+                except tk.TclError: pass
 
     def get_zoomed_tile_size(self):
         """Calculates the current TILE size (base 8x8) based on zoom."""
@@ -3008,167 +2992,139 @@ class TileEditorApp:
         return max(1, int(zoomed_size))
 
     def zoom_map_at_point(self, factor, zoom_x_canvas, zoom_y_canvas):
-        canvas = self.map_canvas
-        current_zoom = self.map_zoom_level
-        min_zoom, max_zoom = 0.1, 6.0
-        new_zoom = max(min_zoom, min(max_zoom, current_zoom * factor))
+        # Zooms the map by 'factor', keeping the content point (zoom_x_canvas, zoom_y_canvas)
+        # stationary relative to the viewport's top-left edge.
+        # zoom_x_canvas and zoom_y_canvas are expected to be canvas *content* coordinates.
 
-        if abs(new_zoom - current_zoom) < 1e-9:
+        canvas = self.map_canvas
+        if not canvas or not canvas.winfo_exists(): # Check canvas existence early
+            self.debug("[DEBUG] zoom_map_at_point: Canvas does not exist. Aborting.")
             return
 
-        map_coord_x_at_cursor = canvas.canvasx(zoom_x_canvas) # This is canvasx from event.x, not event.x itself
-        map_coord_y_at_cursor = canvas.canvasy(zoom_y_canvas) # This is canvasy from event.y
-
-        scale_change = new_zoom / current_zoom
-        self.map_zoom_level = new_zoom # Update state first
-
-        # Ideal scroll position calculation
-        new_map_coord_x_target = map_coord_x_at_cursor # The point under cursor should ideally stay the same *map* coordinate
-        new_map_coord_y_target = map_coord_y_at_cursor
-
-        # To keep new_map_coord_x_target at screen position zoom_x_canvas,
-        # the new canvas.canvasx(0) should be:
-        # new_scroll_x_abs = new_map_coord_x_target - zoom_x_canvas 
-        # This interpretation was slightly off. Let's re-evaluate.
-        #
-        # The point on the map that was at (zoom_x_canvas, zoom_y_canvas) on screen
-        # before zoom was (map_coord_x_at_cursor, map_coord_y_at_cursor) in map units.
-        # After zoom, this map point (map_coord_x_at_cursor, map_coord_y_at_cursor)
-        # should still appear at (zoom_x_canvas, zoom_y_canvas) on screen.
-        #
-        # Let S0 = old scroll offset (canvas.canvasx(0))
-        # Let S1 = new scroll offset
-        # zoom_x_canvas = map_coord_x_at_cursor_on_map_relative_to_origin / old_zoom_level - S0
-        # zoom_x_canvas = map_coord_x_at_cursor_on_map_relative_to_origin / new_zoom_level - S1
-        # This is getting complicated. Tkinter's own scaling:
-        # canvas.scale("all", zoom_x_canvas, zoom_y_canvas, scale_change, scale_change)
-        # This scales the *content*. Then we'd need to adjust scrollregion and redraw.
-        #
-        # Let's use the simpler scroll adjustment logic that worked before,
-        # it relies on the fact that draw_map_canvas will correctly set the new scrollregion.
-
-        # Calculate where the map point under the cursor *would* move to if we only scaled
-        new_x_if_only_scaled = map_coord_x_at_cursor * scale_change # This is not quite right
-        new_y_if_only_scaled = map_coord_y_at_cursor * scale_change
-
-        # The amount the view origin needs to shift to keep the cursor point stationary
-        # delta_x_scroll = new_x_if_only_scaled - map_coord_x_at_cursor # This is how much the map point moved
-        # So canvas must scroll by this amount in map units.
-        # If map_coord_x_at_cursor = C.canvasx(event.x)
-        # then map_coord_x_at_cursor is already a coordinate in the current scrolled view.
-        # After scaling, C.canvasx(event.x) * scale_change is where that point would be IF origin didn't move.
-        # We want map_coord_x_at_cursor to remain at event.x (screen coordinate).
+        current_zoom_float = self.map_zoom_level 
         
-        # Calculate the new viewport origin such that the point under the cursor remains fixed.
-        # (vx, vy) is the current top-left of the viewport in canvas coordinates.
-        # We want to find (vx', vy')
-        # zoom_x_canvas - vx = (map_point_x_under_cursor)
-        # zoom_x_canvas - vx' = (map_point_x_under_cursor) / scale_change
-        # vx' = zoom_x_canvas - (map_point_x_under_cursor / scale_change)
-        # This is not how canvas.xview_scroll works. xview_scroll moves by delta units.
-
-        # Original simpler logic for scroll adjustment:
-        ideal_scroll_x_abs = (map_coord_x_at_cursor * scale_change) - zoom_x_canvas
-        ideal_scroll_y_abs = (map_coord_y_at_cursor * scale_change) - zoom_y_canvas
-        # This was for zoom_map_at_point when zoom_x_canvas was a screen coordinate.
-        # Here, zoom_x_canvas is already a *map content* coordinate.
-
-        # Simpler:
-        # 1. Scale the canvas content around the specific point.
-        #    This changes what map coordinates map to screen coordinates.
-        #    Tkinter's canvas.scale() function does this.
-        #    canvas.scale("all", zoom_x_canvas, zoom_y_canvas, scale_change, scale_change)
-        #    This scales all *items* on the canvas. Since we redraw everything, this isn't what we want.
-
-        # Let's use the previous "zoom_map_at_point" logic which seemed to work by adjusting scrollbars.
-        # The key is that zoom_x_canvas and zoom_y_canvas are the *map content coordinates*
-        # that should remain under the cursor.
+        min_zoom, max_zoom = 0.2, 6.0 # Definitive min_zoom
         
-        # Current view:
-        # view_x1_old = canvas.canvasx(0)
-        # view_y1_old = canvas.canvasy(0)
+        # Calculate potential new zoom after applying factor
+        calculated_val_after_factor = current_zoom_float * factor
+        # Apply clamping
+        potential_new_zoom_float = max(min_zoom, min(max_zoom, calculated_val_after_factor))
         
-        # After zoom, the point (zoom_x_canvas, zoom_y_canvas) should still be at the same
-        # relative position on the screen.
-        # The offset of the cursor from the view origin is (zoom_x_canvas - view_x1_old)
-        # This offset, when scaled, should be (zoom_x_canvas_new_scale - view_x1_new)
-        # zoom_x_canvas * scale_change - view_x1_new = (zoom_x_canvas - view_x1_old) * scale_change
-        # This is also complex.
+        self.debug(f"[DEBUG] zoom_map_at_point: --- Zoom Calculation Start ---")
+        self.debug(f"[DEBUG] zoom_map_at_point: current_zoom_float={current_zoom_float:.4f}, factor={factor:.4f}")
+        self.debug(f"[DEBUG] zoom_map_at_point: val_after_factor={calculated_val_after_factor:.4f}")
+        self.debug(f"[DEBUG] zoom_map_at_point: potential_new_zoom_float (after all clamps min={min_zoom}, max={max_zoom})={potential_new_zoom_float:.4f}")
 
-        # Let's use the logic from the Tkinter wiki for zooming at a point:
-        # This scrolls the view so that the canvas coordinate point (zoom_x_canvas, zoom_y_canvas)
-        # appears at the same screen location after scaling the view.
-        # Note: Tkinter's canvas view units are screen pixels.
-        # Our zoom_x_canvas, zoom_y_canvas are already map content coords.
+        base_display_size = TILE_WIDTH # Assuming TILE_WIDTH is the unscaled pixel size (e.g., 8)
+        current_int_display_tile_size = max(1, int(base_display_size * current_zoom_float))
+        potential_new_int_display_tile_size = max(1, int(base_display_size * potential_new_zoom_float))
+
+        # Update the UI label with the (potentially clamped) new zoom level immediately
+        if hasattr(self, 'map_zoom_label') and self.map_zoom_label.winfo_exists():
+            try:
+                self.map_zoom_label.config(text=f"{int(potential_new_zoom_float * 100)}%")
+            except tk.TclError: pass # Ignore if label is being destroyed
+
+        # Determine if a full redraw is warranted
+        force_redraw_due_to_int_size_change = (current_int_display_tile_size != potential_new_int_display_tile_size)
         
-        # The amount of shift needed in the scroll view
-        # This is how many *screen pixels* the view needs to shift.
-        # Convert these screen pixel shifts to canvas "units" for scroll command.
-        # This calculation was for when zoom_x_canvas was event.x (a screen coordinate)
-        # If zoom_x_canvas is a map coordinate:
-        # dx_scroll = (zoom_x_canvas * (1.0 - scale_change)) # Incorrect
-        # dy_scroll = (zoom_y_canvas * (1.0 - scale_change)) # Incorrect
+        relative_zoom_change_threshold = 0.03 # e.g., 3% change
+        significant_relative_float_change = False
+        if current_zoom_float > 1e-9: # Avoid division by zero for relative change
+            if abs(potential_new_zoom_float - current_zoom_float) / current_zoom_float > relative_zoom_change_threshold:
+                significant_relative_float_change = True
+        elif abs(potential_new_zoom_float - current_zoom_float) > (relative_zoom_change_threshold * min_zoom): # Use absolute for very small current_zoom
+             significant_relative_float_change = True
 
-        # Simpler approach for scroll management (like before):
-        # Calculate new total map dimensions
-        zoomed_tile_size_new = self.get_zoomed_tile_size() # Uses updated self.map_zoom_level
+
+        # Check if the change is just floating point noise / too small to matter visually if int size doesn't change
+        is_just_noise_or_too_small_without_int_change = abs(potential_new_zoom_float - current_zoom_float) < 1e-7
+
+        if not force_redraw_due_to_int_size_change and \
+           not significant_relative_float_change and \
+           is_just_noise_or_too_small_without_int_change:
+            # Only update internal float zoom if it's not just noise, to keep label consistent
+            if not is_just_noise_or_too_small_without_int_change and abs(potential_new_zoom_float - current_zoom_float) > 1e-9 :
+                 self.map_zoom_level = potential_new_zoom_float
+            self.debug(f"[DEBUG] zoom_map_at_point: No significant visual change expected. Zoom for label: {potential_new_zoom_float*100:.1f}%. Actual self.map_zoom_level: {self.map_zoom_level*100:.1f}%. Skipping full redraw.")
+            self.debug(f"[DEBUG] zoom_map_at_point: --- Zoom Calculation End (Skipped Redraw) ---")
+            return
         
-        # These are the new total dimensions of the map content in pixels
-        map_total_pixel_width_new = map_width * self.supertile_grid_width * zoomed_tile_size_new
-        map_total_pixel_height_new = map_height * self.supertile_grid_height * zoomed_tile_size_new
+        self.debug(f"[DEBUG] zoom_map_at_point: Proceeding with redraw. Old actual zoom: {current_zoom_float*100:.1f}%, New target zoom: {potential_new_zoom_float*100:.1f}%")
+        self.debug(f"[DEBUG] zoom_map_at_point: Old int size: {current_int_display_tile_size}, New int size: {potential_new_int_display_tile_size}")
+        self.debug(f"[DEBUG] zoom_map_at_point: SignificantRelFloatChange: {significant_relative_float_change}, ForceIntSizeChange: {force_redraw_due_to_int_size_change}")
 
-        safe_map_width_new = max(1.0, map_total_pixel_width_new)
-        safe_map_height_new = max(1.0, map_total_pixel_height_new)
+        # Update the actual application zoom level state
+        old_zoom_for_scale_calc = current_zoom_float # Use the float value before it's updated by self.map_zoom_level
+        self.map_zoom_level = potential_new_zoom_float # This is the new definitive zoom level
+        
+        scale_change = 1.0 # Default if old zoom was zero or too small
+        if abs(old_zoom_for_scale_calc) > 1e-9 : # Avoid division by zero or huge scale_change from tiny old_zoom
+            scale_change = self.map_zoom_level / old_zoom_for_scale_calc
+        elif abs(self.map_zoom_level) > 1e-9 : # If old zoom was ~0 but new one isn't, it's essentially a fresh scale
+            pass # scale_change remains 1.0 which means no relative scaling for scroll adjustment, absolute positioning will take over
+
+        self.debug(f"[DEBUG] zoom_map_at_point: self.map_zoom_level NOW = {self.map_zoom_level:.4f}, scale_change = {scale_change:.4f}")
+
+        # --- Scroll adjustment logic to keep zoom_x_canvas, zoom_y_canvas fixed ---
+        # (zoom_x_canvas, zoom_y_canvas) are the content coordinates of the point under the cursor (or center)
+        
+        current_view_x1 = canvas.canvasx(0) # Content X at left edge of viewport BEFORE scroll
+        current_view_y1 = canvas.canvasy(0) # Content Y at top edge of viewport BEFORE scroll
+
+        # The point (zoom_x_canvas, zoom_y_canvas) is currently at screen offset:
+        # screen_offset_x = zoom_x_canvas - current_view_x1
+        # screen_offset_y = zoom_y_canvas - current_view_y1
+        # After zoom, we want this same screen_offset to correspond to the new scaled content point.
+        # new_content_point_x = zoom_x_canvas * scale_change (This is conceptual, coordinates don't just multiply)
+        # The new scroll position (target_new_view_x1) should be such that:
+        # target_new_view_x1 + screen_offset_x = (new position of zoom_x_canvas after scaling effect)
+        # A common formula: target_scroll = fixed_point_content_coord - (screen_offset_of_fixed_point / new_zoom_level_relative_to_screen_pixels)
+        # Simplified: keep the relative position of zoom_x_canvas within the viewport the same.
+        # screen_offset_x / viewport_width_old_zoom = (zoom_x_canvas * scale_change - target_new_view_x1) / viewport_width_new_zoom
+        # This is still more complex than needed if we use the formula:
+        target_new_view_x1 = zoom_x_canvas - ((zoom_x_canvas - current_view_x1) / scale_change) if abs(scale_change) > 1e-9 else current_view_x1
+        target_new_view_y1 = zoom_y_canvas - ((zoom_y_canvas - current_view_y1) / scale_change) if abs(scale_change) > 1e-9 else current_view_y1
+        
+        # --- Recalculate total map dimensions AT THE NEW self.map_zoom_level ---
+        new_zoomed_st_w, new_zoomed_st_h = self._get_zoomed_supertile_pixel_dims() # Uses current self.map_zoom_level
+        map_total_pixel_width_new_zoom = map_width * new_zoomed_st_w
+        map_total_pixel_height_new_zoom = map_height * new_zoomed_st_h
+        
+        safe_map_total_w = max(1.0, float(map_total_pixel_width_new_zoom))
+        safe_map_total_h = max(1.0, float(map_total_pixel_height_new_zoom))
+
+        target_frac_x = target_new_view_x1 / safe_map_total_w if safe_map_total_w > 0 else 0.0
+        target_frac_y = target_new_view_y1 / safe_map_total_h if safe_map_total_h > 0 else 0.0
 
         canvas_widget_width = canvas.winfo_width()
         canvas_widget_height = canvas.winfo_height()
 
-        # The fraction of the map that zoom_x_canvas represents:
-        frac_x = zoom_x_canvas / safe_map_width_new if current_zoom == 0 else zoom_x_canvas / (map_width * self.supertile_grid_width * (zoomed_tile_size_new / scale_change) )
-        frac_y = zoom_y_canvas / safe_map_height_new if current_zoom == 0 else zoom_y_canvas / (map_height * self.supertile_grid_height * (zoomed_tile_size_new / scale_change) )
+        # Calculate max fraction to prevent scrolling beyond content edges
+        max_frac_x = 0.0
+        if safe_map_total_w > canvas_widget_width:
+            max_frac_x = (safe_map_total_w - canvas_widget_width) / safe_map_total_w
         
-
-        s_x = canvas.canvasx(0) # current scroll x
-        s_y = canvas.canvasy(0) # current scroll y
+        max_frac_y = 0.0
+        if safe_map_total_h > canvas_widget_height:
+            max_frac_y = (safe_map_total_h - canvas_widget_height) / safe_map_total_h
         
-
-        current_xview_frac = canvas.xview()
-        current_yview_frac = canvas.yview()
-
-        # What fraction of the total map width/height does zoom_x_canvas represent BEFORE zoom?
-        # Need pre-zoom total map dimensions.
-        pre_zoom_tile_size = self.get_zoomed_tile_size() / scale_change # tile size before this zoom
-        pre_map_total_w = map_width * self.supertile_grid_width * pre_zoom_tile_size
-        pre_map_total_h = map_height * self.supertile_grid_height * pre_zoom_tile_size
-        pre_map_total_w = max(1.0, pre_map_total_w) # Avoid division by zero
-        pre_map_total_h = max(1.0, pre_map_total_h)
-
-        frac_target_x = zoom_x_canvas / pre_map_total_w
-        frac_target_y = zoom_y_canvas / pre_map_total_h
+        final_frac_x = max(0.0, min(target_frac_x, max_frac_x))
+        final_frac_y = max(0.0, min(target_frac_y, max_frac_y))
         
-        # How much of the viewport width/height is visible (fraction of total map)
-        view_frac_w = current_xview_frac[1] - current_xview_frac[0]
-        view_frac_h = current_yview_frac[1] - current_yview_frac[0]
+        self.debug(f"[DEBUG] zoom_map_at_point: Scroll Adjust: target_new_view=({target_new_view_x1:.2f},{target_new_view_y1:.2f}), "
+                   f"target_frac=({target_frac_x:.4f},{target_frac_y:.4f}), max_frac=({max_frac_x:.4f},{max_frac_y:.4f}), final_frac=({final_frac_x:.4f},{final_frac_y:.4f})")
+
+        # Apply the scroll before drawing
+        # Only call xview_moveto/yview_moveto if the canvas scrollable area is larger than the viewport
+        if safe_map_total_w > 0: # and safe_map_total_w > canvas_widget_width: # Optional: only if scrollable
+            canvas.xview_moveto(final_frac_x)
+        if safe_map_total_h > 0: # and safe_map_total_h > canvas_widget_height: # Optional
+            canvas.yview_moveto(final_frac_y)
         
-        # New scroll start fraction
-        new_scroll_frac_x = frac_target_x - ( (zoom_x_canvas - canvas.canvasx(0)) / pre_map_total_w ) * (view_frac_w / (view_frac_w * scale_change) if view_frac_w > 0 else 1) # This needs event.x from scroll
-
-
-        # Clamping scroll position after any adjustment (or if no adjustment is made here)
-        canvas_widget_width_after = canvas.winfo_width() # Re-query in case of changes
-        canvas_widget_height_after = canvas.winfo_height()
-
-        # This clamping ensures that if the map is smaller than the canvas, it's at 0,0.
-        # It doesn't handle the zoom-to-point scrolling itself.
-        if map_total_pixel_width_new < canvas_widget_width_after:
-            canvas.xview_moveto(0.0)
-        if map_total_pixel_height_new < canvas_widget_height_after:
-            canvas.yview_moveto(0.0)
-        
-        # The crucial part: redraw the map. This function will use the new zoom level
-        # and calculate the correct scroll region.
-        self.draw_map_canvas()
+        self.draw_map_canvas() 
         self.draw_minimap()
+        self.debug(f"[DEBUG] zoom_map_at_point: --- Zoom Calculation End (Redraw Performed) ---")
 
     # --- File Menu Commands ---
     # ... (new_project, save/load tileset/supertile/map remain mostly unchanged,
@@ -4756,121 +4712,11 @@ class TileEditorApp:
         center_y_canvas = canvas.canvasy((canvas.winfo_height() / 2))
         self.zoom_map_at_point(factor, center_x_canvas, center_y_canvas)
 
-    def set_map_zoom(self, new_zoom_level):
-        """Sets absolute zoom level, centered on current canvas center."""
-        min_zoom, max_zoom = 0.1, 6.0  # New limits
-        safe_zoom = max(min_zoom, min(max_zoom, float(new_zoom_level)))
-        current_zoom = self.map_zoom_level
-        if abs(current_zoom - safe_zoom) > 1e-9:  # Avoid floating point noise
-            factor = safe_zoom / current_zoom if current_zoom > 1e-9 else 1.0
-            canvas = self.map_canvas
-            center_x_canvas = canvas.canvasx(canvas.winfo_width() / 2)
-            center_y_canvas = canvas.canvasy(canvas.winfo_height() / 2)
-            self.zoom_map_at_point(factor, center_x_canvas, center_y_canvas)
-
     def get_zoomed_tile_size(self):
         """Calculates the current TILE size based on 8x8 base and zoom."""
         base_tile_size = 8  # 100% zoom = 8 pixels
         zoomed_size = base_tile_size * self.map_zoom_level
         return max(1, int(zoomed_size))  # Ensure at least 1 pixel
-
-    def zoom_map_at_point(self, factor, zoom_x_canvas, zoom_y_canvas):
-        """Zooms the map by 'factor', keeping the point (zoom_x/y_canvas) stationary,
-        and clamps scroll to prevent gaps and ensure edges align correctly."""
-        canvas = self.map_canvas
-        current_zoom = self.map_zoom_level
-        min_zoom, max_zoom = 0.1, 6.0
-        new_zoom = max(min_zoom, min(max_zoom, current_zoom * factor))
-
-        # Only proceed if zoom actually changes significantly
-        if abs(new_zoom - current_zoom) < 1e-9:
-            return
-
-        # --- 1. Get map coordinates under cursor BEFORE zoom ---
-        map_coord_x_at_cursor = canvas.canvasx(zoom_x_canvas)
-        map_coord_y_at_cursor = canvas.canvasy(zoom_y_canvas)
-
-        # --- 2. Update zoom level ---
-        scale_change = new_zoom / current_zoom
-        self.map_zoom_level = new_zoom  # Update state
-
-        # --- 3. Calculate IDEAL scroll position (absolute pixels) for zoom-to-cursor ---
-        # The map point map_coord_x_at_cursor should end up at the screen
-        # position zoom_x_canvas after zooming.
-        new_map_coord_x = map_coord_x_at_cursor * scale_change
-        new_map_coord_y = map_coord_y_at_cursor * scale_change
-
-        # Ideal absolute coordinate for the viewport's top-left (scroll position):
-        ideal_scroll_x_abs = new_map_coord_x - zoom_x_canvas
-        ideal_scroll_y_abs = new_map_coord_y - zoom_y_canvas
-
-        # --- 4. Calculate new total map dimensions and widget size ---
-        zoomed_tile_size_new = (
-            self.get_zoomed_tile_size()
-        )  # Uses updated self.map_zoom_level
-        map_total_pixel_width_new = (
-            map_width * SUPERTILE_GRID_DIM * zoomed_tile_size_new
-        )
-        map_total_pixel_height_new = (
-            map_height * SUPERTILE_GRID_DIM * zoomed_tile_size_new
-        )
-
-        # Ensure dimensions are at least 1 for calculations
-        safe_map_width = max(1.0, map_total_pixel_width_new)
-        safe_map_height = max(1.0, map_total_pixel_height_new)
-
-        canvas_widget_width = canvas.winfo_width()
-        canvas_widget_height = canvas.winfo_height()
-
-        # --- 5. Calculate the MAXIMUM possible scroll position (absolute pixels) ---
-        # This is how far the top-left corner can move from (0,0) before the
-        # map's right/bottom edge hits the canvas's right/bottom edge.
-        # If map is smaller than canvas, max scroll is 0.
-        max_scroll_x_abs = max(0.0, map_total_pixel_width_new - canvas_widget_width)
-        max_scroll_y_abs = max(0.0, map_total_pixel_height_new - canvas_widget_height)
-
-        # --- 6. Clamp the IDEAL scroll position to the valid range [0, max_scroll_abs] ---
-        final_scroll_x_abs = max(0.0, min(ideal_scroll_x_abs, max_scroll_x_abs))
-        final_scroll_y_abs = max(0.0, min(ideal_scroll_y_abs, max_scroll_y_abs))
-
-        # --- 7. Convert the FINAL absolute clamped scroll position to fractions ---
-        # This handles the case where the map is smaller than the canvas automatically,
-        # because max_scroll_x_abs/max_scroll_y_abs would be 0, clamping final_scroll_*_abs to 0.
-        # The fraction is relative to the total map size.
-        final_x_fraction = final_scroll_x_abs / safe_map_width
-        final_y_fraction = final_scroll_y_abs / safe_map_height
-
-        # --- 8. Apply the FINAL definite scroll position using moveto ---
-        # Ensure fractions are within [0, 1] just in case of float issues, although clamping should handle it.
-        canvas.xview_moveto(max(0.0, min(1.0, final_x_fraction)))
-        canvas.yview_moveto(max(0.0, min(1.0, final_y_fraction)))
-
-        # --- 9. Final Redraw ---
-        # Redraw the map. This uses the final scroll position set by moveto
-        # and updates the scrollregion based on the new total map dimensions.
-        self.draw_map_canvas()
-
-        # Update the minimap viewport
-        self.draw_minimap()
-
-    def handle_map_zoom_scroll(self, event):
-        """Handles Ctrl+MouseWheel zooming, centered on cursor."""
-        factor = 0.0
-        # Determine zoom direction and set multiplicative factor
-        if event.num == 4 or event.delta > 0:  # Zoom In
-            factor = 1.1  # Smaller steps often feel better for scroll wheel
-        elif event.num == 5 or event.delta < 0:  # Zoom Out
-            factor = 1 / 1.1
-        else:
-            return  # Ignore other wheel events
-
-        # Get mouse position relative to canvas content (scrolled coords)
-        canvas = self.map_canvas
-        zoom_x_canvas = canvas.canvasx(event.x)
-        zoom_y_canvas = canvas.canvasy(event.y)
-
-        # Perform zoom centered on the cursor
-        self.zoom_map_at_point(factor, zoom_x_canvas, zoom_y_canvas)
 
     # --- Scrolling Methods ---
 
@@ -9454,118 +9300,141 @@ class TileEditorApp:
 
 
     def create_map_render_of_supertile(self, supertile_index, target_render_width, target_render_height):
-        # Ensure target dimensions are at least 1x1
+        # Creates a Pillow Image for a supertile, scaled to target_render_width/height.
+        # Cache now stores Pillow.Image objects.
+
         safe_target_render_width = max(1, int(target_render_width))
         safe_target_render_height = max(1, int(target_render_height))
 
-        cache_key = (supertile_index, safe_target_render_width, safe_target_render_height, self.supertile_grid_width, self.supertile_grid_height)
+        cache_key = (supertile_index, safe_target_render_width, safe_target_render_height, 
+                     self.supertile_grid_width, self.supertile_grid_height)
+        
         if cache_key in self.map_render_cache:
             return self.map_render_cache[cache_key]
 
-        img = tk.PhotoImage(width=safe_target_render_width, height=safe_target_render_height)
+        # Create a Pillow Image for the entire scaled supertile
+        # Use 'RGB' mode. If alpha is needed later, can change to 'RGBA'.
+        try:
+            # Ensure dimensions are positive for Image.new
+            pil_supertile_image = Image.new('RGB', 
+                                          (max(1, safe_target_render_width), max(1, safe_target_render_height)), 
+                                          INVALID_SUPERTILE_COLOR) # Fill with invalid color initially
+        except ValueError as e_img_new: # e.g. negative size if calculations somehow fail
+            self.debug(f"[DEBUG] Error creating Pillow image for supertile {supertile_index} (size {safe_target_render_width}x{safe_target_render_height}): {e_img_new}")
+            # Return a minimal placeholder Pillow image on error
+            placeholder_pil = Image.new('RGB', (1,1), INVALID_SUPERTILE_COLOR)
+            self.map_render_cache[cache_key] = placeholder_pil # Cache placeholder to avoid re-erroring
+            return placeholder_pil
+
 
         if not (0 <= supertile_index < num_supertiles):
-            img.put(INVALID_SUPERTILE_COLOR, to=(0, 0, safe_target_render_width, safe_target_render_height))
-            self.map_render_cache[cache_key] = img
-            return img
+            # Already filled with INVALID_SUPERTILE_COLOR
+            self.map_render_cache[cache_key] = pil_supertile_image
+            return pil_supertile_image
 
         definition = supertiles_data[supertile_index]
-        src_st_tile_grid_w = self.supertile_grid_width  # Number of base tiles across in the supertile definition
-        src_st_tile_grid_h = self.supertile_grid_height # Number of base tiles down in the supertile definition
+        src_st_tile_grid_w = self.supertile_grid_width
+        src_st_tile_grid_h = self.supertile_grid_height
 
-        if src_st_tile_grid_w <= 0 or src_st_tile_grid_h <= 0: # Should ideally be caught by project settings validation
-            img.put(INVALID_SUPERTILE_COLOR, to=(0, 0, safe_target_render_width, safe_target_render_height))
-            self.map_render_cache[cache_key] = img
-            return img
+        if src_st_tile_grid_w <= 0 or src_st_tile_grid_h <= 0:
+            self.map_render_cache[cache_key] = pil_supertile_image # Already filled with invalid
+            return pil_supertile_image
         
-        # Check definition structure consistency against project settings
         if len(definition) != src_st_tile_grid_h or \
            (src_st_tile_grid_h > 0 and (len(definition[0]) != src_st_tile_grid_w)):
-            # This supertile's internal structure doesn't match current project dimensions.
-            # This can happen if project ST dimensions change after STs were defined.
-            # print(f"Warning: Supertile {supertile_index} internal dim mismatch for create_map_render. Expected {src_st_tile_grid_w}x{src_st_tile_grid_h}")
-            img.put(INVALID_SUPERTILE_COLOR, to=(0, 0, safe_target_render_width, safe_target_render_height)) # Mark as invalid
-            self.map_render_cache[cache_key] = img
-            return img
+            self.debug(f"[DEBUG] Supertile {supertile_index} dim mismatch for map render.")
+            self.map_render_cache[cache_key] = pil_supertile_image # Already filled with invalid
+            return pil_supertile_image
 
-        # Pixel dimensions of one original base tile (e.g., 8x8 TILE_WIDTH/HEIGHT)
-        # when rendered within the target_render_width/height.
-        # This is how many output pixels one base tile will occupy on average.
-        output_pixels_per_base_tile_w = safe_target_render_width / src_st_tile_grid_w
-        output_pixels_per_base_tile_h = safe_target_render_height / src_st_tile_grid_h
+        # Size of one base 8x8 tile when scaled to fit within the target_render_width/height
+        scaled_base_tile_w = safe_target_render_width / src_st_tile_grid_w
+        scaled_base_tile_h = safe_target_render_height / src_st_tile_grid_h
 
-        # Heuristic check: if a base tile column or row would be rendered to less than 1 pixel,
-        # it's likely too small to render meaningfully detail by detail.
-        if safe_target_render_width < src_st_tile_grid_w or safe_target_render_height < src_st_tile_grid_h :
-             # Render the supertile as a solid block of its "average" or most dominant color, or just an invalid color.
-             # For simplicity, using invalid color. A more advanced version could average.
-             # print(f"Warning: Supertile {supertile_index} render target ({safe_target_render_width}x{safe_target_render_height}) too small for its grid ({src_st_tile_grid_w}x{src_st_tile_grid_h}). Filling with placeholder.")
-             img.put(INVALID_SUPERTILE_COLOR, to=(0, 0, safe_target_render_width, safe_target_render_height))
-             self.map_render_cache[cache_key] = img
-             return img
+        # Ensure scaled base tile dimensions are at least 1 pixel for Pillow's resize
+        # Pillow's resize to (0,0) or (0,X) or (X,0) might error or produce unexpected results.
+        # We round them, then ensure they are at least 1.
+        final_scaled_base_tile_w = max(1, round(scaled_base_tile_w))
+        final_scaled_base_tile_h = max(1, round(scaled_base_tile_h))
 
-        # Ratio of source base tile pixels (e.g., TILE_WIDTH=8) to its display size within the scaled render.
-        # This tells us how many source pixels are covered by one *output* pixel in that scaled base tile's area.
-        src_pixels_per_output_pixel_w_ratio = TILE_WIDTH / output_pixels_per_base_tile_w if output_pixels_per_base_tile_w > 1e-9 else float('inf')
-        src_pixels_per_output_pixel_h_ratio = TILE_HEIGHT / output_pixels_per_base_tile_h if output_pixels_per_base_tile_h > 1e-9 else float('inf')
 
-        for y_out in range(safe_target_render_height): # Iterate over each pixel of the output PhotoImage
-            row_colors_hex = []
-            for x_out in range(safe_target_render_width):
-                # Determine which source base tile (in the supertile grid) this output pixel (x_out, y_out) falls into.
-                # Ensure result is int and clamped to valid range.
-                src_base_tile_c_in_st_grid = min(src_st_tile_grid_w - 1, int(x_out / output_pixels_per_base_tile_w))
-                src_base_tile_r_in_st_grid = min(src_st_tile_grid_h - 1, int(y_out / output_pixels_per_base_tile_h))
+        # Temporary 8x8 Pillow image for rendering individual base tiles
+        pil_temp_base_tile = Image.new('RGB', (TILE_WIDTH, TILE_HEIGHT))
+
+        for r_st_def in range(src_st_tile_grid_h): # Row in supertile definition
+            for c_st_def in range(src_st_tile_grid_w): # Col in supertile definition
+                tile_idx_from_st_def = definition[r_st_def][c_st_def]
                 
-                # Determine the coordinate of (x_out, y_out) *within* the area of that specific scaled base tile.
-                # E.g., if a base tile scales to 4x4 output pixels, this would be (0..3.999, 0..3.999)
-                x_in_scaled_base_tile_area = (x_out / output_pixels_per_base_tile_w - src_base_tile_c_in_st_grid) * output_pixels_per_base_tile_w
-                y_in_scaled_base_tile_area = (y_out / output_pixels_per_base_tile_h - src_base_tile_r_in_st_grid) * output_pixels_per_base_tile_h
-                
-                # Map this coordinate back to the original source base tile's pixel coordinates (e.g., 0-7 for an 8x8 tile).
-                src_pixel_c_in_base_tile = min(TILE_WIDTH - 1, int(x_in_scaled_base_tile_area * src_pixels_per_output_pixel_w_ratio))
-                src_pixel_r_in_base_tile = min(TILE_HEIGHT - 1, int(y_in_scaled_base_tile_area * src_pixels_per_output_pixel_h_ratio))
+                pixel_data_for_base_tile = [] # Flat list of (r,g,b) tuples for 8x8 tile
+                valid_tile = True
 
-                pixel_color_hex_final = INVALID_TILE_COLOR # Default on error
+                if not (0 <= tile_idx_from_st_def < num_tiles_in_set):
+                    valid_tile = False
+                else:
+                    pattern = tileset_patterns[tile_idx_from_st_def]
+                    colors = tileset_colors[tile_idx_from_st_def]
 
-                try:
-                    # These indices into `definition` should be safe due to earlier clamping
-                    tile_idx_from_st_def = definition[src_base_tile_r_in_st_grid][src_base_tile_c_in_st_grid]
-
-                    if 0 <= tile_idx_from_st_def < num_tiles_in_set:
-                        # Bounds check for pattern/color array access
-                        if not (0 <= src_pixel_r_in_base_tile < TILE_HEIGHT and \
-                                len(tileset_patterns[tile_idx_from_st_def]) > src_pixel_r_in_base_tile and \
-                                0 <= src_pixel_c_in_base_tile < TILE_WIDTH and \
-                                len(tileset_patterns[tile_idx_from_st_def][src_pixel_r_in_base_tile]) > src_pixel_c_in_base_tile and \
-                                len(tileset_colors[tile_idx_from_st_def]) > src_pixel_r_in_base_tile):
-                            pixel_color_hex_final = INVALID_TILE_COLOR # Malformed tile data
+                    for y_pixel_in_base in range(TILE_HEIGHT): # 0-7
+                        if not (y_pixel_in_base < len(pattern) and y_pixel_in_base < len(colors)):
+                            valid_tile = False; break # Malformed tile data
+                        
+                        fg_idx, bg_idx = colors[y_pixel_in_base]
+                        if not (0 <= fg_idx < len(self.active_msx_palette) and \
+                                0 <= bg_idx < len(self.active_msx_palette)):
+                            fg_color_hex = INVALID_TILE_COLOR; bg_color_hex = INVALID_TILE_COLOR
                         else:
-                            pattern_pixel_val = tileset_patterns[tile_idx_from_st_def][src_pixel_r_in_base_tile][src_pixel_c_in_base_tile]
-                            fg_idx_val, bg_idx_val = tileset_colors[tile_idx_from_st_def][src_pixel_r_in_base_tile]
-                            
-                            if not (0 <= fg_idx_val < len(self.active_msx_palette) and 0 <= bg_idx_val < len(self.active_msx_palette)):
-                                fg_color = INVALID_TILE_COLOR; bg_color = INVALID_TILE_COLOR
-                            else:
-                                fg_color = self.active_msx_palette[fg_idx_val]
-                                bg_color = self.active_msx_palette[bg_idx_val]
-                            
-                            pixel_color_hex_final = fg_color if pattern_pixel_val == 1 else bg_color
-                    # else: tile_idx_from_st_def is out of bounds, pixel_color_hex_final remains INVALID_TILE_COLOR
-                except IndexError:
-                    pixel_color_hex_final = INVALID_TILE_COLOR # Fallback for any unexpected index issue
-                
-                row_colors_hex.append(pixel_color_hex_final)
-            
-            try:
-                if safe_target_render_width > 0:
-                    img.put("{" + " ".join(row_colors_hex) + "}", to=(0, y_out))
-            except tk.TclError as e:
-                if row_colors_hex and safe_target_render_width > 0:
-                    img.put(row_colors_hex[0], to=(0, y_out, safe_target_render_width, y_out + 1))
+                            fg_color_hex = self.active_msx_palette[fg_idx]
+                            bg_color_hex = self.active_msx_palette[bg_idx]
 
-        self.map_render_cache[cache_key] = img
-        return img
+                        row_pattern_data = pattern[y_pixel_in_base]
+                        if not (len(row_pattern_data) == TILE_WIDTH):
+                            valid_tile = False; break # Malformed tile row
+
+                        for x_pixel_in_base in range(TILE_WIDTH): # 0-7
+                            pixel_val = row_pattern_data[x_pixel_in_base]
+                            color_hex_to_use = fg_color_hex if pixel_val == 1 else bg_color_hex
+                            try:
+                                # Pillow needs RGB tuples, not hex strings for putdata
+                                r_int = int(color_hex_to_use[1:3], 16)
+                                g_int = int(color_hex_to_use[3:5], 16)
+                                b_int = int(color_hex_to_use[5:7], 16)
+                                pixel_data_for_base_tile.append((r_int, g_int, b_int))
+                            except ValueError: # Invalid hex string
+                                pixel_data_for_base_tile.append((255,0,255)) # Magenta for error
+                    if not valid_tile: break
+                
+                if not valid_tile or len(pixel_data_for_base_tile) != TILE_WIDTH * TILE_HEIGHT:
+                    # Fill this part of supertile with invalid color if base tile is bad
+                    # Create a temporary Pillow image for the scaled error tile
+                    error_scaled_tile = Image.new('RGB', (final_scaled_base_tile_w, final_scaled_base_tile_h), INVALID_TILE_COLOR)
+                    paste_x = round(c_st_def * scaled_base_tile_w)
+                    paste_y = round(r_st_def * scaled_base_tile_h)
+                    pil_supertile_image.paste(error_scaled_tile, (paste_x, paste_y))
+                    continue
+
+                # Populate the 8x8 temporary Pillow image
+                pil_temp_base_tile.putdata(pixel_data_for_base_tile)
+
+                # Scale the 8x8 temporary image to its final size within the supertile
+                try:
+                    pil_scaled_base_tile = pil_temp_base_tile.resize(
+                        (final_scaled_base_tile_w, final_scaled_base_tile_h),
+                        Image.Resampling.NEAREST
+                    )
+                except ValueError as e_resize: # e.g. if final_scaled_base_tile_w/h are zero
+                    self.debug(f"[DEBUG] Error resizing base tile in supertile {supertile_index}: {e_resize}")
+                    pil_scaled_base_tile = Image.new('RGB', (final_scaled_base_tile_w, final_scaled_base_tile_h), INVALID_TILE_COLOR)
+
+
+                # Calculate paste position (top-left) for this scaled base tile
+                # Use floating point scaled_base_tile_w/h for paste position calculation
+                # then round for the final integer paste coordinates.
+                paste_x = round(c_st_def * scaled_base_tile_w)
+                paste_y = round(r_st_def * scaled_base_tile_h)
+
+                pil_supertile_image.paste(pil_scaled_base_tile, (paste_x, paste_y))
+
+        self.map_render_cache[cache_key] = pil_supertile_image
+        return pil_supertile_image
 
     def _handle_map_scroll_event(self, event=None):
         # This method is called by scrollbar interactions.
@@ -9786,6 +9655,187 @@ class TileEditorApp:
         else:
             # No unsaved changes, quit directly
             self.root.destroy()
+
+    def _on_palette_pane_configure_for_redraw_only(self, event=None):
+        # Called when the palette pane in the map editor is resized.
+        # Solely responsible for debouncing the redraw of its content (map_supertile_selector_canvas).
+        
+        current_pane_event_width = getattr(event, 'width', 'N/A') # Get width if event is provided
+        self.debug(f"[DEBUG] _on_palette_pane_configure_for_redraw_only: Event (width={current_pane_event_width}). Scheduling selector redraw.")
+
+        if hasattr(self, '_palette_pane_resize_timer') and self._palette_pane_resize_timer is not None:
+            try:
+                self.root.after_cancel(self._palette_pane_resize_timer)
+            except tk.TclError: pass 
+        
+        if not hasattr(self, '_palette_pane_resize_timer'): 
+            self._palette_pane_resize_timer = None
+            
+        self._palette_pane_resize_timer = self.root.after(100, self._redraw_map_supertile_selector_debounced)
+        # self.debug(f"[DEBUG] === _on_palette_pane_configure_for_redraw_only END ===") # Optional: reduce log noise
+
+    def _redraw_map_supertile_selector_debounced(self):
+        # Actual redraw function called by the debouncer.
+        self._palette_pane_resize_timer = None # Clear timer ID
+        if hasattr(self, 'map_supertile_selector_canvas') and \
+           self.map_supertile_selector_canvas.winfo_exists():
+            self.debug("[DEBUG] Palette pane configured, redrawing map_supertile_selector_canvas.")
+            self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
+        else:
+            self.debug("[DEBUG] Palette pane configured, but map_supertile_selector_canvas not ready/exists.")
+
+    def _enforce_palette_min_width_on_release(self, event=None):
+        # Called on ButtonRelease-1 on the PanedWindow.
+        # Checks if the palette pane is too small and corrects sash if needed.
+        self.debug(f"\n[DEBUG] === _enforce_palette_min_width_on_release START ===")
+        
+        palette_pane_widget = getattr(self, 'map_editor_palette_pane_container', None)
+        paned_window_widget = getattr(self, 'map_paned_window', None)
+
+        if not paned_window_widget or not paned_window_widget.winfo_exists() or \
+           not palette_pane_widget or not palette_pane_widget.winfo_exists():
+            self.debug("[DEBUG] EnforceMinOnRelease: Required widgets missing. Aborting.")
+            self.debug("[DEBUG] === _enforce_palette_min_width_on_release END (widgets missing) ===")
+            return
+
+        try:
+            # Give Tkinter a moment to settle sizes after drag release, then check
+            # This 'after' helps ensure winfo_width() is up-to-date.
+            self.root.after(10, self._do_check_and_enforce_palette_min_width) 
+            
+        except Exception as e: 
+            self.debug(f"[DEBUG] Unexpected error scheduling enforcement check: {e}")
+        
+        self.debug(f"[DEBUG] === _enforce_palette_min_width_on_release END (check scheduled) ===")
+
+    def _do_check_and_enforce_palette_min_width(self):
+        # Actual logic to check and enforce, called after a short delay from ButtonRelease
+        self.debug(f"\n[DEBUG] --- _do_check_and_enforce_palette_min_width ---")
+
+        map_pane_widget = getattr(self, 'map_editor_map_pane_container', None) # Left pane
+        palette_pane_widget = getattr(self, 'map_editor_palette_pane_container', None) # Right pane
+        paned_window_widget = getattr(self, 'map_paned_window', None)
+
+        if not paned_window_widget or not paned_window_widget.winfo_exists() or \
+           not palette_pane_widget or not palette_pane_widget.winfo_exists() or \
+           not map_pane_widget or not map_pane_widget.winfo_exists(): # Check map_pane_widget too
+            self.debug("[DEBUG] DoCheckEnforce: Required widgets missing. Aborting.")
+            return
+
+        try:
+            current_palette_pane_actual_width = palette_pane_widget.winfo_width()
+            current_map_pane_actual_width = map_pane_widget.winfo_width() # Get current map pane width
+            paned_window_total_width = paned_window_widget.winfo_width()
+            sash_thickness_approx = 8 # Approximation for sash
+            
+            self.debug(f"[DEBUG] DoCheckEnforce: Current PalettePaneW={current_palette_pane_actual_width}, MapPaneW={current_map_pane_actual_width}, TotalPW={paned_window_total_width}")
+
+            # --- Calculate Minimum for Right Pane (Palette) ---
+            padding_for_min_calc = 1 
+            one_supertile_item_w = (self.supertile_grid_width * TILE_WIDTH)
+            min_canvas_content_width_palette = (1 * one_supertile_item_w) + (1 + 1) * padding_for_min_calc 
+            min_canvas_content_width_palette = max(32, min_canvas_content_width_palette)
+            frame_and_internal_padding_approx_palette = 15 
+            min_total_palette_pane_width = min_canvas_content_width_palette + frame_and_internal_padding_approx_palette
+            self.debug(f"[DEBUG] DoCheckEnforce: Min total palette pane width required: {min_total_palette_pane_width}")
+
+            min_total_map_pane_width = 400 # Approximate minimum width for map controls to be usable
+            self.debug(f"[DEBUG] DoCheckEnforce: Min total map (left) pane width required: {min_total_map_pane_width}")
+
+            sash_pos_for_palette_min = paned_window_total_width - min_total_palette_pane_width - sash_thickness_approx
+            sash_pos_for_map_min = min_total_map_pane_width # Sash pos is width of left pane
+
+            target_sash_0_pos = paned_window_widget.sashpos(0) # Get current proposed position
+            corrected_sash_0_pos = target_sash_0_pos # Start with current
+
+            correction_needed = False
+
+            # Check if palette is too small
+            if current_palette_pane_actual_width < min_total_palette_pane_width:
+                self.debug(f"[DEBUG] DoCheckEnforce: Palette pane too small ({current_palette_pane_actual_width} < {min_total_palette_pane_width}).")
+                # Try to move sash left to give palette its min width
+                corrected_sash_0_pos = sash_pos_for_palette_min
+                correction_needed = True
+            
+            # Check if map area is too small, potentially overriding previous correction
+            # (width of left pane is sash_pos)
+            if corrected_sash_0_pos < min_total_map_pane_width:
+                self.debug(f"[DEBUG] DoCheckEnforce: Map pane would be too small ({corrected_sash_0_pos} < {min_total_map_pane_width}).")
+                corrected_sash_0_pos = min_total_map_pane_width
+                correction_needed = True # Even if palette was fine, map might now need adjustment
+
+            # Final sanity check: ensure sash is within paned window bounds
+            # (e.g., if total window is smaller than sum of both minimums + sash)
+            corrected_sash_0_pos = max(0, corrected_sash_0_pos) # Cannot be less than 0
+            corrected_sash_0_pos = min(paned_window_total_width - sash_thickness_approx, corrected_sash_0_pos) # Cannot be more than total width
+
+            self.debug(f"[DEBUG] DoCheckEnforce: CurrentSash0={target_sash_0_pos}, CorrectedSash0AfterChecks={corrected_sash_0_pos}")
+
+            if correction_needed and abs(target_sash_0_pos - corrected_sash_0_pos) > 2: # Only if a meaningful change was calculated
+                self.debug(f"[DEBUG] DoCheckEnforce: Applying sash correction. Setting sashpos(0) to: {corrected_sash_0_pos}")
+                try:
+                    paned_window_widget.sashpos(0, corrected_sash_0_pos)
+                except tk.TclError as e_sash:
+                    self.debug(f"[DEBUG] DoCheckEnforce: TclError setting sashpos: {e_sash}")
+            else:
+                self.debug(f"[DEBUG] DoCheckEnforce: No sash correction needed or change too small.")
+        
+        except tk.TclError as e:
+            self.debug(f"[DEBUG] TclError in _do_check_and_enforce_palette_min_width: {e}")
+        except Exception as e: 
+            self.debug(f"[DEBUG] Unexpected error in _do_check_and_enforce_palette_min_width: {e}")
+        self.debug(f"[DEBUG] --- _do_check_and_enforce_palette_min_width END ---")
+
+    def _on_main_window_configure(self, event=None):
+        # Called when the main application window is resized or moved.
+        # We are interested in resizes that might affect PanedWindow pane minimums.
+
+        # Check if the event is for the root window itself, not a child widget configure event
+        # that might bubble up (though less common for root).
+        # event.widget is the widget that received the event.
+        if event and event.widget != self.root:
+            return # Only process configure events for the root window itself
+
+        self.debug(f"[DEBUG] _on_main_window_configure: Main window resized/moved (w={self.root.winfo_width()}, h={self.root.winfo_height()}).")
+
+        # Debounce the call to check and enforce pane minimums
+        if hasattr(self, '_main_window_configure_timer') and self._main_window_configure_timer is not None:
+            try:
+                self.root.after_cancel(self._main_window_configure_timer)
+            except tk.TclError: pass
+        
+        # Schedule the check. The same _do_check_and_enforce_palette_min_width can be used.
+        # This delay allows multiple Configure events during a drag-resize of the main window to pass.
+        self._main_window_configure_timer = self.root.after(300, self._do_check_and_enforce_palette_min_width_from_main_resize)
+
+    def _do_check_and_enforce_palette_min_width_from_main_resize(self):
+        self.debug("[DEBUG] --- Main window resize: performing debounced pane minimum check ---")
+        if hasattr(self, '_main_window_configure_timer'): # Clear specific timer
+            self._main_window_configure_timer = None
+        
+        # Call the existing enforcement logic
+        # This function will check if the map editor tab is active implicitly
+        # by checking if self.map_paned_window exists and is valid.
+        # If map editor tab is not active, map_paned_window might not be fully up-to-date
+        # or its winfo_width might be small if it's hidden.
+        # The checks within _do_check_and_enforce_palette_min_width for widget existence are important.
+        
+        # Only proceed if the map editor tab is currently visible,
+        # as PanedWindow dimensions are only reliable then.
+        is_map_tab_active = False
+        if self.notebook and self.notebook.winfo_exists():
+            try:
+                selected_tab_widget = self.notebook.nametowidget(self.notebook.select())
+                if selected_tab_widget == self.tab_map_editor:
+                    is_map_tab_active = True
+            except tk.TclError: # select() might fail if no tab, or nametowidget
+                pass
+        
+        if is_map_tab_active:
+            self.debug("[DEBUG] Main resize: Map tab is active, calling _do_check_and_enforce_palette_min_width.")
+            self._do_check_and_enforce_palette_min_width()
+        else:
+            self.debug("[DEBUG] Main resize: Map tab not active, skipping pane minimum enforcement.")
 
 # --- Main Execution ---
 if __name__ == "__main__":
