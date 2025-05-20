@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.37"
+APP_VERSION = "0.0.38"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -3417,10 +3417,6 @@ class TileEditorApp:
             return False
 
     def save_tileset(self, filepath=None):
-        """Saves the current tileset data to a binary file.
-        Returns True on success, False on failure/cancel.
-        If filepath is None, prompts the user.
-        """
         global num_tiles_in_set, tileset_patterns, tileset_colors
         save_path = filepath
         if not save_path:
@@ -3434,47 +3430,69 @@ class TileEditorApp:
 
         try:
             with open(save_path, "wb") as f:
-                # Write number of tiles
-                num_byte = struct.pack("B", num_tiles_in_set)
+                # Determine the actual number of tiles to save based on num_tiles_in_set
+                # This should be the count of active tiles, e.g., if num_tiles_in_set is 1, we save 1 tile.
+                # If num_tiles_in_set is 256, we save 256 tiles.
+                tiles_to_write_count = num_tiles_in_set
+
+                # Write number of tiles (0-255 in file, 0 means 256 tiles)
+                header_byte_value = 0 if tiles_to_write_count == 256 else tiles_to_write_count
+                if not (0 <= header_byte_value <= 255): # Should not happen if MAX_TILES is 256
+                    self.debug(f"[DEBUG] save_tileset: Invalid header_byte_value {header_byte_value} for num_tiles_in_set {tiles_to_write_count}")
+                    raise ValueError(f"Calculated header byte value {header_byte_value} is out of 0-255 range.")
+                
+                num_byte = struct.pack("B", header_byte_value)
                 f.write(num_byte)
-                # Write data for each tile
-                for i in range(num_tiles_in_set):
-                    # Write pattern data (8 bytes)
+
+                # --- Write ALL pattern data first ---
+                for i in range(tiles_to_write_count): # Iterate up to the actual number of tiles
+                    if i >= len(tileset_patterns): # Safety break if data structure is smaller
+                        self.debug(f"[DEBUG] save_tileset: Warning - num_tiles_in_set ({tiles_to_write_count}) > len(tileset_patterns). Stopping pattern write at tile {i}.")
+                        break
                     pattern = tileset_patterns[i]
                     for r in range(TILE_HEIGHT):
                         byte_val = 0
-                        row_pattern = pattern[r]
-                        for c in range(TILE_WIDTH):
-                            if row_pattern[c] == 1:
-                                byte_val = byte_val | (1 << (7 - c))
+                        if r < len(pattern): # Ensure row exists
+                            row_pattern = pattern[r]
+                            for c in range(TILE_WIDTH):
+                                if c < len(row_pattern) and row_pattern[c] == 1: # Ensure col exists
+                                    byte_val = byte_val | (1 << (7 - c))
                         pattern_byte = struct.pack("B", byte_val)
                         f.write(pattern_byte)
-                    # Write color data (8 bytes)
+                
+                # --- Then, write ALL color data ---
+                for i in range(tiles_to_write_count): # Iterate up to the actual number of tiles
+                    if i >= len(tileset_colors): # Safety break
+                        self.debug(f"[DEBUG] save_tileset: Warning - num_tiles_in_set ({tiles_to_write_count}) > len(tileset_colors). Stopping color write at tile {i}.")
+                        break
                     colors = tileset_colors[i]
                     for r in range(TILE_HEIGHT):
-                        fg_idx, bg_idx = colors[r]
-                        color_byte_val = ((fg_idx & 0x0F) << 4) | (bg_idx & 0x0F)
+                        fg_idx, bg_idx = (WHITE_IDX, BLACK_IDX) # Default if row missing
+                        if r < len(colors): # Ensure color data for row exists
+                           fg_idx, bg_idx = colors[r]
+                        
+                        # Ensure indices are valid palette indices (0-15)
+                        safe_fg_idx = max(0, min(15, fg_idx))
+                        safe_bg_idx = max(0, min(15, bg_idx))
+
+                        color_byte_val = ((safe_fg_idx & 0x0F) << 4) | (safe_bg_idx & 0x0F)
                         color_byte = struct.pack("B", color_byte_val)
                         f.write(color_byte)
-            # Show success message ONLY if called directly by user
+
             if filepath is None:
                 messagebox.showinfo(
                     "Save Successful",
                     f"Tileset saved successfully to {os.path.basename(save_path)}",
                 )
-            return True  # Indicate success
+            return True
         except Exception as e:
             messagebox.showerror(
                 "Save Tileset Error",
                 f"Failed to save tileset file '{os.path.basename(save_path)}':\n{e}",
             )
-            return False  # Indicate failure
+            return False
 
     def open_tileset(self, filepath=None):
-        """Loads tileset data from a binary file.
-        Returns True on success, False on failure/cancel.
-        If filepath is None, prompts the user.
-        """
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set, selected_tile_for_supertile
         load_path = filepath
         if not load_path:
@@ -3487,52 +3505,84 @@ class TileEditorApp:
 
         try:
             with open(load_path, "rb") as f:
-                num_tiles_byte = f.read(1)
-                if not num_tiles_byte:
-                    raise ValueError("File empty or missing tile count byte.")
-                loaded_num_tiles = struct.unpack("B", num_tiles_byte)[0]
-                if not (1 <= loaded_num_tiles <= MAX_TILES):
+                num_tiles_header_byte_val = f.read(1)
+                if not num_tiles_header_byte_val:
+                    raise ValueError("File empty or missing tile count header byte.")
+                
+                header_value = struct.unpack("B", num_tiles_header_byte_val)[0]
+                loaded_num_tiles = 256 if header_value == 0 else header_value
+
+                if not (1 <= loaded_num_tiles <= MAX_TILES): # Check against actual count
                     raise ValueError(
-                        f"Invalid tile count in file: {loaded_num_tiles} (must be 1-{MAX_TILES})"
+                        f"Invalid tile count derived from file: {loaded_num_tiles} (must be 1-{MAX_TILES})"
                     )
 
+                # Initialize temporary data structures for loading
                 new_patterns = [
                     [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
-                    for _i in range(MAX_TILES)
+                    for _i in range(MAX_TILES) # Initialize for max possible, will be used up to loaded_num_tiles
                 ]
                 new_colors = [
                     [(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)]
                     for _i in range(MAX_TILES)
                 ]
 
+                bytes_per_tile_pattern = TILE_HEIGHT # Each pattern row is 1 byte, TILE_HEIGHT rows
+                total_pattern_bytes_to_read = loaded_num_tiles * bytes_per_tile_pattern
+                
+                all_pattern_data_bytes = f.read(total_pattern_bytes_to_read)
+                if len(all_pattern_data_bytes) < total_pattern_bytes_to_read:
+                    raise EOFError(f"EOF while reading pattern data block. Expected {total_pattern_bytes_to_read}, got {len(all_pattern_data_bytes)}.")
+
+                # --- Parse ALL pattern data ---
+                current_byte_offset_pattern = 0
                 for i in range(loaded_num_tiles):
-                    pattern_bytes = f.read(
-                        TILE_HEIGHT
-                    )  
-                    if len(pattern_bytes) < TILE_HEIGHT:
-                        raise EOFError(f"EOF pattern T:{i}")
-                    for r_idx in range(TILE_HEIGHT): # Renamed r
-                        byte_val = pattern_bytes[r_idx]  
+                    # Extract 8 bytes for the current tile's pattern
+                    tile_pattern_bytes = all_pattern_data_bytes[current_byte_offset_pattern : current_byte_offset_pattern + bytes_per_tile_pattern]
+                    if len(tile_pattern_bytes) < bytes_per_tile_pattern: # Should not happen if total read was okay
+                        self.debug(f"[DEBUG] open_tileset: Unexpected short read for tile {i} pattern block.")
+                        # Fill with default pattern or skip, for now, it will result in a blank tile due to initialization
+                        current_byte_offset_pattern += len(tile_pattern_bytes)
+                        continue 
+                        
+                    for r_idx in range(TILE_HEIGHT):
+                        byte_val = tile_pattern_bytes[r_idx]
                         for c in range(TILE_WIDTH):
                             pixel_bit = (byte_val >> (7 - c)) & 1
                             new_patterns[i][r_idx][c] = pixel_bit
-                    color_bytes = f.read(TILE_HEIGHT)  
-                    if len(color_bytes) < TILE_HEIGHT:
-                        raise EOFError(f"EOF color T:{i}")
-                    for r_idx in range(TILE_HEIGHT): # Renamed r
-                        byte_val = color_bytes[r_idx]
+                    current_byte_offset_pattern += bytes_per_tile_pattern
+                
+                bytes_per_tile_colors = TILE_HEIGHT # Each color row is 1 byte
+                total_color_bytes_to_read = loaded_num_tiles * bytes_per_tile_colors
+
+                all_color_data_bytes = f.read(total_color_bytes_to_read)
+                if len(all_color_data_bytes) < total_color_bytes_to_read:
+                    raise EOFError(f"EOF while reading color data block. Expected {total_color_bytes_to_read}, got {len(all_color_data_bytes)}.")
+
+                # --- Parse ALL color data ---
+                current_byte_offset_colors = 0
+                for i in range(loaded_num_tiles):
+                    tile_color_bytes = all_color_data_bytes[current_byte_offset_colors : current_byte_offset_colors + bytes_per_tile_colors]
+                    if len(tile_color_bytes) < bytes_per_tile_colors:
+                        self.debug(f"[DEBUG] open_tileset: Unexpected short read for tile {i} color block.")
+                        current_byte_offset_colors += len(tile_color_bytes)
+                        continue
+
+                    for r_idx in range(TILE_HEIGHT):
+                        byte_val = tile_color_bytes[r_idx]
                         fg_idx = (byte_val >> 4) & 0x0F
                         bg_idx = byte_val & 0x0F
                         if not (0 <= fg_idx < 16 and 0 <= bg_idx < 16):
-                            print(
-                                f"Warning: Invalid palette index T:{i} R:{r_idx} ({fg_idx},{bg_idx}). Using default."
+                            self.debug(
+                                f"Warning: Invalid palette index T:{i} R:{r_idx} ({fg_idx},{bg_idx}) in loaded file. Using default."
                             )
                             new_colors[i][r_idx] = (WHITE_IDX, BLACK_IDX)
                         else:
                             new_colors[i][r_idx] = (fg_idx, bg_idx)
+                    current_byte_offset_colors += bytes_per_tile_colors
 
             confirm = True
-            if filepath is None:  
+            if filepath is None:
                 confirm = messagebox.askokcancel(
                     "Load Tileset",
                     f"Replace current tileset with {loaded_num_tiles} tile(s) from this file?",
@@ -3540,11 +3590,21 @@ class TileEditorApp:
 
             if confirm:
                 if self._clear_marked_unused(trigger_redraw=False):
-                    pass # Full redraw will happen later
+                    pass
                 
-                tileset_patterns = new_patterns
-                tileset_colors = new_colors
-                num_tiles_in_set = loaded_num_tiles
+                # Assign loaded data to global variables
+                # We only need to update the portion of tileset_patterns/colors up to loaded_num_tiles
+                # The rest of the MAX_TILES entries should remain as their default initialized values.
+                for i in range(loaded_num_tiles):
+                    tileset_patterns[i] = new_patterns[i]
+                    tileset_colors[i] = new_colors[i]
+                # If loaded_num_tiles < MAX_TILES, ensure remaining slots are blank/default
+                # (This is already handled by how new_patterns/colors are initialized and assigned,
+                #  and how num_tiles_in_set will be set. The actual global lists tileset_patterns/colors
+                #  are always MAX_TILES long).
+
+                num_tiles_in_set = loaded_num_tiles # This is the crucial part for active tile count
+                
                 current_tile_index = max(
                     0, min(current_tile_index, num_tiles_in_set - 1)
                 )
@@ -3552,11 +3612,11 @@ class TileEditorApp:
                     0, min(selected_tile_for_supertile, num_tiles_in_set - 1)
                 )
 
-                self.clear_all_caches()  
+                self.clear_all_caches()
                 self.invalidate_minimap_background_cache()
                 self.update_all_displays(changed_level="all")
-                self._update_editor_button_states()  
-                self._update_edit_menu_state()  
+                self._update_editor_button_states()
+                self._update_edit_menu_state()
 
                 if filepath is None:
                     self.notebook.select(self.tab_tile_editor)
@@ -3566,9 +3626,9 @@ class TileEditorApp:
                     )
                 if filepath is None:
                     self._mark_project_modified()
-                return True  
+                return True
             else:
-                return False  
+                return False
 
         except FileNotFoundError:
             messagebox.showerror("Open Error", f"File not found:\n{load_path}")

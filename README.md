@@ -318,21 +318,30 @@ All project assets are saved in custom binary file formats. Multi-byte numerical
         *   Byte 2: Green component (value 0-7)
         *   Byte 3: Blue component (value 0-7)
 
-### 2. Tileset File (`.SC4Tiles`)
+### 2. Tileset File (`.SC4Tiles`) - from v0.0.38 on
 
 *   **Purpose:** Stores definitions for 8x8 pixel tiles, including their pixel patterns and per-row color attributes.
 *   **Structure:**
     *   **Header (1 byte):**
-        *   `num_tiles_in_set`: The number of tiles defined in this file (value 0-255. A value of 0 represents 256 tiles).
-    *   **Tile Data Blocks (repeated `num_tiles_in_set` times):**
-        *   Each tile block is 16 bytes:
-            *   **Pattern Data (8 bytes):** One byte per row of the 8x8 tile.
+        *   `num_tiles_in_file_header`: A single byte representing the number of tiles defined in the file.
+            *   A value of `0` indicates 256 tiles.
+            *   Values `1` through `255` represent that exact number of tiles.
+            *   *(The application internally uses `num_tiles_in_set` which is the actual count, 1-256).*
+    *   **All Pattern Data Block (Total: `actual_num_tiles` * 8 bytes):**
+        *   This block contains the pattern data for all tiles, stored consecutively.
+        *   For each tile (from tile 0 to tile `actual_num_tiles - 1`):
+            *   **Pattern Data (8 bytes):** One byte per row of the 8x8 tile (total 8 bytes per tile).
                 *   Each bit within a byte represents a pixel (MSB = leftmost pixel).
                 *   `1` = foreground pixel, `0` = background pixel.
-            *   **Color Attribute Data (8 bytes):** One byte per row of the 8x8 tile.
+    *   **All Color Attribute Data Block (Total: `actual_num_tiles` * 8 bytes):**
+        *   This block contains the color attribute data for all tiles, stored consecutively, immediately following the "All Pattern Data Block".
+        *   For each tile (from tile 0 to tile `actual_num_tiles - 1`):
+            *   **Color Attribute Data (8 bytes):** One byte per row of the 8x8 tile (total 8 bytes per tile).
                 *   Each byte defines the foreground and background palette indices for that row:
                     *   High Nibble (bits 7-4): Foreground palette index (0-15).
                     *   Low Nibble (bits 3-0): Background palette index (0-15).
+
+*(Where `actual_num_tiles` is 256 if `num_tiles_in_file_header` is 0, otherwise `actual_num_tiles` is equal to `num_tiles_in_file_header`.)*
 
 ### 3. Supertile Definition File (`.SC4Super`)
 
