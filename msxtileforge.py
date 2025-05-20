@@ -9631,35 +9631,40 @@ class TileEditorApp:
 
 
     def _pick_importer_color(self, swatch_type):
-        """Handles click on an importer FG/BG swatch to choose a color from the main palette."""
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog) or \
            not self.active_msx_palette:
             return
 
         dialog = self.rom_import_dialog
         
-        # Create a temporary Toplevel for color picking
+        # Create a standard Toplevel window for the picker
         picker_win = tk.Toplevel(dialog)
         picker_win.title(f"Select Importer {'FG' if swatch_type == 'fg' else 'BG'} Color")
-        picker_win.transient(dialog)
-        picker_win.grab_set()
+        picker_win.transient(dialog) # Make it a "child" of the dialog
+        picker_win.grab_set()      # Modal behavior
         picker_win.resizable(False, False)
 
-        picker_canvas_size = 4 * (PALETTE_SQUARE_SIZE + 2) # Use same size as tile editor palette
+        # Canvas for color swatches
+        picker_canvas_size_w = 4 * (PALETTE_SQUARE_SIZE + 2) + 2
+        picker_canvas_size_h = 4 * (PALETTE_SQUARE_SIZE + 2) + 2
+        
         picker_canvas = tk.Canvas(picker_win, 
-                                  width=picker_canvas_size, 
-                                  height=picker_canvas_size, 
+                                  width=picker_canvas_size_w, 
+                                  height=picker_canvas_size_h, 
                                   borderwidth=0, highlightthickness=0)
         picker_canvas.pack(padx=5, pady=5)
 
-        # Store selected index from picker
         selected_palette_index_from_picker = tk.IntVar(value=-1) 
 
         def on_palette_color_click(event, index_clicked):
             selected_palette_index_from_picker.set(index_clicked)
-            picker_win.destroy()
+            picker_win.destroy() # This is the primary way it should close
 
-        for i in range(len(self.active_msx_palette)): # Iterate up to 16 colors
+        # Bind Escape to close the picker window
+        picker_win.bind("<Escape>", lambda e: picker_win.destroy())
+
+        # Populate the picker canvas with color swatches
+        for i in range(len(self.active_msx_palette)): 
             row, col = divmod(i, 4)
             x1 = col * (PALETTE_SQUARE_SIZE + 2) + 2
             y1 = row * (PALETTE_SQUARE_SIZE + 2) + 2
@@ -9667,26 +9672,65 @@ class TileEditorApp:
             y2 = y1 + PALETTE_SQUARE_SIZE
             color_hex = self.active_msx_palette[i]
             
-            rect_id = picker_canvas.create_rectangle(x1, y1, x2, y2, fill=color_hex, outline="grey", width=1)
+            rect_id = picker_canvas.create_rectangle(x1, y1, x2, y2, fill=color_hex, outline="grey", width=1, tags=f"picker_swatch_{i}")
             picker_canvas.tag_bind(rect_id, "<Button-1>", 
                                    lambda e, idx=i: on_palette_color_click(e, idx))
+            # Optional: Add hover effects back if desired, but keep it simple first
+            # picker_canvas.tag_bind(rect_id, "<Enter>", lambda e, r=rect_id: picker_canvas.itemconfig(r, outline="yellow", width=2))
+            # picker_canvas.tag_bind(rect_id, "<Leave>", lambda e, r=rect_id: picker_canvas.itemconfig(r, outline="grey", width=1))
         
-        # Center picker window
-        picker_win.update_idletasks()
-        dialog_x = dialog.winfo_x()
-        dialog_y = dialog.winfo_y()
-        dialog_w = dialog.winfo_width()
-        # dialog_h = dialog.winfo_height() # Not needed for this centering
-        picker_w = picker_win.winfo_reqwidth()
-        picker_h = picker_win.winfo_reqheight()
-        # Position near the swatch, or center if too complex
-        # For now, simple centering on dialog:
-        x_pos = dialog_x + (dialog_w // 2) - (picker_w // 2)
-        y_pos = dialog_y + 100 # Slightly offset from top
-        picker_win.geometry(f"+{x_pos}+{y_pos}")
+        # --- Positioning Logic ---
+        picker_win.update_idletasks() # Calculate picker's required size
 
-        picker_win.wait_window() # Wait for picker to close
+        clicked_swatch_widget = None
+        if swatch_type == 'fg':
+            clicked_swatch_widget = getattr(dialog, 'importer_fg_swatch', None)
+        elif swatch_type == 'bg':
+            clicked_swatch_widget = getattr(dialog, 'importer_bg_swatch', None)
 
+        if clicked_swatch_widget and clicked_swatch_widget.winfo_exists():
+            dialog.update_idletasks() # Ensure main dialog geometry is current
+            
+            swatch_screen_x = clicked_swatch_widget.winfo_rootx()
+            swatch_screen_y = clicked_swatch_widget.winfo_rooty()
+            swatch_width = clicked_swatch_widget.winfo_width()
+            
+            target_x_pos = swatch_screen_x + swatch_width + 5 # Position to the right
+            target_y_pos = swatch_screen_y                     # Align top edges
+
+            picker_w = picker_win.winfo_width() 
+            picker_h = picker_win.winfo_height()
+            screen_w = picker_win.winfo_screenwidth()
+            screen_h = picker_win.winfo_screenheight()
+
+            # Adjust if off-screen (simplified boundary check)
+            if target_x_pos + picker_w > screen_w:
+                target_x_pos = swatch_screen_x - picker_w - 5 # Try left
+            if target_x_pos < 0: # Still off left, or was initially off left
+                 target_x_pos = 5 # Fallback to near left edge of screen
+            
+            if target_y_pos + picker_h > screen_h:
+                target_y_pos = screen_h - picker_h - 5 # Move up from bottom
+            if target_y_pos < 0:
+                target_y_pos = 5 # Fallback to near top edge of screen
+            
+            picker_win.geometry(f"+{target_x_pos}+{target_y_pos}")
+        else:
+            # Fallback: Center on the ROM importer dialog if swatch widget not found or other issue
+            self.debug("[DEBUG] _pick_importer_color: Swatch widget not found or error; using fallback centering.")
+            picker_win.update_idletasks()
+            dialog_x = dialog.winfo_rootx()
+            dialog_y = dialog.winfo_rooty()
+            dialog_w = dialog.winfo_width()
+            picker_w = picker_win.winfo_width()
+            x_pos = dialog_x + (dialog_w // 2) - (picker_w // 2)
+            y_pos = dialog_y + 50 # Offset slightly from dialog top
+            picker_win.geometry(f"+{max(0, x_pos)}+{max(0, y_pos)}") # Ensure on screen
+        
+        picker_win.focus_set()
+        picker_win.wait_window() # This blocks until picker_win is destroyed
+
+        # --- Post-picker logic (after it's closed) ---
         chosen_idx = selected_palette_index_from_picker.get()
         if 0 <= chosen_idx < len(self.active_msx_palette):
             changed_color = False
@@ -9701,7 +9745,7 @@ class TileEditorApp:
             
             if changed_color:
                 self._update_importer_color_swatches()
-                self._draw_rom_importer_canvas() # Redraw grid with new default unselected colors
+                self._draw_rom_importer_canvas()
 
     def confirm_quit(self):
         """Checks for unsaved changes and prompts user before quitting."""
