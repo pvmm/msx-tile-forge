@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.39"
+APP_VERSION = "0.0.40"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -3780,23 +3780,25 @@ class TileEditorApp:
             )
             return False
 
-    def open_supertiles(self, filepath=None):
-        global supertiles_data, num_supertiles, current_supertile_index, selected_supertile_for_map, num_tiles_in_set # Using globals
+    def open_supertiles(self, filepath=None, is_part_of_project_load=False): # Added is_part_of_project_load
+        global supertiles_data, num_supertiles, current_supertile_index, selected_supertile_for_map, num_tiles_in_set 
         load_path = filepath
         if not load_path:
-            load_path = filedialog.askopenfilename(
-                filetypes=[("MSX Supertiles", "*.SC4Super"), ("All Files", "*.*")],
-                title="Open Supertiles",
-            )
-        if not load_path:
-            return False
+            # Only ask for file if not part of project load and no path given
+            if not is_part_of_project_load:
+                load_path = filedialog.askopenfilename(
+                    filetypes=[("MSX Supertiles", "*.SC4Super"), ("All Files", "*.*")],
+                    title="Open Supertiles",
+                )
+            if not load_path: # If still no load_path (user cancelled or was project load with no path)
+                return False
 
         try:
             loaded_grid_width_from_file = 0
             loaded_grid_height_from_file = 0
             loaded_num_st_from_file = 0
             temp_supertiles_data_from_file = []
-            header_size_st_calc = 0 # To store the size of the count + dimension headers
+            header_size_st_calc = 0 
 
             try:
                 file_size_check = os.path.getsize(load_path)
@@ -3809,14 +3811,14 @@ class TileEditorApp:
                     raise ValueError("File empty or missing supertile count byte(s).")
                 
                 indicator_byte = struct.unpack("B", first_count_byte_val)[0]
-                header_size_st_calc += 1 # For the first count byte
+                header_size_st_calc += 1 
 
                 if indicator_byte == 0: 
                     count_bytes_short = f.read(2)
                     if len(count_bytes_short) < 2:
                         raise EOFError("EOF reading 2-byte supertile count after indicator.")
                     loaded_num_st_from_file = struct.unpack(">H", count_bytes_short)[0]
-                    header_size_st_calc += 2 # For the 2-byte short
+                    header_size_st_calc += 2 
                 else: 
                     loaded_num_st_from_file = indicator_byte
                 
@@ -3832,17 +3834,15 @@ class TileEditorApp:
                 
                 loaded_grid_width_from_file = struct.unpack("B", dim_w_byte)[0]
                 loaded_grid_height_from_file = struct.unpack("B", dim_h_byte)[0]
-                header_size_st_calc += 2 # For dimension bytes
+                header_size_st_calc += 2 
 
-                if not (1 <= loaded_grid_width_from_file <= 32 and 1 <= loaded_grid_height_from_file <= 32): # Assuming 0-dim is invalid if count > 0
+                if not (1 <= loaded_grid_width_from_file <= 32 and 1 <= loaded_grid_height_from_file <= 32):
                     if loaded_num_st_from_file == 0 and loaded_grid_width_from_file == 0 and loaded_grid_height_from_file == 0:
-                        pass # Allow 0x0 for 0 supertiles, if file format strictly allows it.
+                        pass 
                     else:
                         raise ValueError(f"Invalid supertile dimensions in file: {loaded_grid_width_from_file}x{loaded_grid_height_from_file}")
 
-                # Calculate expected sizes
                 tiles_per_definition_calc = loaded_grid_width_from_file * loaded_grid_height_from_file
-                # Data payload is 1 byte per tile index in the definition
                 expected_data_payload_size_st = loaded_num_st_from_file * tiles_per_definition_calc 
                 
                 expected_size_old_format_st = header_size_st_calc + expected_data_payload_size_st
@@ -3869,13 +3869,12 @@ class TileEditorApp:
                     self.debug(f"Info: Read and skipped {RESERVED_BYTES_COUNT} reserved bytes from supertile file.")
 
                 if loaded_num_st_from_file > 0:
-                    # Initialize temp_supertiles_data_from_file based on dimensions from the file
                     temp_supertiles_data_from_file = [
                         [[0 for _c in range(loaded_grid_width_from_file)] for _r in range(loaded_grid_height_from_file)]
                         for _st in range(loaded_num_st_from_file)
                     ]
                     
-                    bytes_per_definition_read = tiles_per_definition_calc # 1 byte per tile index
+                    bytes_per_definition_read = tiles_per_definition_calc 
 
                     for i in range(loaded_num_st_from_file):
                         st_bytes_read = f.read(bytes_per_definition_read)
@@ -3887,9 +3886,7 @@ class TileEditorApp:
                             for c_load in range(loaded_grid_width_from_file):
                                 tile_idx_read = st_bytes_read[byte_idx_val] 
                                 byte_idx_val += 1
-                                # Validate tile_idx_read against current project's num_tiles_in_set during actual application,
-                                # but here, just store what's in the file (0-255 range)
-                                if not (0 <= tile_idx_read <= 255): # Tile indices are bytes
+                                if not (0 <= tile_idx_read <= 255): 
                                     self.debug(f"Warning: Invalid Tile index byte {tile_idx_read} in Supertile {i} at [{r_load},{c_load}]. Resetting to 0.")
                                     temp_supertiles_data_from_file[i][r_load][c_load] = 0
                                 else:
@@ -3899,22 +3896,22 @@ class TileEditorApp:
                 if extra_data_check:
                     self.debug(f"Warning: Supertile file '{os.path.basename(load_path)}' contains additional unexpected data at the end.")
 
-            # --- End of file reading block ---
-
             confirm_load = True
-            if filepath is None:
+            # Only ask for overall confirmation if it's a standalone open and not part of project load
+            if not is_part_of_project_load and filepath is None: 
                 confirm_load = messagebox.askokcancel(
                     "Load Supertiles",
-                    f"Replace current supertiles with {loaded_num_st_from_file} definition(s) from this file?\n(Dimensions: {loaded_grid_width_from_file}W x {loaded_grid_height_from_file}H)",
+                    f"Replace current supertiles with {loaded_num_st_from_file} definition(s) from this file?\n(File Dimensions: {loaded_grid_width_from_file}W x {loaded_grid_height_from_file}H)",
                 )
 
             if confirm_load:
                 if self._clear_marked_unused(trigger_redraw=False):
-                    pass # Redraw handled by update_all_displays
+                    pass 
 
-                # Check for dimension mismatch before applying data
-                if self.supertile_grid_width != loaded_grid_width_from_file or \
-                   self.supertile_grid_height != loaded_grid_height_from_file:
+                # Dimension mismatch confirmation only for standalone open
+                if not is_part_of_project_load and \
+                   (self.supertile_grid_width != loaded_grid_width_from_file or \
+                    self.supertile_grid_height != loaded_grid_height_from_file):
                     dim_confirm = messagebox.askokcancel(
                         "Dimension Mismatch",
                         f"Supertile dimensions in file ({loaded_grid_width_from_file}x{loaded_grid_height_from_file}) "
@@ -3923,42 +3920,51 @@ class TileEditorApp:
                         icon="warning"
                     )
                     if not dim_confirm:
-                        return False # User cancelled due to dimension mismatch
-                    # If confirmed, update project dimensions
+                        return False 
+                
+                # This block now executes if:
+                # 1. It's part of project load (is_part_of_project_load=True), OR
+                # 2. It's standalone, and user confirmed overall load, AND (if dimensions differed) user confirmed dimension change.
+                # It means we are committed to adopting the file's dimensions if they are different.
+                if self.supertile_grid_width != loaded_grid_width_from_file or \
+                   self.supertile_grid_height != loaded_grid_height_from_file:
+                    self.debug(f"[DEBUG] open_supertiles: Adopting ST dimensions from file: {loaded_grid_width_from_file}x{loaded_grid_height_from_file}")
                     self.supertile_grid_width = loaded_grid_width_from_file
                     self.supertile_grid_height = loaded_grid_height_from_file
-                    # This dimension change requires re-init of supertiles_data potentially, and cache clears
+                    # Re-initialize global supertiles_data to the new dimensions, clearing old content.
+                    # MAX_SUPERTILES is the capacity.
                     supertiles_data = [
                         [[0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)]
-                        for _st_init in range(MAX_SUPERTILES)
-                    ] # Re-initialize global to new dimensions
-                    self.clear_all_caches() # Includes ST image and map render
-                    self._reconfigure_supertile_definition_canvas()
-
+                        for _st_init in range(MAX_SUPERTILES) 
+                    ]
+                    self.clear_all_caches() # Critical after dimension change
+                    self._reconfigure_supertile_definition_canvas() # Update definition canvas size
+                    # Note: map data is not "converted" here. It will be re-read by open_map if part of project load.
+                    # If standalone, the existing map will now be interpreted with new ST cell sizes.
+                
                 # Apply loaded data
                 for i in range(loaded_num_st_from_file):
-                    if i < MAX_SUPERTILES:
-                        # Ensure the loaded definition is compatible or adapt it
-                        # For now, direct assignment if dimensions match (or were just matched)
+                    if i < MAX_SUPERTILES: # Ensure we don't write past allocated global list
+                        # temp_supertiles_data_from_file was created with file's dimensions
+                        # And supertiles_data was just re-initialized to these same dimensions if they changed.
                         supertiles_data[i] = temp_supertiles_data_from_file[i]
-                    else: break
+                    else: break # Should not happen if loaded_num_st_from_file <= MAX_SUPERTILES
                 
+                # If fewer supertiles were loaded than currently exist in project (e.g. standalone load of smaller set)
                 if num_supertiles > loaded_num_st_from_file:
                     for i in range(loaded_num_st_from_file, num_supertiles):
-                        if i < MAX_SUPERTILES:
+                        if i < MAX_SUPERTILES: # Ensure index is valid
                              supertiles_data[i] = [[0]*self.supertile_grid_width for _r_clear in range(self.supertile_grid_height)]
 
                 num_supertiles = loaded_num_st_from_file
-                if num_supertiles == 0 and MAX_SUPERTILES > 0 :
+                if num_supertiles == 0 and MAX_SUPERTILES > 0 : # Ensure at least one ST if max allows
                     num_supertiles = 1 
-                    if supertiles_data:
+                    if supertiles_data: # Should exist if MAX_SUPERTILES > 0
                          supertiles_data[0] = [[0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)]
-                    # (else block for empty supertiles_data if MAX_SUPERTILES>0 is complex and assumes prior errors)
-
+                
                 current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1))
                 selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
                 
-                # Validate tile indices within loaded supertiles against current num_tiles_in_set
                 max_valid_tile_idx = num_tiles_in_set - 1
                 for st_idx_val in range(num_supertiles):
                     for r_val in range(self.supertile_grid_height):
@@ -3968,7 +3974,6 @@ class TileEditorApp:
                                            f"which is out of bounds for current tileset size ({num_tiles_in_set}). Resetting to 0.")
                                 supertiles_data[st_idx_val][r_val][c_val] = 0
 
-
                 self.supertile_image_cache.clear() 
                 self.map_render_cache.clear()      
                 self.invalidate_minimap_background_cache()
@@ -3976,9 +3981,9 @@ class TileEditorApp:
                 self.update_all_displays(changed_level="all")
                 self._update_editor_button_states()
                 self._update_edit_menu_state()
-                self._update_supertile_rotate_button_state() # Update based on potentially new ST dimensions
+                self._update_supertile_rotate_button_state() 
 
-                if filepath is None:
+                if not is_part_of_project_load and filepath is None: # Message for standalone interactive open
                     try:
                         if self.notebook and self.notebook.winfo_exists() and self.tab_supertile_editor.winfo_exists():
                             self.notebook.select(self.tab_supertile_editor)
@@ -3988,11 +3993,13 @@ class TileEditorApp:
                         "Load Successful",
                         f"Loaded {num_supertiles} supertiles ({self.supertile_grid_width}x{self.supertile_grid_height}) from {os.path.basename(load_path)}",
                     )
-                if filepath is None: # Only mark modified if opened interactively
+                
+                # Mark modified only for standalone interactive open, not for project load (project load handles its own flag)
+                if not is_part_of_project_load and filepath is None: 
                     self._mark_project_modified()
                 return True
-            else: # User cancelled confirmation dialog
-                return False
+            else: 
+                return False # User cancelled confirmation dialog
 
         except FileNotFoundError:
             messagebox.showerror("Open Error", f"File not found:\n{load_path}")
@@ -4377,32 +4384,27 @@ class TileEditorApp:
             return False
     
     def open_project(self):
-        # Allow user to select any of the four component files to identify the project
         filepath = filedialog.askopenfilename(
             filetypes=[
-                ("SC4 Palette File (*.SC4Pal)", "*.SC4Pal"),       # UPDATED: Prefer new
+                ("SC4 Palette File (*.SC4Pal)", "*.SC4Pal"),       
                 ("MSX Tileset File (*.SC4Tiles)", "*.SC4Tiles"),  
                 ("MSX Supertile File (*.SC4Super)", "*.SC4Super"),
                 ("MSX Map File (*.SC4Map)", "*.SC4Map"),
-                ("Old MSX Palette File (*.msxpal)", "*.msxpal"), # ADDED: Fallback for selection
+                ("Old MSX Palette File (*.msxpal)", "*.msxpal"), 
                 ("All Files", "*.*"),
             ],
             title="Open Project (Select Any Component File)",
             parent=self.root
         )
         if not filepath:
-            return # User cancelled
+            return 
 
         directory = os.path.dirname(filepath)
         base_name_with_ext = os.path.basename(filepath)
-        base_name, selected_ext = os.path.splitext(base_name_with_ext) # Use selected_ext later if needed
+        base_name, selected_ext = os.path.splitext(base_name_with_ext) 
         
-        # If the selected file itself was an old .msxpal, use that base_name
-        # Otherwise, the base_name derived from .SC4Pal, .SC4Tiles etc. is fine.
-        # The base_name should be correct regardless of which component was selected.
         base_path = os.path.join(directory, base_name)
 
-        # --- MODIFIED: Palette path construction with fallback ---
         pal_path_new = base_path + ".SC4Pal"
         pal_path_old = base_path + ".msxpal"
         
@@ -4413,15 +4415,13 @@ class TileEditorApp:
         elif os.path.exists(pal_path_old):
             actual_pal_path_to_load = pal_path_old
             self.debug(f"[DEBUG] open_project: Found old palette format: {actual_pal_path_to_load}")
-        # --- END MODIFIED ---
 
         til_path = base_path + ".SC4Tiles"
         sup_path = base_path + ".SC4Super"
         map_path = base_path + ".SC4Map"
 
         missing_files = []
-        # Check for palette (either new or old must exist)
-        if actual_pal_path_to_load is None: # Neither .SC4Pal nor .msxpal found
+        if actual_pal_path_to_load is None: 
             missing_files.append(f"{base_name}.SC4Pal (or .msxpal)")
         if not os.path.exists(til_path): missing_files.append(os.path.basename(til_path))
         if not os.path.exists(sup_path): missing_files.append(os.path.basename(sup_path))
@@ -4440,33 +4440,28 @@ class TileEditorApp:
             if not confirm_discard:
                 return
         
-        # --- Clear state before loading ---
         self.is_ctrl_pressed = False; self.is_shift_pressed = False; self.current_mouse_action = None
-        global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data # Globals
+        global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data 
         tile_clipboard_pattern = None; tile_clipboard_colors = None; supertile_clipboard_data = None
         self.map_clipboard_data = None
         self._clear_map_selection(); self._clear_paste_preview_rect() 
-        self._clear_marked_unused(trigger_redraw=False) # Don't redraw yet
-        self.clear_all_caches() # Clears tile, supertile, map_render caches
-        self.invalidate_minimap_background_cache() # Separate minimap BG cache
-        # --- End Clear state ---
+        self._clear_marked_unused(trigger_redraw=False) 
+        self.clear_all_caches() 
+        self.invalidate_minimap_background_cache() 
 
         success = True
         self.debug(f"Loading project '{base_name}'...")
         
-        # Use the determined actual_pal_path_to_load
         if success: self.debug(f"  Loading palette: {actual_pal_path_to_load}"); success = self.open_palette(actual_pal_path_to_load)
-        
         if success: self.debug(f"  Loading tileset: {til_path}"); success = self.open_tileset(til_path)
-        if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path)
+        if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path, is_part_of_project_load=True) # Modified line
         if success: self.debug(f"  Loading map: {map_path}"); success = self.open_map(map_path)
         
         if success:
             self.project_modified = False 
-            self.current_project_base_path = base_path # Store the base path without any specific extension
+            self.current_project_base_path = base_path 
             self._update_window_title()
             
-            # Defer UI updates that depend on widget geometry until after Tkinter has settled
             self.root.after_idle(self._perform_project_load_ui_updates)
             self.debug(f"[DEBUG] open_project: Project '{base_name}' load sequence initiated. UI updates deferred.")
 
@@ -4476,8 +4471,7 @@ class TileEditorApp:
                                  parent=self.root)
             self.project_modified = True 
             self._update_window_title()
-            # Still attempt to update displays to reflect whatever might have loaded partially or reset
-            self.root.after_idle(self.update_all_displays, "all") # Use after_idle here too
+            self.root.after_idle(self.update_all_displays, "all") 
             self.root.after_idle(self._update_edit_menu_state)
             self.root.after_idle(self._update_editor_button_states)
             self.root.after_idle(self._update_supertile_rotate_button_state)
