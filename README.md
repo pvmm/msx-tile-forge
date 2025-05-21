@@ -1,5 +1,5 @@
 # MSX Tile Forge
-v0.0.37
+v0.0.39
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and TkMyinter.
 
@@ -21,7 +21,7 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Pixel-level drawing with selectable foreground/background colors.
     *   Assign unique foreground and background palette indices to each of the 8 rows within a tile.
     *   Tileset viewer (up to 256 tiles) with selection and drag-and-drop reordering.
-    *   Operations: Add New, Insert, Delete tiles.
+    *   Operations: Add New, Add Many..., Insert, Delete tiles.
     *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (colors reset for rows), Shift Up/Down/Left/Right.
     *   Copy/Paste functionality for tile patterns and row colors.
     *   "Mark Unused" feature to highlight tiles not referenced in any supertile.
@@ -30,8 +30,8 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
 *   **Supertile Editor (Project-Configurable Dimensions, e.g., 2x2, 4x4, 8x2 tiles):**
     *   Define supertiles by arranging existing tiles in a grid of **user-defined width and height** (1-32 tiles per dimension, set per project).
     *   Tileset viewer for selecting component tiles from the current tileset.
-    *   Supertile selector (up to 256 supertiles) with selection and drag-and-drop reordering.
-    *   Operations: Add New, Insert, Delete supertiles.
+    *   Supertile selector (up to 65535 supertiles) with selection and drag-and-drop reordering.
+    *   Operations: Add New, Add Many..., Insert, Delete supertiles.
     *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (**enabled only for square supertiles**), Shift Up/Down/Left/Right for the supertile definition.
     *   Copy/Paste functionality for supertile definitions
     *   "Mark Unused" feature: Highlights unused supertiles (not used on the map) and also re-highlights unused base tiles (not used in any supertile definition) within this tab's context.
@@ -155,15 +155,14 @@ The main menu bar provides access to project-wide operations and settings.
 *   **File Menu:**
     *   **Project Management:**
         *   `New Project (Ctrl+N)`: Starts a new project, prompting for supertile dimensions. Clears all current data (palette, tiles, supertiles, map).
-        *   `Open Project... (Ctrl+O)`: Loads an existing project. Select any of its four component files (`.msxpal`, `.SC4Tiles`, `.SC4Super`, `.SC4Map`); the application loads all associated files. Supertile dimensions are restored from the `.SC4Super` file.
+        *   `Open Project... (Ctrl+O)`: Loads an existing project. Select any of its four component files (`.SC4Pal`, `.SC4Tiles`, `.SC4Super`, `.SC4Map`); the application loads all associated files. Supertile dimensions are restored from the `.SC4Super` file.
         *   `Save Project (Ctrl+S)`: Saves all four components of the current project. If unsaved, acts like "Save Project As...".
         *   `Save Project As... (Ctrl+Shift+S)`: Saves all four project components under a new base name and location chosen by the user.
     *   **Individual File Operations:** Allows loading or saving specific asset types independently:
-        *   Palette (`.msxpal`)
+        *   Palette (`.SC4Pal`)
         *   Tileset (`.SC4Tiles`)
         *   Supertiles (`.SC4Super`)
         *   Map (`.SC4Map`)
-    *   **Import Tiles from ROM...:** Opens the ROM Importer dialog to extract tile data from external binary files (see detailed section below).
     *   **Exit (Ctrl+Q):** Closes the application. Prompts to save if there are unsaved changes to the current project.
 
 *   **Edit Menu:**
@@ -176,16 +175,19 @@ The main menu bar provides access to project-wide operations and settings.
         *   `Clear Current Supertile`: Resets the selected supertile's definition to all tile 0s.
         *   `Clear Map`: Resets all cells in the current map to supertile 0.
     *   **Set Data Counts/Dimensions:**
-        *   `Set Tileset Size...`: Adjusts the total number of active tiles (1-256).
-        *   `Set Supertile Count...`: Adjusts the total number of active supertiles (1-256).
         *   `Set Map Dimensions...`: Changes the map's width and height in supertile units (1-1024 per side).
-        *   *Note: Reducing sizes may discard data and will prompt for confirmation if dependent items are affected.*
 
 *   **View Menu:**
     *   `Show/Hide Minimap (Ctrl+M)`: Toggles the resizable Minimap window for the Map Editor.
 
+*   **Import Menu:**
+
+    *   Append Tileset from File...: Appends tiles from another project's .SC4Tiles file.
+    *   Append Supertiles from File...: Appends supertiles and their associated tiles from another project's .SC4Super and .SC4Tiles files.
+    *   Import Tiles from ROM...: Opens the ROM Importer dialog to extract tile data from external binary files (see detailed section below).
+
 *   **Help Menu:**
-    *   `About...`: Displays application information (version, author).
+    *   About...: Displays application information (version, author).
 
 *   **General User Experience:**
     *   **Unsaved Changes:** The window title is marked with an asterisk (*) if the project has unsaved modifications. Prompts to save are given before closing, opening, or creating new projects if changes are pending.
@@ -224,7 +226,7 @@ Used for creating and editing individual 8x8 pixel base tiles.
     *   **Tileset Viewer:** Displays all tiles in the project (up to 256).
         *   Click to select a tile for editing.
         *   Drag-and-drop to reorder tiles (supertile definitions update references).
-    *   **Tile Operations:** Buttons for "Add New" (appends a blank tile), "Insert" (inserts a blank tile at selection), "Delete" (removes selected tile).
+    *   **Tile Operations:** Buttons for "Add New", "Add Many...", "Insert", "Delete" tiles.
     *   **Info Label:** Shows current tile index and total tiles.
 
 ### 3. Supertile Editor Tab
@@ -245,7 +247,7 @@ For creating composite "supertiles" from base tiles. Supertile grid dimensions (
 *   **Asset Selection (Right):**
     *   **Tileset Viewer:** Displays all base tiles. Click to select a tile for placing in the supertile definition. Drag-and-drop reorders tiles.
     *   **Supertile Selector:** Displays all supertiles in the project. Click to select a supertile for editing. Drag-and-drop reorders supertiles (map data updates references).
-    *   **Supertile Operations:** Buttons for "Add New", "Insert", "Delete" supertiles.
+    *   **Supertile Operations:** Buttons for "Add New", "Add Many...", "Insert", "Delete" supertiles.
     *   **Info Label:** Shows total number of supertiles.
 
 ### 4. Map Editor Tab
@@ -306,19 +308,25 @@ This feature (accessible via `File -> Import Tiles from ROM...`) allows loading 
 
 ## Technical Description of Generated Files
 
-All project assets are saved in custom binary file formats. Multi-byte numerical values (like map dimensions) are stored in Big-Endian format unless specified otherwise.
+All project assets are saved in custom binary file formats. Multi-byte numerical values (like map dimensions or 2-byte supertile counts/indices) are stored in **Big-Endian** format unless specified otherwise.
 
-### 1. Palette File (`.msxpal`)
+**File Format Versioning Note (from v0.0.39 onwards):**
+Project component files (`.SC4Pal`, `.SC4Tiles`, `.SC4Super`, `.SC4Map`) created with MSX Tile Forge v0.0.39 and later include **4 reserved bytes** immediately following their primary header information (e.g., after tile count, supertile count and dimensions, or map dimensions). These reserved bytes are intended for future file format extensions. Older versions of the application might not recognize these bytes, and older files might not contain them. The application attempts to detect and handle both older and newer format files where possible.
+
+### 1. Palette File (`.SC4Pal`)
 
 *   **Purpose:** Stores the 16-color active MSX2 palette.
+*   **Primary Extension:** `.SC4Pal` (Older `.msxpal` files might be loadable as a fallback).
 *   **Structure:**
-    *   A sequence of 16 color entries, totaling 48 bytes.
-    *   Each entry is 3 bytes, representing one palette color (index 0 to 15):
-        *   Byte 1: Red component (value 0-7)
-        *   Byte 2: Green component (value 0-7)
-        *   Byte 3: Blue component (value 0-7)
+    *   **Reserved Bytes (4 bytes):** For future use (present in files saved by v0.0.39+).
+    *   **Color Data (48 bytes total):**
+        *   A sequence of 16 color entries.
+        *   Each entry is 3 bytes, representing one palette color (index 0 to 15):
+            *   Byte 1: Red component (value 0-7)
+            *   Byte 2: Green component (value 0-7)
+            *   Byte 3: Blue component (value 0-7)
 
-### 2. Tileset File (`.SC4Tiles`) - from v0.0.38 on
+### 2. Tileset File (`.SC4Tiles`)
 
 *   **Purpose:** Stores definitions for 8x8 pixel tiles, including their pixel patterns and per-row color attributes.
 *   **Structure:**
@@ -326,14 +334,14 @@ All project assets are saved in custom binary file formats. Multi-byte numerical
         *   `num_tiles_in_file_header`: A single byte representing the number of tiles defined in the file.
             *   A value of `0` indicates 256 tiles.
             *   Values `1` through `255` represent that exact number of tiles.
-            *   *(The application internally uses `num_tiles_in_set` which is the actual count, 1-256).*
-    *   **All Pattern Data Block (Total: `actual_num_tiles` * 8 bytes):**
+    *   **Reserved Bytes (4 bytes):** For future use (present in files saved by v0.0.39+).
+    *   **All Pattern Data Block (Total: `actual_num_tiles` \* 8 bytes):**
         *   This block contains the pattern data for all tiles, stored consecutively.
         *   For each tile (from tile 0 to tile `actual_num_tiles - 1`):
             *   **Pattern Data (8 bytes):** One byte per row of the 8x8 tile (total 8 bytes per tile).
                 *   Each bit within a byte represents a pixel (MSB = leftmost pixel).
                 *   `1` = foreground pixel, `0` = background pixel.
-    *   **All Color Attribute Data Block (Total: `actual_num_tiles` * 8 bytes):**
+    *   **All Color Attribute Data Block (Total: `actual_num_tiles` \* 8 bytes):**
         *   This block contains the color attribute data for all tiles, stored consecutively, immediately following the "All Pattern Data Block".
         *   For each tile (from tile 0 to tile `actual_num_tiles - 1`):
             *   **Color Attribute Data (8 bytes):** One byte per row of the 8x8 tile (total 8 bytes per tile).
@@ -347,11 +355,15 @@ All project assets are saved in custom binary file formats. Multi-byte numerical
 
 *   **Purpose:** Stores the definitions of supertiles, specifying which base tiles compose them and the supertile grid dimensions.
 *   **Structure:**
-    *   **Header (3 bytes):**
-        *   `num_supertiles` (1 byte): Number of supertiles defined (value 0-255. A value of 0 represents 256 supertiles).
+    *   **Supertile Count (1 or 3 bytes):**
+        *   If the first byte is `1-255`: This byte directly indicates the number of supertiles.
+        *   If the first byte is `0`: This is an indicator that the actual count follows in the next 2 bytes.
+            *   Next 2 bytes: `actual_num_supertiles` (Unsigned Short, Big-Endian, value 0-65535).
+    *   **Supertile Grid Dimensions (2 bytes):**
         *   `supertile_grid_width` (1 byte): The width of each supertile in base tiles (value 1-32).
         *   `supertile_grid_height` (1 byte): The height of each supertile in base tiles (value 1-32).
-    *   **Supertile Definition Blocks (repeated `num_supertiles` times):**
+    *   **Reserved Bytes (4 bytes):** For future use (present in files saved by v0.0.39+).
+    *   **Supertile Definition Blocks (repeated `actual_num_supertiles` times):**
         *   Each block defines one supertile and consists of `supertile_grid_width * supertile_grid_height` bytes.
         *   Each byte within a block is a tile index (0-255) from a `.SC4Tiles` file, specifying the base tile for that position within the supertile's grid.
         *   Tile indices are stored row by row (top-to-bottom, left-to-right within each row).
@@ -363,9 +375,13 @@ All project assets are saved in custom binary file formats. Multi-byte numerical
     *   **Header (4 bytes):**
         *   `map_width` (2 bytes, Unsigned Short, Big-Endian): Width of the map in supertile units.
         *   `map_height` (2 bytes, Unsigned Short, Big-Endian): Height of the map in supertile units.
-    *   **Map Data:**
-        *   A sequence of `map_width * map_height` bytes.
-        *   Each byte is a supertile index (0-255) from a `.SC4Super` file, specifying the supertile for that map cell.
+    *   **Reserved Bytes (4 bytes):** For future use (present in files saved by v0.0.39+).
+    *   **Map Data (Variable size per index):**
+        *   A sequence of `map_width * map_height` supertile indices.
+        *   **Index Size:**
+            *   If the project's `num_supertiles` (total count of supertiles in the project) at the time of saving was **<= 255**, each supertile index is stored as **1 byte** (value 0-255).
+            *   If the project's `num_supertiles` at the time of saving was **> 255**, each supertile index is stored as **2 bytes** (Unsigned Short, Big-Endian, value 0-65535).
+            *   The index format may also be deduced from the files size. When supporting more than 255 supertiles, the map's file payload will be twice as big as when supporting 255 supertile or less.
         *   Supertile indices are stored row by row (top-to-bottom, left-to-right within each row).
      
 ## Contributing
