@@ -240,6 +240,8 @@ class TileEditorApp:
 
         self.rom_import_dialog = None
         self.map_controls_min_width = 0 # Will be calculated in create_map_editor_widgets
+        
+        self.scroll_speed_units = 3
 
 
         self.debug("[DEBUG] TileEditorApp __init__ started.")
@@ -265,7 +267,7 @@ class TileEditorApp:
         self.create_map_editor_widgets(self.tab_map_editor) 
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
-        self._setup_map_canvas_bindings() # This might be a good place to add map_canvas configure bind if canvas exists
+        self._setup_map_canvas_bindings()
 
         self._update_window_title() 
         self.update_all_displays(changed_level="all") 
@@ -853,12 +855,12 @@ class TileEditorApp:
         palette_frame.grid(row=0, column=0, pady=(0, 10), sticky=(tk.N, tk.W, tk.E))
         self.tile_editor_palette_canvas = tk.Canvas(
             palette_frame,
-            width=4 * (PALETTE_SQUARE_SIZE + 2) + 2, # Corrected canvas size calculation
+            width=4 * (PALETTE_SQUARE_SIZE + 2) + 2,
             height=4 * (PALETTE_SQUARE_SIZE + 2) + 2,
             borderwidth=0,
             highlightthickness=0,
         )
-        self.tile_editor_palette_canvas.grid(row=0, column=0) # Removed sticky, let frame control
+        self.tile_editor_palette_canvas.grid(row=0, column=0)
         self.tile_editor_palette_canvas.bind(
             "<Button-1>", self.handle_tile_editor_palette_click
         )
@@ -872,7 +874,7 @@ class TileEditorApp:
         right_frame.grid_columnconfigure(0, weight=1) 
 
         viewer_canvas_width = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + 1) + 1
-        num_rows_in_viewer = math.ceil(MAX_TILES / NUM_TILES_ACROSS) # MAX_TILES is appropriate here for scrollregion
+        num_rows_in_viewer = math.ceil(MAX_TILES / NUM_TILES_ACROSS)
         viewer_canvas_height = num_rows_in_viewer * (VIEWER_TILE_SIZE + 1) + 1
         viewer_hbar = ttk.Scrollbar(viewer_frame, orient=tk.HORIZONTAL)
         viewer_vbar = ttk.Scrollbar(viewer_frame, orient=tk.VERTICAL)
@@ -894,6 +896,9 @@ class TileEditorApp:
         self.tileset_canvas.bind("<Button-1>", self.handle_tileset_click)
         self.tileset_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
         self.tileset_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
+        self.tileset_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+") # Added
+        self.tileset_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")   # Added
+        self.tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")   # Added
 
         tile_button_frame = ttk.Frame(right_frame)
         tile_button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
@@ -903,12 +908,10 @@ class TileEditorApp:
         )
         self.add_tile_button.pack(side=tk.LEFT, padx=(0, 3))
 
-        # --- ADDED "Add Many Tiles..." Button ---
         self.add_many_tiles_button = ttk.Button(
             tile_button_frame, text="Add Many...", command=self.handle_add_many_tiles
         )
         self.add_many_tiles_button.pack(side=tk.LEFT, padx=3)
-        # --- END ADDED ---
 
         self.insert_tile_button = ttk.Button(
             tile_button_frame, text="Insert", command=self.handle_insert_tile
@@ -942,10 +945,9 @@ class TileEditorApp:
         self.supertile_def_canvas = tk.Canvas(
             def_frame, width=def_canvas_width_actual, height=def_canvas_height_actual, bg="darkgrey"
         )
-        # Changed sticky from "nsew" to "nw" to prevent canvas from stretching beyond its configured width/height
         self.supertile_def_canvas.grid(row=0, column=0, sticky="nw") 
-        def_frame.grid_rowconfigure(0, weight=0) # Let row height be determined by canvas
-        def_frame.grid_columnconfigure(0, weight=0) # Let col width be determined by canvas
+        def_frame.grid_rowconfigure(0, weight=0) 
+        def_frame.grid_columnconfigure(0, weight=0)
 
         self.supertile_def_canvas.bind("<Button-1>", self.handle_supertile_def_click)
         self.supertile_def_canvas.bind("<B1-Motion>", self.handle_supertile_def_drag)
@@ -1053,6 +1055,9 @@ class TileEditorApp:
         self.st_tileset_canvas.bind(
             "<ButtonRelease-1>", self.handle_viewer_drag_release
         )
+        self.st_tileset_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+")
+        self.st_tileset_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
+        self.st_tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
         st_selector_frame = ttk.LabelFrame(
             right_frame, text="Supertile Selector (Click to edit)"
@@ -1093,6 +1098,9 @@ class TileEditorApp:
         self.supertile_selector_canvas.bind(
             "<ButtonRelease-1>", self.handle_viewer_drag_release
         )
+        self.supertile_selector_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+")
+        self.supertile_selector_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
+        self.supertile_selector_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
         bottom_controls_frame = ttk.Frame(right_frame)
         bottom_controls_frame.grid(
@@ -1184,7 +1192,6 @@ class TileEditorApp:
         st_grid_check = ttk.Checkbutton(grid_controls_frame,text="Show Supertile Grid (Press 'G' to Cycle Colors)",variable=self.show_supertile_grid,command=self.toggle_supertile_grid)
         st_grid_check.grid(row=0, column=0, padx=5, sticky="w")
         
-        # Ensure map_area_frame's layout is processed before querying child reqwidth
         map_area_frame.update_idletasks() 
         controls_frame_width = controls_frame.winfo_reqwidth()
         win_controls_frame_width = win_controls_frame.winfo_reqwidth()
@@ -1230,6 +1237,9 @@ class TileEditorApp:
         self.map_supertile_selector_canvas.bind("<Button-1>", self.handle_map_supertile_selector_click)
         self.map_supertile_selector_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
         self.map_supertile_selector_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
+        self.map_supertile_selector_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+")
+        self.map_supertile_selector_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
+        self.map_supertile_selector_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
         
         self.map_editor_palette_pane_container.bind("<Configure>", self._on_palette_pane_configure_for_redraw_only)
         self.map_paned_window.bind("<ButtonRelease-1>", self._enforce_palette_min_width_on_release)
@@ -1242,7 +1252,6 @@ class TileEditorApp:
         canvas = self.map_canvas
 
         # --- Unbind ALL PREVIOUSLY POTENTIAL MAP CANVAS BINDINGS ---
-        # ... (all unbind lines remain the same) ...
         canvas.unbind("<Button-1>")
         canvas.unbind("<B1-Motion>")
         canvas.unbind("<ButtonRelease-1>")
@@ -1269,6 +1278,9 @@ class TileEditorApp:
         canvas.unbind("<Enter>")
         canvas.unbind("<Leave>")
         canvas.unbind("<Motion>")
+        canvas.unbind("<MouseWheel>")
+        canvas.unbind("<Button-4>")
+        canvas.unbind("<Button-5>")
         # --- End Unbind ---
 
         # --- Mouse Button 1 (Primary) - Checks Shift/Ctrl internally ---
@@ -1281,7 +1293,7 @@ class TileEditorApp:
 
         # --- Panning (Ctrl + Mouse Button 1) - Checks Shift internally ---
         canvas.bind("<Control-ButtonPress-1>", self.handle_pan_start)
-        canvas.bind("<Control-B1-Motion>", self.handle_pan_motion) # This will be modified
+        canvas.bind("<Control-B1-Motion>", self.handle_pan_motion) 
 
         # --- Selection (Shift + Mouse Button 1) ---
         canvas.bind("<Shift-ButtonPress-1>", self.handle_map_selection_start)
@@ -1292,6 +1304,11 @@ class TileEditorApp:
         canvas.bind("<Control-MouseWheel>", self.handle_map_zoom_scroll)
         canvas.bind("<Control-Button-4>", self.handle_map_zoom_scroll)
         canvas.bind("<Control-Button-5>", self.handle_map_zoom_scroll)
+        
+        # --- Standard Scrolling (No Modifiers + Mouse Wheel) ---
+        canvas.bind("<MouseWheel>", self._on_mousewheel_scroll)
+        canvas.bind("<Button-4>", self._on_mousewheel_scroll)  
+        canvas.bind("<Button-5>", self._on_mousewheel_scroll)  
 
         # --- Keyboard ---
         canvas.bind("<FocusIn>", lambda e: self.map_canvas.focus_set())
@@ -1323,7 +1340,6 @@ class TileEditorApp:
 
         # --- Scrollbar Interaction (Update map canvas AND minimap) ---
         if hasattr(self, "map_hbar") and self.map_hbar:
-            # For scrollbar drag (B1-Motion) and discrete clicks (ButtonRelease-1)
             self.map_hbar.bind("<B1-Motion>", self._handle_map_scroll_event)
             self.map_hbar.bind("<ButtonRelease-1>", self._handle_map_scroll_event) 
         if hasattr(self, "map_vbar") and self.map_vbar:
@@ -8572,7 +8588,6 @@ class TileEditorApp:
         dialog.title(f"ROM Tile Importer - {os.path.basename(rom_filepath)}")
         dialog.transient(self.root)
         dialog.grab_set()
-        # dialog.resizable(False, False) # Consider allowing resize
 
         dialog.rom_data = rom_data
         dialog.rom_filepath = rom_filepath
@@ -8588,16 +8603,12 @@ class TileEditorApp:
         dialog.slider_redraw_timer_id = None
         dialog.rom_importer_grid_cols = 1
 
-        # --- NEW: Add attributes for Pillow viewport image and Tk PhotoImage for ROM importer ---
-        dialog.pil_rom_viewport_image = None # Will hold the Pillow Image object
-        dialog.tk_rom_photoimage = None      # Will hold the Tk.PhotoImage object
-        # --- END NEW ---
+        dialog.pil_rom_viewport_image = None 
+        dialog.tk_rom_photoimage = None      
 
         try:
             safe_tile_w = max(1, TILE_WIDTH)
             safe_tile_h = max(1, TILE_HEIGHT)
-            # This temp_tile_image_unscaled_ref might become less relevant with Pillow rendering,
-            # but let's keep it for now if _draw_rom_tile_preview still uses direct PhotoImage puts for the small preview.
             dialog.temp_tile_image_unscaled_ref = tk.PhotoImage(width=safe_tile_w, height=safe_tile_h)
         except tk.TclError as e_photo:
             self.debug(f"[DEBUG] CRITICAL: Failed to create temp_tile_image_unscaled_ref: {e_photo}")
@@ -8742,9 +8753,12 @@ class TileEditorApp:
         dialog.canvas.bind("<Leave>", self._on_rom_canvas_leave)
         dialog.canvas.bind("<Button-1>", self._on_rom_canvas_left_click)
         dialog.canvas.bind("<Button-3>", self._on_rom_canvas_right_click)
-        dialog.bind("<Escape>", lambda e: self._clear_rom_import_selection()) # Bind to dialog for global Esc
-        dialog.canvas.bind("<FocusIn>", lambda e: None) # Allow canvas to get focus for keys
+        dialog.bind("<Escape>", lambda e: self._clear_rom_import_selection()) 
+        dialog.canvas.bind("<FocusIn>", lambda e: None) 
         dialog.canvas.bind("<Key>", self._on_rom_canvas_keypress)
+        dialog.canvas.bind("<MouseWheel>", self._on_mousewheel_scroll)
+        dialog.canvas.bind("<Button-4>", self._on_mousewheel_scroll)
+        dialog.canvas.bind("<Button-5>", self._on_mousewheel_scroll)
         dialog.canvas.focus_set()
         dialog.protocol("WM_DELETE_WINDOW", self._close_rom_importer_dialog)
 
@@ -8757,22 +8771,20 @@ class TileEditorApp:
         root_x = self.root.winfo_x()
         root_y = self.root.winfo_y()
 
-        dialog.update_idletasks() # Ensure dialog knows its own requested size
+        dialog.update_idletasks() 
         dialog_w = dialog.winfo_reqwidth()
         dialog_h = dialog.winfo_reqheight()
         
-        # Attempt to center on main window
         x_pos = root_x + (root_w // 2) - (dialog_w // 2)
         y_pos = root_y + (root_h // 2) - (dialog_h // 2)
         
-        # Ensure it's on screen
         screen_width_dialog = dialog.winfo_screenwidth()
         screen_height_dialog = dialog.winfo_screenheight()
         x_pos = max(0, min(x_pos, screen_width_dialog - dialog_w))
         y_pos = max(0, min(y_pos, screen_height_dialog - dialog_h))
 
         dialog.geometry(f"{dialog_w}x{dialog_h}+{x_pos}+{y_pos}")
-        dialog.lift() # Ensure it's on top
+        dialog.lift()
 
     def _close_rom_importer_dialog(self):
         """Closes and cleans up the ROM importer dialog."""
@@ -11046,6 +11058,68 @@ class TileEditorApp:
              summary_msg += f"\nNote: Tileset limit prevented appending all desired tiles from file."
 
         messagebox.showinfo("Append Successful", summary_msg, parent=self.root)
+
+
+    def _on_mousewheel_scroll(self, event):
+        # Generic handler for mousewheel vertical scrolling on canvases.
+        canvas = event.widget
+        if not canvas.winfo_exists():
+            return
+
+        scroll_units = 0
+        if event.num == 5 or event.delta < 0:  # Scroll Down
+            scroll_units = self.scroll_speed_units
+        elif event.num == 4 or event.delta > 0: # Scroll Up
+            scroll_units = -self.scroll_speed_units
+
+        if scroll_units != 0:
+            try:
+                current_view_before_scroll = canvas.yview() # Get view before scroll
+                canvas.yview_scroll(scroll_units, "units")
+                current_view_after_scroll = canvas.yview()  # Get view after scroll
+
+                # Only redraw if the view actually changed.
+                if current_view_before_scroll != current_view_after_scroll:
+                    # Identify the canvas and call its specific redraw method
+                    if canvas == self.tileset_canvas:
+                        self.draw_tileset_viewer(self.tileset_canvas, current_tile_index)
+                    elif canvas == self.st_tileset_canvas:
+                        self.draw_tileset_viewer(self.st_tileset_canvas, selected_tile_for_supertile)
+                    elif canvas == self.supertile_selector_canvas:
+                        self.draw_supertile_selector(self.supertile_selector_canvas, current_supertile_index)
+                    elif canvas == self.map_canvas:
+                        if not (event.state & 0x0004): # If Ctrl key is NOT pressed (mask for Control is 4)
+                            self.draw_map_canvas()
+                            self.draw_minimap() 
+                    elif canvas == self.map_supertile_selector_canvas:
+                        self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
+                    elif hasattr(self, 'rom_import_dialog') and \
+                         self.rom_import_dialog and \
+                         tk.Toplevel.winfo_exists(self.rom_import_dialog) and \
+                         canvas == getattr(self.rom_import_dialog, 'canvas', None):
+                        self.debug("[DEBUG] Mousewheel scroll on ROM importer, scheduling direct redraw.")
+                        self._schedule_debounced_draw_from_scroll_rom_direct()
+                else:
+                    self.debug(f"[DEBUG] Scroll attempted on {canvas} but view did not change (likely at limit). No redraw triggered.")
+
+            except tk.TclError as e:
+                self.debug(f"[DEBUG] TclError during yview_scroll/redraw: {e}")
+            except Exception as e:
+                self.debug(f"[DEBUG] Unexpected error during yview_scroll/redraw: {e}")
+        return "break"
+
+    def _schedule_debounced_draw_from_scroll_rom_direct(self):
+        # Helper to schedule the debounced draw for the ROM importer canvas.
+        current_dialog = getattr(self, 'rom_import_dialog', None)
+        if not current_dialog or not tk.Toplevel.winfo_exists(current_dialog): return
+        if not hasattr(current_dialog, 'redraw_timer_id'): current_dialog.redraw_timer_id = None
+
+        if current_dialog.redraw_timer_id is not None:
+            try:
+                current_dialog.after_cancel(current_dialog.redraw_timer_id)
+            except tk.TclError:
+                pass # Timer might have already fired
+        current_dialog.redraw_timer_id = current_dialog.after(30, self._perform_debounced_rom_canvas_draw)
 
 # --- Main Execution ---
 if __name__ == "__main__":
