@@ -146,8 +146,205 @@ def get_contrast_color(hex_color):
     except:
         return "#000000"
 
+# --- Usage Window Classes -----------------------------------------------------------------------------------------------
+# --- Usage Window Classes ---
+class ColorUsageWindow(tk.Toplevel):
+    def __init__(self, master_app):
+        super().__init__(master_app.root)
+        self.app_ref = master_app
+        self.title("Color Usage")
+        self.transient(master_app.root)
+        self.resizable(False, True) 
 
-# --- Application Class ---
+        self._image_references = [] 
+        
+        # --- Sorting State ---
+        self.current_sort_column_id = "slot_index" # Default sort: by slot index
+        self.current_sort_direction_is_asc = True   # Default: ascending
+
+        main_frame = ttk.Frame(self, padding="5")
+        main_frame.pack(expand=True, fill="both")
+        main_frame.grid_rowconfigure(1, weight=1) 
+        main_frame.grid_columnconfigure(0, weight=1)
+
+        header_frame = ttk.Frame(main_frame)
+        header_frame.grid(row=0, column=0, sticky="ew", columnspan=2) 
+        
+        col_width_swatch = 40 
+        col_width_index = 50  
+        col_width_counts = 80 
+
+        header_frame.grid_columnconfigure(0, weight=0, minsize=col_width_swatch) 
+        header_frame.grid_columnconfigure(1, weight=0, minsize=col_width_index)  
+        header_frame.grid_columnconfigure(2, weight=0, minsize=col_width_counts)  
+        header_frame.grid_columnconfigure(3, weight=0, minsize=col_width_counts)  
+        header_frame.grid_columnconfigure(4, weight=0, minsize=col_width_counts) 
+
+        # --- Clickable Static Labels for Sorting ---
+        # Store labels to update their text with sort indicators later if desired
+        self.header_labels = {}
+
+        lbl_color = ttk.Label(header_frame, text="Color", anchor="center", cursor="hand2")
+        lbl_color.grid(row=0, column=0, sticky="ew")
+        # No sorting by color swatch itself usually
+
+        lbl_index = ttk.Label(header_frame, text="Index ?", anchor="w", cursor="hand2") # Default sort indicator
+        lbl_index.grid(row=0, column=1, sticky="ew", padx=(5,0))
+        lbl_index.bind("<Button-1>", lambda e, col_id="slot_index": self._sort_by_column(col_id))
+        self.header_labels["slot_index"] = lbl_index
+        
+        lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="e", cursor="hand2")
+        lbl_pixel_uses.grid(row=0, column=2, sticky="ew")
+        lbl_pixel_uses.bind("<Button-1>", lambda e, col_id="pixel_uses_count": self._sort_by_column(col_id))
+        self.header_labels["pixel_uses_count"] = lbl_pixel_uses
+
+        lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="e", cursor="hand2")
+        lbl_line_refs.grid(row=0, column=3, sticky="ew")
+        lbl_line_refs.bind("<Button-1>", lambda e, col_id="line_refs_count": self._sort_by_column(col_id))
+        self.header_labels["line_refs_count"] = lbl_line_refs
+
+        lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="e", cursor="hand2")
+        lbl_tile_refs.grid(row=0, column=4, sticky="ew")
+        lbl_tile_refs.bind("<Button-1>", lambda e, col_id="tile_refs_count": self._sort_by_column(col_id))
+        self.header_labels["tile_refs_count"] = lbl_tile_refs
+        # --- End Clickable Static Labels ---
+
+        self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val") 
+        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16) 
+        
+        self.tree.column("#0", width=col_width_swatch, minwidth=col_width_swatch, stretch=tk.NO, anchor="center") 
+        self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="w")
+        self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="e")
+        self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="e")
+        self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="e")
+
+        tree_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+
+        self.tree.grid(row=1, column=0, sticky="nsew") 
+        tree_scrollbar.grid(row=1, column=1, sticky="ns")
+        main_frame.grid_columnconfigure(1, weight=0)
+
+        button_frame_container = ttk.Frame(main_frame) 
+        button_frame_container.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
+        
+        self.refresh_button = ttk.Button(button_frame_container, text="Refresh", command=self.refresh_data)
+        self.refresh_button.pack(pady=5)
+
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(10, self.refresh_data)
+
+    def _sort_by_column(self, column_id_clicked):
+        # Handles click on a header label to change sort order.
+        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Sorting by column '{column_id_clicked}'")
+        if self.current_sort_column_id == column_id_clicked:
+            self.current_sort_direction_is_asc = not self.current_sort_direction_is_asc
+        else:
+            self.current_sort_column_id = column_id_clicked
+            self.current_sort_direction_is_asc = True # Default to ascending on new column
+
+        # Update header label texts to show sort indicators (optional visual polish)
+        for col_id, label_widget in self.header_labels.items():
+            text = label_widget.cget("text").replace(" ?", "").replace(" ?", "") # Remove old indicator
+            if col_id == self.current_sort_column_id:
+                text += " ?" if self.current_sort_direction_is_asc else " ?"
+            try:
+                if label_widget.winfo_exists():
+                    label_widget.config(text=text)
+            except tk.TclError: pass
+
+        self.refresh_data() # Re-fetch, re-sort, and re-populate the tree
+
+    # refresh_data and _on_close remain the same as Step 1P
+    # The sorting logic will be added to refresh_data in the next step.
+    # For now, refresh_data just needs to be aware that it *will* use these sorting state vars.
+
+    def refresh_data(self): 
+        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
+        if not hasattr(self, 'tree') or not self.tree.winfo_exists():
+            self.app_ref.debug("[DEBUG] Treeview not ready for refresh_data.")
+            return
+
+        for i in self.tree.get_children():
+            self.tree.delete(i)
+        self._image_references.clear()
+
+        usage_data = [] 
+        if hasattr(self.app_ref, '_calculate_color_usage_data'):
+            try:
+                usage_data = self.app_ref._calculate_color_usage_data() # This returns a list of dicts
+            except Exception as e:
+                self.app_ref.debug(f"[DEBUG] Error calling _calculate_color_usage_data: {e}")
+                # Populate with dummy data for UI testing if calculation fails
+                for i in range(16): 
+                     usage_data.append({
+                        'slot_index': i,
+                        'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF",
+                        'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0
+                    })
+        else: 
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: _calculate_color_usage_data not found for refresh.")
+            for i in range(16): # Dummy data
+                usage_data.append({
+                    'slot_index': i,
+                    'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF",
+                    'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0
+                })
+        
+        # --- Apply Sorting ---
+        # The column_id_clicked corresponds to keys in our item_data dictionaries
+        if self.current_sort_column_id in usage_data[0]: # Check if sort key is valid
+            try:
+                usage_data.sort(key=lambda item: item[self.current_sort_column_id], 
+                                reverse=not self.current_sort_direction_is_asc)
+            except TypeError as e_sort: # e.g. if trying to sort by a non-sortable key like the hex string directly without conversion
+                self.app_ref.debug(f"[DEBUG] TypeError during sorting by '{self.current_sort_column_id}': {e_sort}. Defaulting to slot_index sort.")
+                usage_data.sort(key=lambda item: item['slot_index'], reverse=False) # Fallback sort
+            except KeyError as e_key: # Should not happen if column_id is from our dict keys
+                self.app_ref.debug(f"[DEBUG] KeyError during sorting by '{self.current_sort_column_id}': {e_key}. Defaulting to slot_index sort.")
+                usage_data.sort(key=lambda item: item['slot_index'], reverse=False) # Fallback sort
+
+        else: # Fallback if sort column ID is somehow invalid
+            self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}'. Defaulting to slot_index sort.")
+            usage_data.sort(key=lambda item: item['slot_index'], reverse=False)
+        # --- End Apply Sorting ---
+
+        preview_image_size = 16
+        for item_data in usage_data: # Iterate through the (now sorted) data
+            slot_idx = item_data['slot_index']
+            hex_color = item_data['current_color_hex']
+            
+            img_w = max(1, preview_image_size)
+            img_h = max(1, preview_image_size)
+            photo = None
+            try:
+                photo = tk.PhotoImage(width=img_w, height=img_h)
+                hex_color_to_put = hex_color
+                if not (isinstance(hex_color, str) and hex_color.startswith('#') and len(hex_color) == 7):
+                    hex_color_to_put = "#FF00FF"
+                photo.put(hex_color_to_put, to=(0, 0, img_w, img_h))
+                self._image_references.append(photo) 
+            except tk.TclError as e_photo:
+                self.app_ref.debug(f"[DEBUG] TclError creating/putting color swatch for slot {slot_idx} color '{hex_color}': {e_photo}")
+
+            self.tree.insert("", "end",
+                             iid=f"slot_{slot_idx}", 
+                             text="",  
+                             image=photo if photo else '', 
+                             values=( 
+                                 str(slot_idx),                 
+                                 item_data['pixel_uses_count'],
+                                 item_data['line_refs_count'],
+                                 item_data['tile_refs_count']
+                             ))
+
+    def _on_close(self): 
+        self.app_ref.debug("[DEBUG] ColorUsageWindow closed.")
+        if self.app_ref: 
+            self.app_ref.color_usage_window = None 
+        self.destroy()
+
+# --- Application Class  -----------------------------------------------------------------------------------------------
 class TileEditorApp:
     def __init__(self, root):
         self.debug_enabled = getattr(root, 'app_debug_mode', False)
@@ -161,8 +358,8 @@ class TileEditorApp:
 
         self.root.bind("<Configure>", self._on_main_window_configure)
         self._main_window_configure_timer = None 
-        self._map_canvas_configure_timer = None # Initialize this timer attribute
-        self._palette_pane_resize_timer = None # For palette selector redraw
+        self._map_canvas_configure_timer = None 
+        self._palette_pane_resize_timer = None 
 
 
         self.current_project_base_path = None
@@ -239,9 +436,11 @@ class TileEditorApp:
         self.marked_unused_supertiles = set()
 
         self.rom_import_dialog = None
-        self.map_controls_min_width = 0 # Will be calculated in create_map_editor_widgets
+        self.map_controls_min_width = 0 
         
-        self.scroll_speed_units = 3
+        self.scroll_speed_units = 3 
+        
+        self.color_usage_window = None # Added reference for Color Usage window
 
 
         self.debug("[DEBUG] TileEditorApp __init__ started.")
@@ -267,7 +466,7 @@ class TileEditorApp:
         self.create_map_editor_widgets(self.tab_map_editor) 
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
-        self._setup_map_canvas_bindings()
+        self._setup_map_canvas_bindings() 
 
         self._update_window_title() 
         self.update_all_displays(changed_level="all") 
@@ -554,7 +753,6 @@ class TileEditorApp:
             label="Save Palette...", command=self.save_palette
         )
         file_menu.add_separator()
-        # Updated labels to remove file extensions
         file_menu.add_command(
             label="Open Tileset...", command=self.open_tileset
         )
@@ -576,7 +774,7 @@ class TileEditorApp:
             label="Exit", command=self.confirm_quit, accelerator="Ctrl+Q"
         )
 
-        # --- Edit Menu (Modified) ---
+        # --- Edit Menu ---
         self.edit_menu = tk.Menu(menubar, tearoff=0) 
         menubar.add_cascade(label="Edit", menu=self.edit_menu)
 
@@ -615,11 +813,16 @@ class TileEditorApp:
         view_menu.add_command(
             label="Show/Hide Minimap", command=self.toggle_minimap, accelerator="Ctrl+M"
         )
+        view_menu.add_separator() # Added separator
+        view_menu.add_command(label="Color Usage", command=self.toggle_color_usage_window) # Added this line
+        # Future usage windows will go here:
+        # view_menu.add_command(label="Tile Usage", command=self.toggle_tile_usage_window)
+        # view_menu.add_command(label="Supertile Usage", command=self.toggle_supertile_usage_window)
 
-        # Import Menu (Placed after View)
+
+        # --- Import Menu ---
         import_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Import", menu=import_menu)
-        # Updated labels to remove file extensions (if any were implicitly there by convention)
         import_menu.add_command(
             label="Append Tileset from File...", 
             command=self.append_tileset_from_file
@@ -11114,6 +11317,116 @@ class TileEditorApp:
             except tk.TclError:
                 pass # Timer might have already fired
         current_dialog.redraw_timer_id = current_dialog.after(30, self._perform_debounced_rom_canvas_draw)
+
+    def _calculate_color_usage_data(self):
+        # Calculates usage counts for each of the 16 active palette slots.
+        # Returns a list of dictionaries, one for each slot.
+        global tileset_patterns, tileset_colors, num_tiles_in_set # Using globals
+
+        results = []
+        if not self.active_msx_palette or len(self.active_msx_palette) != 16:
+            self.debug("[DEBUG] _calculate_color_usage_data: Active MSX palette is not ready or not 16 colors.")
+            # Return empty or placeholder data for 16 slots if palette is bad
+            for i in range(16):
+                results.append({
+                    'slot_index': i,
+                    'current_color_hex': "#FF00FF", # Error color
+                    'pixel_uses_count': 0,
+                    'line_refs_count': 0,
+                    'tile_refs_count': 0
+                })
+            return results
+
+        for p_idx in range(16): # For each of the 16 palette slots
+            current_color_hex = self.active_msx_palette[p_idx]
+            pixel_uses = 0
+            line_references = 0
+            tile_references_set = set() # To count unique tiles using this p_idx
+
+            for tile_idx in range(num_tiles_in_set):
+                tile_uses_this_color_slot = False
+                for row_idx in range(TILE_HEIGHT):
+                    if tile_idx >= len(tileset_colors) or row_idx >= len(tileset_colors[tile_idx]):
+                        # Should not happen if data is consistent
+                        continue 
+                    
+                    fg_slot, bg_slot = tileset_colors[tile_idx][row_idx]
+                    line_uses_this_color_slot = False
+
+                    if fg_slot == p_idx:
+                        line_references += 1
+                        tile_uses_this_color_slot = True
+                        line_uses_this_color_slot = True
+                    
+                    # Check bg_slot, but only add to line_references if fg_slot didn't already count this line
+                    if bg_slot == p_idx:
+                        tile_uses_this_color_slot = True 
+                        if not line_uses_this_color_slot: # Avoid double counting line if both FG/BG use same p_idx
+                            line_references += 1
+                            line_uses_this_color_slot = True # Mark line as counted for this p_idx
+
+                    # Calculate pixel uses for this line if the p_idx is involved
+                    if line_uses_this_color_slot:
+                        if tile_idx >= len(tileset_patterns) or row_idx >= len(tileset_patterns[tile_idx]):
+                            continue
+
+                        for col_idx in range(TILE_WIDTH):
+                            if col_idx >= len(tileset_patterns[tile_idx][row_idx]):
+                                continue
+                            
+                            pixel_pattern_value = tileset_patterns[tile_idx][row_idx][col_idx]
+                            if pixel_pattern_value == 1 and fg_slot == p_idx: # FG pixel
+                                pixel_uses += 1
+                            elif pixel_pattern_value == 0 and bg_slot == p_idx: # BG pixel
+                                pixel_uses += 1
+                
+                if tile_uses_this_color_slot:
+                    tile_references_set.add(tile_idx)
+
+            results.append({
+                'slot_index': p_idx,
+                'current_color_hex': current_color_hex,
+                'pixel_uses_count': pixel_uses,
+                'line_refs_count': line_references,
+                'tile_refs_count': len(tile_references_set)
+            })
+            
+        return results
+
+    def toggle_color_usage_window(self):
+        # Toggles the visibility of the Color Usage window.
+        if self.color_usage_window is None or not tk.Toplevel.winfo_exists(self.color_usage_window):
+            self.debug("[DEBUG] Creating new Color Usage window.")
+            self.color_usage_window = ColorUsageWindow(self) # Pass self (the app instance)
+            # Optional: Position the window relative to the main app
+            self.root.update_idletasks()
+            self.color_usage_window.update_idletasks()
+            main_x = self.root.winfo_rootx()
+            main_y = self.root.winfo_rooty()
+            main_w = self.root.winfo_width()
+            # main_h = self.root.winfo_height() # Not used here
+
+            cuw_w = self.color_usage_window.winfo_reqwidth()
+            # cuw_h = self.color_usage_window.winfo_reqheight() # Not used here
+            
+            # Position to the right of the main window, aligned with top
+            pos_x = main_x + main_w + 10 
+            pos_y = main_y
+            
+            # Basic screen boundary check (adjust if needed for multi-monitor or complex setups)
+            screen_w = self.root.winfo_screenwidth()
+            if pos_x + cuw_w > screen_w:
+                pos_x = screen_w - cuw_w - 10 # Try to fit on the right
+            if pos_x < 0 : pos_x = 10 # Fallback if still off screen
+
+            self.color_usage_window.geometry(f"+{pos_x}+{pos_y}")
+
+        else:
+            self.debug("[DEBUG] Lifting existing Color Usage window.")
+            self.color_usage_window.lift()
+            self.color_usage_window.focus_set()
+            if hasattr(self.color_usage_window, 'refresh_data'): # If it has a refresh method
+                self.color_usage_window.refresh_data() # Refresh when brought to front
 
 # --- Main Execution ---
 if __name__ == "__main__":
