@@ -169,12 +169,10 @@ class ColorUsageWindow(tk.Toplevel):
         header_frame = ttk.Frame(main_frame)
         header_frame.grid(row=0, column=0, sticky="ew", columnspan=2) 
         
-        # --- Define Column Widths (can be adjusted) ---
-        col_width_swatch = 30  # For the color swatch column (#0)
-        col_width_index = 40   # Reduced width for the slot index column
-        col_width_counts = 70  # For each of the count columns
+        col_width_swatch = 30  
+        col_width_index = 40   
+        col_width_counts = 70  
 
-        # Configure grid for header_frame to align with Treeview columns
         header_frame.grid_columnconfigure(0, weight=0, minsize=col_width_swatch) 
         header_frame.grid_columnconfigure(1, weight=0, minsize=col_width_index)  
         header_frame.grid_columnconfigure(2, weight=0, minsize=col_width_counts)  
@@ -185,39 +183,35 @@ class ColorUsageWindow(tk.Toplevel):
 
         lbl_color = ttk.Label(header_frame, text="Color", anchor="center", cursor="hand2")
         lbl_color.grid(row=0, column=0, sticky="ew")
-        # lbl_color.bind("<Button-1>", lambda e, col_id="preview_image": self._sort_by_column(col_id)) # Sorting by image is not typical
-
-        lbl_index = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") # Centered anchor
-        lbl_index.grid(row=0, column=1, sticky="ew") # Use padx on frame if needed, sticky="ew" for label to fill
+        
+        lbl_index = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") 
+        lbl_index.grid(row=0, column=1, sticky="ew") 
         lbl_index.bind("<Button-1>", lambda e, col_id="slot_index": self._sort_by_column(col_id))
         self.header_labels["slot_index"] = lbl_index
         
-        lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="center", cursor="hand2") # Centered anchor
+        lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="center", cursor="hand2") 
         lbl_pixel_uses.grid(row=0, column=2, sticky="ew")
         lbl_pixel_uses.bind("<Button-1>", lambda e, col_id="pixel_uses_count": self._sort_by_column(col_id))
         self.header_labels["pixel_uses_count"] = lbl_pixel_uses
 
-        lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="center", cursor="hand2") # Centered anchor
+        lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="center", cursor="hand2") 
         lbl_line_refs.grid(row=0, column=3, sticky="ew")
         lbl_line_refs.bind("<Button-1>", lambda e, col_id="line_refs_count": self._sort_by_column(col_id))
         self.header_labels["line_refs_count"] = lbl_line_refs
 
-        lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") # Centered anchor
+        lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") 
         lbl_tile_refs.grid(row=0, column=4, sticky="ew")
         lbl_tile_refs.bind("<Button-1>", lambda e, col_id="tile_refs_count": self._sort_by_column(col_id))
         self.header_labels["tile_refs_count"] = lbl_tile_refs
 
         self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val") 
-        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16) 
+        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16, selectmode="browse") # selectmode
         
-        # Column #0 (Swatch)
         self.tree.column("#0", width=col_width_swatch, minwidth=col_width_swatch, stretch=tk.NO, anchor="center") 
-        
-        # Data Columns
-        self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="center") # Centered
-        self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center") # Centered
-        self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  # Centered
-        self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  # Centered
+        self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="center") 
+        self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center") 
+        self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
+        self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
 
         tree_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scrollbar.set)
@@ -225,6 +219,9 @@ class ColorUsageWindow(tk.Toplevel):
         self.tree.grid(row=1, column=0, sticky="nsew") 
         tree_scrollbar.grid(row=1, column=1, sticky="ns")
         main_frame.grid_columnconfigure(1, weight=0)
+        
+        # Bind selection event
+        self.tree.bind("<<TreeviewSelect>>", self._on_item_selected) # Added this line
 
         button_frame_container = ttk.Frame(main_frame) 
         button_frame_container.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
@@ -235,8 +232,9 @@ class ColorUsageWindow(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(10, self.refresh_data)
 
-    # _sort_by_column, refresh_data, and _on_close methods remain unchanged from Phase 2, Step 1
-    # For completeness, they are included here if you replace the whole class.
+    # _sort_by_column, refresh_data, _on_close methods from previous step are needed here
+    # For brevity, I'm not repeating them unless they change.
+    # Make sure they are present in your ColorUsageWindow class.
     def _sort_by_column(self, column_id_clicked):
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Sorting by column '{column_id_clicked}'")
         if self.current_sort_column_id == column_id_clicked:
@@ -246,14 +244,11 @@ class ColorUsageWindow(tk.Toplevel):
             self.current_sort_direction_is_asc = True 
 
         for col_id, label_widget in self.header_labels.items():
-            # Ensure label_widget exists before trying to cget/config
             if not label_widget.winfo_exists(): continue
-            
-            # Attempt to get text, handle potential TclError if widget is bad
             try:
                 current_text = label_widget.cget("text")
             except tk.TclError:
-                current_text = col_id # Fallback to id if cget fails
+                current_text = col_id 
             
             text = current_text.replace(" ▲", "").replace(" ▼", "") 
             if col_id == self.current_sort_column_id:
@@ -262,7 +257,6 @@ class ColorUsageWindow(tk.Toplevel):
             try:
                 label_widget.config(text=text)
             except tk.TclError: pass
-
         self.refresh_data()
 
     def refresh_data(self): 
@@ -297,29 +291,30 @@ class ColorUsageWindow(tk.Toplevel):
                 })
         
         valid_sort_key = self.current_sort_column_id
-        if self.current_sort_column_id not in usage_data[0]: # Check if sort key is valid
+        # Ensure usage_data is not empty before trying to access usage_data[0]
+        if usage_data and self.current_sort_column_id not in usage_data[0]: 
             self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}' in refresh_data. Defaulting to slot_index.")
-            valid_sort_key = 'slot_index' # Fallback sort key
-            # Also update the state to reflect this fallback for consistency
+            valid_sort_key = 'slot_index' 
             self.current_sort_column_id = 'slot_index'
             self.current_sort_direction_is_asc = True
-            # Update header labels again to reflect this forced default sort
             for col_id_hdr, label_widget_hdr in self.header_labels.items():
                 if not label_widget_hdr.winfo_exists(): continue
                 try:
                     hdr_text = label_widget_hdr.cget("text").replace(" ▲", "").replace(" ▼", "")
-                    if col_id_hdr == self.current_sort_column_id: # which is now 'slot_index'
+                    if col_id_hdr == self.current_sort_column_id: 
                         hdr_text += " ▲" if self.current_sort_direction_is_asc else " ▼"
                     label_widget_hdr.config(text=hdr_text)
                 except tk.TclError: pass
+        elif not usage_data: # Handle empty usage_data case
+             self.app_ref.debug("[DEBUG] usage_data is empty, skipping sort.")
 
 
-        try:
-            usage_data.sort(key=lambda item: item[valid_sort_key], 
-                            reverse=not self.current_sort_direction_is_asc)
-        except (TypeError, KeyError) as e_sort: 
-            self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
-            # Data remains unsorted or sorted by previous valid key if error
+        if usage_data: # Only sort if there's data
+            try:
+                usage_data.sort(key=lambda item: item[valid_sort_key], 
+                                reverse=not self.current_sort_direction_is_asc)
+            except (TypeError, KeyError) as e_sort: 
+                self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
        
         preview_image_size = 16
         for item_data in usage_data: 
@@ -355,6 +350,42 @@ class ColorUsageWindow(tk.Toplevel):
         if self.app_ref: 
             self.app_ref.color_usage_window = None 
         self.destroy()
+
+    def _on_item_selected(self, event):
+        # Handles item selection in the Treeview.
+        if not self.tree.winfo_exists(): # Check if tree still exists
+            return
+
+        selected_items = self.tree.selection() # Get tuple of selected item IDs
+        if not selected_items: # No item selected
+            return
+
+        item_id_str = selected_items[0] # We use selectmode="browse", so only one item
+
+        # Extract slot_index from the item_id (iid was set as f"slot_{slot_idx}")
+        # or from the values if preferred and available.
+        # Using iid:
+        try:
+            if item_id_str.startswith("slot_"):
+                slot_index = int(item_id_str.split("_")[1])
+            else: # Fallback or different iid scheme
+                # Alternative: Get from values if slot_index is the first value
+                # item_values = self.tree.item(item_id_str, "values")
+                # if item_values and len(item_values) > 0:
+                #     slot_index = int(item_values[0])
+                # else: return
+                self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Could not parse slot_index from iid '{item_id_str}'.")
+                return
+        except (ValueError, IndexError) as e:
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error parsing slot_index from iid '{item_id_str}': {e}")
+            return
+
+        if 0 <= slot_index <= 15: # Validate parsed index
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Item selected, slot_index: {slot_index}")
+            if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
+                self.app_ref.synchronize_selection_from_usage_window("color", slot_index)
+        else:
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Parsed invalid slot_index {slot_index}.")
 
 # --- Application Class  -----------------------------------------------------------------------------------------------
 class TileEditorApp:
@@ -11439,6 +11470,64 @@ class TileEditorApp:
             self.color_usage_window.focus_set()
             if hasattr(self.color_usage_window, 'refresh_data'): # If it has a refresh method
                 self.color_usage_window.refresh_data() # Refresh when brought to front
+
+    def synchronize_selection_from_usage_window(self, item_type, index):
+        self.debug(f"[DEBUG] Synchronizing selection from usage window: type='{item_type}', index={index}")
+        global selected_color_index 
+
+        if item_type == "color":
+            if not (0 <= index <= 15):
+                self.debug(f"[DEBUG] Invalid color slot index {index} for synchronization.")
+                return
+
+            try:
+                # Determine current tab BEFORE making changes
+                current_tab_widget = None
+                if self.notebook.winfo_exists():
+                    selected_tab_path = self.notebook.select()
+                    if selected_tab_path:
+                        current_tab_widget = self.notebook.nametowidget(selected_tab_path)
+
+                # Update selection state for Palette Editor
+                self.selected_palette_slot = index
+                
+                # Update selection state for Tile Editor's drawing palette (global)
+                selected_color_index = index
+                
+                # Conditional Tab Switch:
+                # Switch to Palette Editor tab ONLY IF not currently on Tile Editor tab.
+                # If on Tile Editor, the user likely wants to use the selected color there.
+                # If on any other tab (or Palette Editor itself), switch to Palette Editor
+                # to make the active palette selection explicit.
+                if current_tab_widget != self.tab_tile_editor:
+                    if self.notebook.winfo_exists() and self.tab_palette_editor.winfo_exists():
+                        self.notebook.select(self.tab_palette_editor)
+                    else:
+                        self.debug("[DEBUG] Sync: Palette editor tab or notebook not available for switch.")
+                        # update_all_displays will still be called below
+                
+                self.update_all_displays(changed_level="all") 
+                
+                self.root.lift()
+                # Focus behavior can be tricky. Focusing root might not be ideal if user intends
+                # to continue interacting with the usage window immediately.
+                # Consider if focus should go to the newly selected tab's main canvas if switched.
+                # For now, let's keep it simple and lift root.
+                # self.root.focus_set() 
+
+            except tk.TclError as e:
+                self.debug(f"[DEBUG] TclError during color selection synchronization: {e}")
+            except Exception as e:
+                self.debug(f"[DEBUG] Unexpected error during color selection synchronization: {e}")
+
+        elif item_type == "tile":
+            self.debug(f"[DEBUG] Tile synchronization requested for index {index} - to be implemented.")
+            pass
+        elif item_type == "supertile":
+            self.debug(f"[DEBUG] Supertile synchronization requested for index {index} - to be implemented.")
+            pass
+        else:
+            self.debug(f"[DEBUG] Unknown item_type '{item_type}' for synchronization.")
 
 # --- Main Execution ---
 if __name__ == "__main__":
