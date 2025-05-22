@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.40"
+APP_VERSION = "0.0.41"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -157,9 +157,9 @@ class ColorUsageWindow(tk.Toplevel):
         self.resizable(False, True) 
 
         self._image_references = [] 
-        
         self.current_sort_column_id = "slot_index" 
         self.current_sort_direction_is_asc = True   
+        self.refresh_timer_id = None 
 
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
@@ -180,61 +180,63 @@ class ColorUsageWindow(tk.Toplevel):
         header_frame.grid_columnconfigure(4, weight=0, minsize=col_width_counts) 
 
         self.header_labels = {}
-
         lbl_color = ttk.Label(header_frame, text="Color", anchor="center", cursor="hand2")
         lbl_color.grid(row=0, column=0, sticky="ew")
-        
         lbl_index = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") 
         lbl_index.grid(row=0, column=1, sticky="ew") 
         lbl_index.bind("<Button-1>", lambda e, col_id="slot_index": self._sort_by_column(col_id))
         self.header_labels["slot_index"] = lbl_index
-        
         lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="center", cursor="hand2") 
         lbl_pixel_uses.grid(row=0, column=2, sticky="ew")
         lbl_pixel_uses.bind("<Button-1>", lambda e, col_id="pixel_uses_count": self._sort_by_column(col_id))
         self.header_labels["pixel_uses_count"] = lbl_pixel_uses
-
         lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="center", cursor="hand2") 
         lbl_line_refs.grid(row=0, column=3, sticky="ew")
         lbl_line_refs.bind("<Button-1>", lambda e, col_id="line_refs_count": self._sort_by_column(col_id))
         self.header_labels["line_refs_count"] = lbl_line_refs
-
         lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") 
         lbl_tile_refs.grid(row=0, column=4, sticky="ew")
         lbl_tile_refs.bind("<Button-1>", lambda e, col_id="tile_refs_count": self._sort_by_column(col_id))
         self.header_labels["tile_refs_count"] = lbl_tile_refs
 
         self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val") 
-        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16, selectmode="browse") # selectmode
-        
+        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16, selectmode="browse") 
         self.tree.column("#0", width=col_width_swatch, minwidth=col_width_swatch, stretch=tk.NO, anchor="center") 
         self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="center") 
         self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center") 
         self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
         self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
-
+        self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
         tree_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scrollbar.set)
-
         self.tree.grid(row=1, column=0, sticky="nsew") 
         tree_scrollbar.grid(row=1, column=1, sticky="ns")
         main_frame.grid_columnconfigure(1, weight=0)
-        
-        # Bind selection event
-        self.tree.bind("<<TreeviewSelect>>", self._on_item_selected) # Added this line
-
         button_frame_container = ttk.Frame(main_frame) 
         button_frame_container.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
-        
-        self.refresh_button = ttk.Button(button_frame_container, text="Refresh", command=self.refresh_data)
-        self.refresh_button.pack(pady=5)
-
+        self.refresh_button = None 
+        if self.app_ref.debug_enabled:
+            self.refresh_button = ttk.Button(button_frame_container, text="Refresh (Debug)", command=self.refresh_data)
+            self.refresh_button.pack(pady=5)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.after(10, self.refresh_data)
+        self.after(10, self.refresh_data) 
 
-    # _sort_by_column, refresh_data, _on_close methods from previous step are needed here
-    # For brevity, I'm not repeating them unless they change.
-    # Make sure they are present in your ColorUsageWindow class.
+    def request_refresh(self, delay_ms=300): 
+        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}") # Added debug
+        if not self.winfo_exists(): 
+            return
+        if self.refresh_timer_id is not None:
+            self.after_cancel(self.refresh_timer_id)
+        self.refresh_timer_id = self.after(delay_ms, self._perform_debounced_refresh)
+        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: new refresh_timer_id set to: {self.refresh_timer_id}") # Added debug
+
+
+    def _perform_debounced_refresh(self): 
+        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: _perform_debounced_refresh executing for timer {self.refresh_timer_id}.") # Added debug
+        self.refresh_timer_id = None 
+        if self.winfo_exists(): 
+            self.refresh_data()
+
     def _sort_by_column(self, column_id_clicked):
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Sorting by column '{column_id_clicked}'")
         if self.current_sort_column_id == column_id_clicked:
@@ -242,20 +244,14 @@ class ColorUsageWindow(tk.Toplevel):
         else:
             self.current_sort_column_id = column_id_clicked
             self.current_sort_direction_is_asc = True 
-
         for col_id, label_widget in self.header_labels.items():
             if not label_widget.winfo_exists(): continue
-            try:
-                current_text = label_widget.cget("text")
-            except tk.TclError:
-                current_text = col_id 
-            
+            try: current_text = label_widget.cget("text")
+            except tk.TclError: current_text = col_id 
             text = current_text.replace(" ▲", "").replace(" ▼", "") 
             if col_id == self.current_sort_column_id:
                 text += " ▲" if self.current_sort_direction_is_asc else " ▼"
-            
-            try:
-                label_widget.config(text=text)
+            try: label_widget.config(text=text)
             except tk.TclError: pass
         self.refresh_data()
 
@@ -264,34 +260,21 @@ class ColorUsageWindow(tk.Toplevel):
         if not hasattr(self, 'tree') or not self.tree.winfo_exists():
             self.app_ref.debug("[DEBUG] Treeview not ready for refresh_data.")
             return
-
         for i in self.tree.get_children():
             self.tree.delete(i)
         self._image_references.clear()
-
         usage_data = [] 
         if hasattr(self.app_ref, '_calculate_color_usage_data'):
-            try:
-                usage_data = self.app_ref._calculate_color_usage_data() 
+            try: usage_data = self.app_ref._calculate_color_usage_data() 
             except Exception as e:
                 self.app_ref.debug(f"[DEBUG] Error calling _calculate_color_usage_data: {e}")
                 for i in range(16): 
-                     usage_data.append({
-                        'slot_index': i,
-                        'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF",
-                        'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0
-                    })
+                     usage_data.append({'slot_index': i, 'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF", 'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0})
         else: 
             self.app_ref.debug("[DEBUG] ColorUsageWindow: _calculate_color_usage_data not found for refresh.")
             for i in range(16): 
-                usage_data.append({
-                    'slot_index': i,
-                    'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF",
-                    'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0
-                })
-        
+                usage_data.append({'slot_index': i, 'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF", 'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0})
         valid_sort_key = self.current_sort_column_id
-        # Ensure usage_data is not empty before trying to access usage_data[0]
         if usage_data and self.current_sort_column_id not in usage_data[0]: 
             self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}' in refresh_data. Defaulting to slot_index.")
             valid_sort_key = 'slot_index' 
@@ -301,128 +284,95 @@ class ColorUsageWindow(tk.Toplevel):
                 if not label_widget_hdr.winfo_exists(): continue
                 try:
                     hdr_text = label_widget_hdr.cget("text").replace(" ▲", "").replace(" ▼", "")
-                    if col_id_hdr == self.current_sort_column_id: 
-                        hdr_text += " ▲" if self.current_sort_direction_is_asc else " ▼"
+                    if col_id_hdr == self.current_sort_column_id: hdr_text += " ▲" if self.current_sort_direction_is_asc else " ▼"
                     label_widget_hdr.config(text=hdr_text)
                 except tk.TclError: pass
-        elif not usage_data: # Handle empty usage_data case
-             self.app_ref.debug("[DEBUG] usage_data is empty, skipping sort.")
-
-
-        if usage_data: # Only sort if there's data
-            try:
-                usage_data.sort(key=lambda item: item[valid_sort_key], 
-                                reverse=not self.current_sort_direction_is_asc)
-            except (TypeError, KeyError) as e_sort: 
-                self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
-       
+        elif not usage_data: self.app_ref.debug("[DEBUG] usage_data is empty, skipping sort.")
+        if usage_data: 
+            try: usage_data.sort(key=lambda item: item[valid_sort_key], reverse=not self.current_sort_direction_is_asc)
+            except (TypeError, KeyError) as e_sort: self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         preview_image_size = 16
         for item_data in usage_data: 
             slot_idx = item_data['slot_index']
             hex_color = item_data['current_color_hex']
-            
-            img_w = max(1, preview_image_size)
-            img_h = max(1, preview_image_size)
+            img_w = max(1, preview_image_size); img_h = max(1, preview_image_size)
             photo = None
             try:
                 photo = tk.PhotoImage(width=img_w, height=img_h)
                 hex_color_to_put = hex_color
-                if not (isinstance(hex_color, str) and hex_color.startswith('#') and len(hex_color) == 7):
-                    hex_color_to_put = "#FF00FF"
+                if not (isinstance(hex_color, str) and hex_color.startswith('#') and len(hex_color) == 7): hex_color_to_put = "#FF00FF"
                 photo.put(hex_color_to_put, to=(0, 0, img_w, img_h))
                 self._image_references.append(photo) 
-            except tk.TclError as e_photo:
-                self.app_ref.debug(f"[DEBUG] TclError creating/putting color swatch for slot {slot_idx} color '{hex_color}': {e_photo}")
-
-            self.tree.insert("", "end",
-                             iid=f"slot_{slot_idx}", 
-                             text="",  
-                             image=photo if photo else '', 
-                             values=( 
-                                 str(slot_idx),                 
-                                 item_data['pixel_uses_count'],
-                                 item_data['line_refs_count'],
-                                 item_data['tile_refs_count']
-                             ))
-
-    def _on_close(self): 
-        self.app_ref.debug("[DEBUG] ColorUsageWindow closed.")
-        if self.app_ref: 
-            self.app_ref.color_usage_window = None 
-        self.destroy()
+            except tk.TclError as e_photo: self.app_ref.debug(f"[DEBUG] TclError creating/putting color swatch for slot {slot_idx} color '{hex_color}': {e_photo}")
+            self.tree.insert("", "end", iid=f"slot_{slot_idx}", text="", image=photo if photo else '', values=(f" {slot_idx}", item_data['pixel_uses_count'], item_data['line_refs_count'], item_data['tile_refs_count']))
 
     def _on_item_selected(self, event):
-        # Handles item selection in the Treeview.
-        if not self.tree.winfo_exists(): # Check if tree still exists
-            return
-
-        selected_items = self.tree.selection() # Get tuple of selected item IDs
-        if not selected_items: # No item selected
-            return
-
-        item_id_str = selected_items[0] # We use selectmode="browse", so only one item
-
-        # Extract slot_index from the item_id (iid was set as f"slot_{slot_idx}")
-        # or from the values if preferred and available.
-        # Using iid:
+        if not self.tree.winfo_exists(): return
+        selected_items = self.tree.selection() 
+        if not selected_items: return
+        item_id_str = selected_items[0]
         try:
-            if item_id_str.startswith("slot_"):
-                slot_index = int(item_id_str.split("_")[1])
-            else: # Fallback or different iid scheme
-                # Alternative: Get from values if slot_index is the first value
-                # item_values = self.tree.item(item_id_str, "values")
-                # if item_values and len(item_values) > 0:
-                #     slot_index = int(item_values[0])
-                # else: return
-                self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Could not parse slot_index from iid '{item_id_str}'.")
-                return
-        except (ValueError, IndexError) as e:
-            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error parsing slot_index from iid '{item_id_str}': {e}")
-            return
-
-        if 0 <= slot_index <= 15: # Validate parsed index
+            if item_id_str.startswith("slot_"): slot_index = int(item_id_str.split("_")[1])
+            else: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Could not parse slot_index from iid '{item_id_str}'."); return
+        except (ValueError, IndexError) as e: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error parsing slot_index from iid '{item_id_str}': {e}"); return
+        if 0 <= slot_index <= 15: 
             self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Item selected, slot_index: {slot_index}")
-            if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
-                self.app_ref.synchronize_selection_from_usage_window("color", slot_index)
-        else:
-            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Parsed invalid slot_index {slot_index}.")
+            if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'): self.app_ref.synchronize_selection_from_usage_window("color", slot_index)
+        else: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Parsed invalid slot_index {slot_index}.")
+
+    def _on_close(self): 
+        if self.refresh_timer_id is not None:
+            self.after_cancel(self.refresh_timer_id)
+            self.refresh_timer_id = None
+        self.app_ref.debug("[DEBUG] ColorUsageWindow closed.")
+        if self.app_ref: self.app_ref.color_usage_window = None 
+        self.destroy()
 
 # --- Application Class  -----------------------------------------------------------------------------------------------
 class TileEditorApp:
     def __init__(self, root):
+        # --- 1. Basic App/Root Window Setup ---
         self.debug_enabled = getattr(root, 'app_debug_mode', False)
+        self.debug("[DEBUG] TileEditorApp __init__ started (Reordered).")
         
         self.root = root
-        self.root.protocol("WM_DELETE_WINDOW", self.confirm_quit)
-        
         self.root.title("MSX Tile Forge - Untitled") 
-        with suppress(tk.TclError):
+        with suppress(tk.TclError): # Try to maximize window
             self.root.state("zoomed")
 
-        self.root.bind("<Configure>", self._on_main_window_configure)
+        self.current_project_base_path = None
+        self.project_modified = False
+        self.scroll_speed_units = 3 
+        self.is_currently_painting_tile = False # For drag-paint refresh fix
+
+        # Initialize active palette (needed early if default colors are used by UI elements immediately)
+        self.active_msx_palette = []
+        for r_pal, g_pal, b_pal in MSX2_RGB7_VALUES:
+            self.active_msx_palette.append(self._rgb7_to_hex(r_pal, g_pal, b_pal))
+        self.selected_palette_slot = 0 # For Palette Editor
+
+        # Timer IDs for debouncing configure events
         self._main_window_configure_timer = None 
         self._map_canvas_configure_timer = None 
         self._palette_pane_resize_timer = None 
 
-
-        self.current_project_base_path = None
-        self.project_modified = False
-
+        # --- 2. Core Data Structures Initialization ---
+        # (Assuming global definitions for tileset_patterns, tileset_colors, etc. are handled correctly
+        # at the module level and this __init__ potentially re-initializes them for a new app instance
+        # or on new_project. For now, aligning with your existing structure where these are manipulated.)
+        
+        # Default supertile dimensions for the project
         self.supertile_grid_width = SUPERTILE_GRID_DIM 
         self.supertile_grid_height = SUPERTILE_GRID_DIM 
 
-        self.active_msx_palette = []
-        for r_pal, g_pal, b_pal in MSX2_RGB7_VALUES:
-            self.active_msx_palette.append(self._rgb7_to_hex(r_pal, g_pal, b_pal))
-        self.selected_palette_slot = 0
-
+        # Image Caches
         self.tile_image_cache = {}      
         self.supertile_image_cache = {} 
         self.map_render_cache = {}      
-
         self.pil_map_viewport_image = None 
         self.tk_map_photoimage = None      
 
+        # Drag State
         self.drag_active = False
         self.drag_item_type = None
         self.drag_start_index = -1
@@ -431,6 +381,7 @@ class TileEditorApp:
         self.drag_canvas = None
         self.drag_indicator_id = None
 
+        # Map View State
         self.map_zoom_level = 1.0
         self.show_supertile_grid = tk.BooleanVar(value=False)
         self.show_window_view = tk.BooleanVar(value=False)
@@ -440,13 +391,15 @@ class TileEditorApp:
         self.window_view_tile_w = tk.IntVar(value=DEFAULT_WIN_VIEW_WIDTH_TILES)
         self.window_view_tile_h = tk.IntVar(value=DEFAULT_WIN_VIEW_HEIGHT_TILES)
         self.window_view_resize_handle = None
-        self.drag_start_x = 0
+        self.drag_start_x = 0 # For map window drag/resize
         self.drag_start_y = 0
         self.drag_start_win_tx = 0
         self.drag_start_win_ty = 0
         self.drag_start_win_tw = 0
         self.drag_start_win_th = 0
+        self.map_controls_min_width = 0 # Calculated later
 
+        # Minimap State
         self.minimap_window = None
         self.minimap_canvas = None
         self.MINIMAP_VIEWPORT_COLOR = "#FF0000"
@@ -457,40 +410,46 @@ class TileEditorApp:
         self.minimap_resize_timer = None
         self._minimap_resizing_internally = False
 
+        # Interaction State
         self.is_ctrl_pressed = False
-        self.current_mouse_action = None
+        self.current_mouse_action = None # For map interactions
         self.pan_start_x = 0
         self.pan_start_y = 0
-        self.last_placed_supertile_cell = None
+        self.last_placed_supertile_cell = None # For ST definition editor
         self.is_shift_pressed = False
 
+        # Map Selection & Clipboard
         self.map_selection_active = False
         self.map_selection_rect_id = None
         self.map_selection_start_st = None
         self.map_selection_end_st = None
         self.map_clipboard_data = None
         self.map_paste_preview_rect_id = None
+        # Note: tile_clipboard_pattern etc. are module globals in your original code
 
-        self.edit_menu = None
+        # Menu item state
+        self.edit_menu = None # Will be assigned in create_menu
         self.copy_menu_item_index = -1
         self.paste_menu_item_index = -1
 
+        # Marked Unused State
         self.marked_unused_tiles = set()
         self.marked_unused_supertiles = set()
 
+        # Dialog References
         self.rom_import_dialog = None
-        self.map_controls_min_width = 0 
-        
-        self.scroll_speed_units = 3 
-        
-        self.color_usage_window = None # Added reference for Color Usage window
+        self.color_usage_window = None
+        # self.tile_usage_window = None # Future
+        # self.supertile_usage_window = None # Future
 
-
-        self.debug("[DEBUG] TileEditorApp __init__ started.")
-
+        # --- 3. Menu Creation ---
         self.create_menu()
+
+        # --- 4. Global Key Bindings ---
         self._setup_global_key_bindings()
-        self.notebook = ttk.Notebook(root)
+
+        # --- 5. Main UI Layout (Notebook and Tabs) ---
+        self.notebook = ttk.Notebook(root) 
         self.notebook.pack(pady=10, padx=10, expand=True, fill="both")
 
         self.tab_palette_editor = ttk.Frame(self.notebook, padding="10")
@@ -503,22 +462,35 @@ class TileEditorApp:
         self.notebook.add(self.tab_supertile_editor, text="Supertile Editor")
         self.notebook.add(self.tab_map_editor, text="Map Editor")
 
+        # --- 6. Widget Creation for Each Tab ---
+        # These methods will also set up canvas-specific bindings (like scrollwheel)
         self.create_palette_editor_widgets(self.tab_palette_editor)
         self.create_tile_editor_widgets(self.tab_tile_editor)
         self.create_supertile_editor_widgets(self.tab_supertile_editor)
-        self.create_map_editor_widgets(self.tab_map_editor) 
+        self.create_map_editor_widgets(self.tab_map_editor) # This calculates self.map_controls_min_width
         
-        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
-        self._setup_map_canvas_bindings() 
+        # --- 7. Global Application State Variables (Post-UI if they depend on UI elements) ---
+        # (self.map_controls_min_width is set inside create_map_editor_widgets)
 
+        # --- 8. Core Event Bindings ---
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
+        self._setup_map_canvas_bindings() # Sets up bindings for self.map_canvas
+        
+        # Bind WM_DELETE_WINDOW and root Configure event now that main UI structure is up
+        self.root.protocol("WM_DELETE_WINDOW", self.confirm_quit)
+        self.root.bind("<Configure>", self._on_main_window_configure)
+
+        # --- 9. Initial UI State Updates & Refresh ---
+        # These should generally come after all UI elements are created and bindings are set.
         self._update_window_title() 
-        self.update_all_displays(changed_level="all") 
+        self.update_all_displays(changed_level="all") # This populates visible tab
         self._update_edit_menu_state()
         self._update_editor_button_states()
         self._update_supertile_rotate_button_state()
         self._update_map_cursor()
         
-        self.debug("[DEBUG] TileEditorApp __init__ finished.")
+        # --- 10. Final Debug Message ---
+        self.debug("[DEBUG] TileEditorApp __init__ finished (Reordered).")
 
     def debug(self, message):
         """Prints the message to the console only if debug mode is enabled."""
@@ -1012,6 +984,9 @@ class TileEditorApp:
         ) 
         self.editor_canvas.bind("<Enter>", self._set_pencil_cursor)
         self.editor_canvas.bind("<Leave>", self._reset_cursor)
+
+        self.editor_canvas.bind("<ButtonRelease-1>", self._handle_editor_paint_release, add="+")
+        self.editor_canvas.bind("<ButtonRelease-3>", self._handle_editor_paint_release, add="+") # Also for right-button drag painting
 
         fg_bg_buttons_container = ttk.Frame(editor_frame)
         fg_bg_buttons_container.grid(row=0, column=1, sticky=(tk.N, tk.S), padx=(10, 0))
@@ -2424,6 +2399,7 @@ class TileEditorApp:
                 print(f"Set Palette Slot {target_slot} to {new_color_hex}")
                 self.clear_all_caches()
                 self.update_all_displays(changed_level="all")
+                self._request_color_usage_refresh() # Added
         else:
             print("Clicked outside valid color range in picker.")
 
@@ -2431,9 +2407,9 @@ class TileEditorApp:
         if not (0 <= self.selected_palette_slot < 16):
             return
         try:
-            r_val = int(self.rgb_r_var.get()) # Renamed r
-            g_val = int(self.rgb_g_var.get()) # Renamed g
-            b_val = int(self.rgb_b_var.get()) # Renamed b
+            r_val = int(self.rgb_r_var.get()) 
+            g_val = int(self.rgb_g_var.get()) 
+            b_val = int(self.rgb_b_var.get()) 
             if not (0 <= r_val <= 7 and 0 <= g_val <= 7 and 0 <= b_val <= 7):
                 raise ValueError("RGB values must be 0-7.")
             
@@ -2441,14 +2417,15 @@ class TileEditorApp:
             target_slot = self.selected_palette_slot
             
             if self.active_msx_palette[target_slot] != new_color_hex:
-                if self._clear_marked_unused(trigger_redraw=False): # Clear before palette change
-                    pass # Full redraw will happen anyway
+                if self._clear_marked_unused(trigger_redraw=False): 
+                    pass
                 
                 self._mark_project_modified()
                 self.active_msx_palette[target_slot] = new_color_hex
                 print(f"Set Palette Slot {target_slot} to {new_color_hex} via RGB")
                 self.clear_all_caches()
-                self.update_all_displays(changed_level="all") # "all" because palette affects everything
+                self.update_all_displays(changed_level="all") 
+                self._request_color_usage_refresh() # Added
         except ValueError as e:
             messagebox.showerror("Invalid RGB", f"Invalid RGB input: {e}")
 
@@ -2459,7 +2436,7 @@ class TileEditorApp:
         )
         if confirm:
             new_default_palette = []
-            for r_val, g_val, b_val in MSX2_RGB7_VALUES: # Renamed r,g,b
+            for r_val, g_val, b_val in MSX2_RGB7_VALUES: 
                 new_default_palette.append(self._rgb7_to_hex(r_val, g_val, b_val))
             
             if self.active_msx_palette != new_default_palette:
@@ -2470,9 +2447,10 @@ class TileEditorApp:
                 self.active_msx_palette = new_default_palette
                 self.selected_palette_slot = 0
                 global selected_color_index
-                selected_color_index = 0 # Or WHITE_IDX depending on desired default
+                selected_color_index = WHITE_IDX # Or 0, consistent with default selection
                 self.clear_all_caches()
                 self.update_all_displays(changed_level="all")
+                self._request_color_usage_refresh() # Added
                 print("Palette reset to MSX2 defaults.")
             else:
                 print("Palette is already set to MSX2 defaults.")
@@ -2483,23 +2461,23 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
         
-        # --- Clear marked unused if an actual drawing action occurs ---
+        self.is_currently_painting_tile = True # Painting starts
         c = event.x // EDITOR_PIXEL_SIZE
         r = event.y // EDITOR_PIXEL_SIZE
         if 0 <= r < TILE_HEIGHT and 0 <= c < TILE_WIDTH:
-            pixel_value_to_set = 1 if event.num == 1 else 0 # Determine based on left/right click
+            pixel_value_to_set = 1 if event.num == 1 else 0 
             if tileset_patterns[current_tile_index][r][c] != pixel_value_to_set:
-                # Call _clear_marked_unused only if a change is about to be made
-                if self._clear_marked_unused(trigger_redraw=False): # Clear state first
-                    self.update_all_displays(changed_level="all") # Redraw if marks were cleared
+                if self._clear_marked_unused(trigger_redraw=False): 
+                    self.update_all_displays(changed_level="all") 
                 
                 self._mark_project_modified()
                 tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
                 self.invalidate_tile_cache(current_tile_index)
-                # update_all_displays will be called again if marks were cleared,
-                # otherwise, a more targeted update is fine.
-                if not (self.marked_unused_tiles or self.marked_unused_supertiles): # if no marks were cleared
+
+                if not (self.marked_unused_tiles or self.marked_unused_supertiles): 
                     self.update_all_displays(changed_level="tile")
+                
+                self._request_color_usage_refresh() 
             last_drawn_pixel = (r, c)
 
     def handle_editor_drag(self, event):
@@ -2507,26 +2485,27 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
         
+        self.is_currently_painting_tile = True # Painting continues
         c = event.x // EDITOR_PIXEL_SIZE
         r = event.y // EDITOR_PIXEL_SIZE
         if 0 <= r < TILE_HEIGHT and 0 <= c < TILE_WIDTH:
             if (r, c) != last_drawn_pixel:
                 pixel_value_to_set = (
                     1 if event.state & 0x100 else (0 if event.state & 0x400 else -1)
-                ) # Determine based on button state during drag
+                ) 
                 if (
                     pixel_value_to_set != -1
                     and tileset_patterns[current_tile_index][r][c] != pixel_value_to_set
                 ):
-                    # Call _clear_marked_unused only if a change is about to be made
-                    if self._clear_marked_unused(trigger_redraw=False): # Clear state first
-                        self.update_all_displays(changed_level="all") # Redraw if marks were cleared
+                    if self._clear_marked_unused(trigger_redraw=False): 
+                        self.update_all_displays(changed_level="all")
 
                     self._mark_project_modified()
                     tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
                     self.invalidate_tile_cache(current_tile_index)
                     if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                         self.update_all_displays(changed_level="tile")
+                    self._request_color_usage_refresh() 
                 last_drawn_pixel = (r, c)
 
     def handle_tile_editor_palette_click(self, event):
@@ -2552,16 +2531,16 @@ class TileEditorApp:
             current_fg_idx, current_bg_idx = tileset_colors[current_tile_index][row]
             changed = False
             if fg_or_bg == "fg" and current_fg_idx != selected_color_index:
-                if self._clear_marked_unused(trigger_redraw=False): # Clear state first
-                    self.update_all_displays(changed_level="all") # Redraw if marks were cleared
+                if self._clear_marked_unused(trigger_redraw=False): 
+                    self.update_all_displays(changed_level="all") 
                 tileset_colors[current_tile_index][row] = (
                     selected_color_index,
                     current_bg_idx,
                 )
                 changed = True
             elif fg_or_bg == "bg" and current_bg_idx != selected_color_index:
-                if self._clear_marked_unused(trigger_redraw=False): # Clear state first
-                    self.update_all_displays(changed_level="all") # Redraw if marks were cleared
+                if self._clear_marked_unused(trigger_redraw=False): 
+                    self.update_all_displays(changed_level="all") 
                 tileset_colors[current_tile_index][row] = (
                     current_fg_idx,
                     selected_color_index,
@@ -2573,6 +2552,7 @@ class TileEditorApp:
                 self.invalidate_tile_cache(current_tile_index)
                 if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                     self.update_all_displays(changed_level="tile")
+                self._request_color_usage_refresh()
 
     def handle_tileset_click(self, event):
         canvas = event.widget
@@ -3500,6 +3480,7 @@ class TileEditorApp:
             
             self._trigger_minimap_reconfigure() # In case map proportions change due to ST dim change
             self.update_all_displays(changed_level="all")
+            self._request_color_usage_refresh()
 
             self._update_editor_button_states()
             self._update_edit_menu_state()
@@ -3554,31 +3535,30 @@ class TileEditorApp:
         load_path = filepath
         if not load_path:
             load_path = filedialog.askopenfilename(
-                filetypes=[("SC4 Palette File", "*.SC4Pal"), ("Old MSX Palette File", "*.msxpal"), ("All Files", "*.*")], # UPDATED
-                title="Open SC4 Palette", # UPDATED
+                filetypes=[("SC4 Palette File", "*.SC4Pal"), ("Old MSX Palette File", "*.msxpal"), ("All Files", "*.*")], 
+                title="Open SC4 Palette", 
             )
         if not load_path:
             return False
 
         try:
-            expected_color_data_size = 16 * 3  # 48 bytes for colors
+            expected_color_data_size = 16 * 3  
             new_palette_hex = []
             
-            # Determine file size to infer format (old .msxpal vs new .SC4Pal with reserved bytes)
             try:
                 file_size = os.path.getsize(load_path)
             except OSError as e:
                 raise ValueError(f"Could not get size of file '{os.path.basename(load_path)}': {e}")
 
             is_new_format_with_reserved_bytes = False
-            expected_size_new = RESERVED_BYTES_COUNT + expected_color_data_size # 4 + 48 = 52
-            expected_size_old = expected_color_data_size # 48
+            expected_size_new = RESERVED_BYTES_COUNT + expected_color_data_size 
+            expected_size_old = expected_color_data_size 
 
             if file_size == expected_size_new:
                 is_new_format_with_reserved_bytes = True
                 self.debug(f"Info: Detected new format SC4Pal file (size {file_size} with reserved bytes).")
             elif file_size == expected_size_old:
-                is_new_format_with_reserved_bytes = False # Old format, no reserved bytes
+                is_new_format_with_reserved_bytes = False 
                 self.debug(f"Info: Detected old format msxpal/SC4Pal file (size {file_size} without reserved bytes).")
             else:
                 raise ValueError(
@@ -3587,14 +3567,11 @@ class TileEditorApp:
 
             with open(load_path, "rb") as f:
                 if is_new_format_with_reserved_bytes:
-                    # --- ADDED: Read and discard reserved bytes from the BEGINNING ---
                     reserved_bytes_read = f.read(RESERVED_BYTES_COUNT)
                     if len(reserved_bytes_read) < RESERVED_BYTES_COUNT:
                         raise EOFError("EOF while reading reserved bytes from new format palette file.")
                     self.debug(f"Info: Read and skipped {RESERVED_BYTES_COUNT} reserved bytes from palette file.")
-                    # --- END ADDED ---
                 
-                # Read the 48 bytes of color data
                 palette_data_bytes = f.read(expected_color_data_size)
                 if len(palette_data_bytes) < expected_color_data_size:
                     raise EOFError(
@@ -3617,13 +3594,12 @@ class TileEditorApp:
                     hex_color = self._rgb7_to_hex(r_val, g_val, b_val)
                     new_palette_hex.append(hex_color)
                 
-                # Check for any further unexpected data
                 extra_data_check = f.read(1)
                 if extra_data_check:
                     self.debug(f"Warning: Palette file '{os.path.basename(load_path)}' contains additional unexpected data at the end.")
 
             confirm = True
-            if filepath is None:
+            if filepath is None: # Only ask confirm if interactive open
                 confirm = messagebox.askokcancel(
                     "Load Palette",
                     "Replace the current active palette with data from this file?",
@@ -3641,6 +3617,7 @@ class TileEditorApp:
                 self.clear_all_caches()
                 self.invalidate_minimap_background_cache()
                 self.update_all_displays(changed_level="all")
+                self._request_color_usage_refresh() # Added
                 
                 if filepath is None:
                     try: 
@@ -3909,6 +3886,7 @@ class TileEditorApp:
                 self.update_all_displays(changed_level="all")
                 self._update_editor_button_states()
                 self._update_edit_menu_state()
+                self._request_color_usage_refresh()
 
                 if filepath is None:
                     try:
@@ -4700,7 +4678,7 @@ class TileEditorApp:
         
         if success: self.debug(f"  Loading palette: {actual_pal_path_to_load}"); success = self.open_palette(actual_pal_path_to_load)
         if success: self.debug(f"  Loading tileset: {til_path}"); success = self.open_tileset(til_path)
-        if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path, is_part_of_project_load=True) # Modified line
+        if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path, is_part_of_project_load=True) 
         if success: self.debug(f"  Loading map: {map_path}"); success = self.open_map(map_path)
         
         if success:
@@ -4708,8 +4686,14 @@ class TileEditorApp:
             self.current_project_base_path = base_path 
             self._update_window_title()
             
-            self.root.after_idle(self._perform_project_load_ui_updates)
-            self.debug(f"[DEBUG] open_project: Project '{base_name}' load sequence initiated. UI updates deferred.")
+            # _perform_project_load_ui_updates will call update_all_displays,
+            # so we request the color usage refresh *after* that sequence.
+            def deferred_refresh_and_updates():
+                self._perform_project_load_ui_updates()
+                self._request_color_usage_refresh() # Added here
+
+            self.root.after_idle(deferred_refresh_and_updates) # Modified
+            self.debug(f"[DEBUG] open_project: Project '{base_name}' load sequence initiated. UI updates and color usage refresh deferred.")
 
         else:
             messagebox.showerror("Project Open Error", 
@@ -4717,10 +4701,15 @@ class TileEditorApp:
                                  parent=self.root)
             self.project_modified = True 
             self._update_window_title()
-            self.root.after_idle(self.update_all_displays, "all") 
-            self.root.after_idle(self._update_edit_menu_state)
-            self.root.after_idle(self._update_editor_button_states)
-            self.root.after_idle(self._update_supertile_rotate_button_state)
+            # Still attempt to update displays and color usage even on partial/failed load
+            def deferred_fail_refresh_and_updates():
+                self.update_all_displays(changed_level="all") 
+                self._update_edit_menu_state()
+                self._update_editor_button_states()
+                self._update_supertile_rotate_button_state()
+                self._request_color_usage_refresh() # Added here
+
+            self.root.after_idle(deferred_fail_refresh_and_updates) # Modified
 
     def _perform_project_load_ui_updates(self):
         """Helper method to perform UI updates after a project load and Tkinter idle cycle."""
@@ -4862,6 +4851,7 @@ class TileEditorApp:
                     self.update_all_displays(changed_level="all")
                     self._update_editor_button_states()
                     self._update_edit_menu_state()
+                    self._request_color_usage_refresh()
 
             except ValueError:
                 messagebox.showerror("Invalid Input", "Please enter a valid whole number.")
@@ -5043,6 +5033,7 @@ class TileEditorApp:
             self.invalidate_tile_cache(current_tile_index)
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                 self.update_all_displays(changed_level="tile")
+            self._request_color_usage_refresh()
 
     def clear_current_supertile(self):
         global supertiles_data, current_supertile_index # supertiles_data is global
@@ -5094,7 +5085,7 @@ class TileEditorApp:
             messagebox.showinfo("Paste Tile", "Tile clipboard is empty.")
             return
         if not (0 <= current_tile_index < num_tiles_in_set):
-            messagebox.showwarning("Paste Tile", "No valid tile selected to paste onto.") # Clarified message
+            messagebox.showwarning("Paste Tile", "No valid tile selected to paste onto.") 
             return
         
         if self._clear_marked_unused(trigger_redraw=False):
@@ -5106,6 +5097,7 @@ class TileEditorApp:
         self.invalidate_tile_cache(current_tile_index)
         if not (self.marked_unused_tiles or self.marked_unused_supertiles):
             self.update_all_displays(changed_level="tile")
+        self._request_color_usage_refresh() # Added
         print(f"Pasted onto Tile {current_tile_index}.")
 
     def copy_current_supertile(self):
@@ -7415,27 +7407,23 @@ class TileEditorApp:
 
     def handle_add_tile(self):  
         global num_tiles_in_set, current_tile_index
-        
-        # Clear marks BEFORE any modification that changes usage or indices
+    
         if self._clear_marked_unused(trigger_redraw=False):
-            # If marks were cleared, ensure a full redraw happens after other operations
-            # by setting a flag or letting update_all_displays in success path handle it.
-            # For simplicity here, we'll rely on the update_all_displays in the success path.
             pass
 
-        success = self._insert_tile(num_tiles_in_set)  # Insert at the very end
+        success = self._insert_tile(num_tiles_in_set)  
 
         if success:
             num_tiles_in_set += 1
             new_tile_idx = num_tiles_in_set - 1
-            current_tile_index = new_tile_idx  # Select the newly added tile
+            current_tile_index = new_tile_idx  
 
             self.clear_all_caches()  
             self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all")  # Update everything
+            self.update_all_displays(changed_level="all")  
             self.scroll_viewers_to_tile(current_tile_index)
             self._update_editor_button_states()  
-            # self._mark_project_modified() is called within _insert_tile
+            self._request_color_usage_refresh() # Correctly placed
             print(f"Added new tile {new_tile_idx}")
         else:
             messagebox.showwarning(
@@ -7446,18 +7434,17 @@ class TileEditorApp:
         global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
 
         if self._clear_marked_unused(trigger_redraw=False):
-            pass # Full redraw will happen if successful
+            pass 
 
         insert_idx = current_tile_index
         success = self._insert_tile(insert_idx)
 
         if success:
             num_tiles_in_set += 1
-            current_tile_index = insert_idx # Selection stays at the new blank tile
+            current_tile_index = insert_idx 
 
             if selected_tile_for_supertile >= insert_idx:
                 selected_tile_for_supertile += 1
-            # Clamp to be safe, though _insert_tile should ensure num_tiles_in_set is valid for this
             selected_tile_for_supertile = min(selected_tile_for_supertile, num_tiles_in_set -1)
 
 
@@ -7466,7 +7453,7 @@ class TileEditorApp:
             self.update_all_displays(changed_level="all")
             self.scroll_viewers_to_tile(current_tile_index)
             self._update_editor_button_states()
-            # self._mark_project_modified() is called within _insert_tile
+            self._request_color_usage_refresh() # Added
             print(f"Inserted tile at index {insert_idx}")
         else:
             messagebox.showwarning(
@@ -7499,10 +7486,7 @@ class TileEditorApp:
 
         if not messagebox.askokcancel("Confirm Delete", confirm_msg, icon="warning"):
             return
-        
-        # Adjust marked set BEFORE actual data deletion and BEFORE _delete_tile
-        # because _delete_tile will change num_tiles_in_set which might affect _adjust_marked logic
-        # if it relied on the old num_tiles_in_set.
+
         self._adjust_marked_indices_after_delete(self.marked_unused_tiles, delete_idx)
 
         success = self._delete_tile(delete_idx) # Core logic does NOT clear marks
@@ -7527,6 +7511,7 @@ class TileEditorApp:
             self.update_all_displays(changed_level="all") # This will redraw with adjusted marks
             self.scroll_viewers_to_tile(current_tile_index)  
             self._update_editor_button_states()
+            self._request_color_usage_refresh()
             # self._mark_project_modified() is called within _delete_tile
             print(f"Deleted tile at index {delete_idx}")
         else:
@@ -10219,7 +10204,6 @@ class TileEditorApp:
         except tk.TclError:
             self.debug("[DEBUG] Error updating importer swatches: TclError (widget likely destroyed).")
 
-
     def _pick_importer_color(self, swatch_type):
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog) or \
            not self.active_msx_palette:
@@ -10703,54 +10687,52 @@ class TileEditorApp:
         return result["value"]
 
     def handle_add_many_tiles(self):
-        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX # Globals
+        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX 
 
         if num_tiles_in_set >= MAX_TILES:
             messagebox.showinfo("Add Many Tiles", "Tileset is already full.", parent=self.root)
             return
 
         space_available = MAX_TILES - num_tiles_in_set
-        
+    
         num_to_add = self._create_add_many_dialog(
-            parent=self.root, # Or the specific tab frame if preferred for modality
+            parent=self.root, 
             title_text="Add Many Tiles",
             prompt_text=f"How many tiles to add? (1-{space_available})",
             current_items=num_tiles_in_set,
             max_items_total=MAX_TILES
         )
 
-        if num_to_add is None or num_to_add <= 0: # User cancelled or entered invalid
+        if num_to_add is None or num_to_add <= 0: 
             return
 
         if self._clear_marked_unused(trigger_redraw=False):
-            pass # Redraw will happen as part of update_all_displays
+            pass 
 
         self._mark_project_modified()
-        
-        first_new_tile_idx = num_tiles_in_set # Index where new tiles will start
-        
+    
+        first_new_tile_idx = num_tiles_in_set 
+    
         for _ in range(num_to_add):
-            if num_tiles_in_set < MAX_TILES: # Double check limit inside loop
-                # Ensure global lists are extended if they are not pre-allocated to MAX_TILES
-                # (Assuming they are already MAX_TILES long and we just update num_tiles_in_set)
+            if num_tiles_in_set < MAX_TILES: 
                 if num_tiles_in_set < len(tileset_patterns) and num_tiles_in_set < len(tileset_colors):
                     tileset_patterns[num_tiles_in_set] = [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
                     tileset_colors[num_tiles_in_set] = [(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)]
                     num_tiles_in_set += 1
                 else:
-                    # This case implies tileset_patterns/colors are not MAX_TILES long, or an issue with num_tiles_in_set
                     self.debug(f"[DEBUG] handle_add_many_tiles: Error - trying to access beyond list capacity for tile {num_tiles_in_set}")
-                    break # Stop adding if data structures are not as expected
+                    break 
             else:
-                break # Should be caught by space_available and num_to_add logic
-
-        current_tile_index = first_new_tile_idx # Select the first of the newly added tiles
+                break 
         
+        current_tile_index = first_new_tile_idx 
+    
         self.clear_all_caches()
         self.invalidate_minimap_background_cache()
         self.update_all_displays(changed_level="all")
         self.scroll_viewers_to_tile(current_tile_index)
         self._update_editor_button_states()
+        self._request_color_usage_refresh() # Correctly placed
         self.debug(f"Added {num_to_add} new tiles.")
 
     def handle_add_many_supertiles(self):
@@ -10933,7 +10915,8 @@ class TileEditorApp:
             self.update_all_displays(changed_level="all")
             self.scroll_viewers_to_tile(current_tile_index)
             self._update_editor_button_states()
-            
+            self._request_color_usage_refresh()
+
             final_message = f"Appended {num_to_actually_append} tile(s) from {os.path.basename(load_path)}."
             if num_to_actually_append < tiles_in_file_count:
                 final_message += f"\n({tiles_in_file_count - num_to_actually_append} tiles from file were not appended due to limit.)"
@@ -11528,6 +11511,31 @@ class TileEditorApp:
             pass
         else:
             self.debug(f"[DEBUG] Unknown item_type '{item_type}' for synchronization.")
+
+    def _request_color_usage_refresh(self):
+        # Helper to request a refresh of the color usage window if it's open.
+        if self.color_usage_window and \
+           tk.Toplevel.winfo_exists(self.color_usage_window) and \
+           self.color_usage_window.winfo_ismapped(): # Check if mapped (visible)
+            if hasattr(self.color_usage_window, 'request_refresh'):
+                self.color_usage_window.request_refresh()
+            else:
+                self.debug("[DEBUG] ColorUsageWindow does not have request_refresh method.")
+        # else: window doesn't exist or isn't visible, no action.
+
+    def _handle_editor_paint_release(self, event):
+        # Called on ButtonRelease-1 from the tile editor canvas
+        global last_drawn_pixel # Assuming last_drawn_pixel is a module-level global
+        global last_drawn_pixel # Assuming last_drawn_pixel is a module-level global
+        
+        if self.is_currently_painting_tile:
+            self.debug("[DEBUG] Tile paint drag finished, requesting final color usage refresh.")
+            self._request_color_usage_refresh()
+            self.is_currently_painting_tile = False
+        last_drawn_pixel = None # Reset for next click/drag
+
+# print(dir(TileEditorApp))
+# exit() # Stop before GUI starts for this test
 
 # --- Main Execution ---
 if __name__ == "__main__":
