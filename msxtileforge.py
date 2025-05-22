@@ -1,4 +1,4 @@
-#!/bin/env -S python3
+﻿#!/bin/env -S python3
 # -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk
@@ -158,9 +158,8 @@ class ColorUsageWindow(tk.Toplevel):
 
         self._image_references = [] 
         
-        # --- Sorting State ---
-        self.current_sort_column_id = "slot_index" # Default sort: by slot index
-        self.current_sort_direction_is_asc = True   # Default: ascending
+        self.current_sort_column_id = "slot_index" 
+        self.current_sort_direction_is_asc = True   
 
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
@@ -170,53 +169,55 @@ class ColorUsageWindow(tk.Toplevel):
         header_frame = ttk.Frame(main_frame)
         header_frame.grid(row=0, column=0, sticky="ew", columnspan=2) 
         
-        col_width_swatch = 40 
-        col_width_index = 50  
-        col_width_counts = 80 
+        # --- Define Column Widths (can be adjusted) ---
+        col_width_swatch = 30  # For the color swatch column (#0)
+        col_width_index = 40   # Reduced width for the slot index column
+        col_width_counts = 70  # For each of the count columns
 
+        # Configure grid for header_frame to align with Treeview columns
         header_frame.grid_columnconfigure(0, weight=0, minsize=col_width_swatch) 
         header_frame.grid_columnconfigure(1, weight=0, minsize=col_width_index)  
         header_frame.grid_columnconfigure(2, weight=0, minsize=col_width_counts)  
         header_frame.grid_columnconfigure(3, weight=0, minsize=col_width_counts)  
         header_frame.grid_columnconfigure(4, weight=0, minsize=col_width_counts) 
 
-        # --- Clickable Static Labels for Sorting ---
-        # Store labels to update their text with sort indicators later if desired
         self.header_labels = {}
 
         lbl_color = ttk.Label(header_frame, text="Color", anchor="center", cursor="hand2")
         lbl_color.grid(row=0, column=0, sticky="ew")
-        # No sorting by color swatch itself usually
+        # lbl_color.bind("<Button-1>", lambda e, col_id="preview_image": self._sort_by_column(col_id)) # Sorting by image is not typical
 
-        lbl_index = ttk.Label(header_frame, text="Index ?", anchor="w", cursor="hand2") # Default sort indicator
-        lbl_index.grid(row=0, column=1, sticky="ew", padx=(5,0))
+        lbl_index = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") # Centered anchor
+        lbl_index.grid(row=0, column=1, sticky="ew") # Use padx on frame if needed, sticky="ew" for label to fill
         lbl_index.bind("<Button-1>", lambda e, col_id="slot_index": self._sort_by_column(col_id))
         self.header_labels["slot_index"] = lbl_index
         
-        lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="e", cursor="hand2")
+        lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="center", cursor="hand2") # Centered anchor
         lbl_pixel_uses.grid(row=0, column=2, sticky="ew")
         lbl_pixel_uses.bind("<Button-1>", lambda e, col_id="pixel_uses_count": self._sort_by_column(col_id))
         self.header_labels["pixel_uses_count"] = lbl_pixel_uses
 
-        lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="e", cursor="hand2")
+        lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="center", cursor="hand2") # Centered anchor
         lbl_line_refs.grid(row=0, column=3, sticky="ew")
         lbl_line_refs.bind("<Button-1>", lambda e, col_id="line_refs_count": self._sort_by_column(col_id))
         self.header_labels["line_refs_count"] = lbl_line_refs
 
-        lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="e", cursor="hand2")
+        lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") # Centered anchor
         lbl_tile_refs.grid(row=0, column=4, sticky="ew")
         lbl_tile_refs.bind("<Button-1>", lambda e, col_id="tile_refs_count": self._sort_by_column(col_id))
         self.header_labels["tile_refs_count"] = lbl_tile_refs
-        # --- End Clickable Static Labels ---
 
         self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val") 
         self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16) 
         
+        # Column #0 (Swatch)
         self.tree.column("#0", width=col_width_swatch, minwidth=col_width_swatch, stretch=tk.NO, anchor="center") 
-        self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="w")
-        self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="e")
-        self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="e")
-        self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="e")
+        
+        # Data Columns
+        self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="center") # Centered
+        self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center") # Centered
+        self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  # Centered
+        self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  # Centered
 
         tree_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scrollbar.set)
@@ -234,30 +235,35 @@ class ColorUsageWindow(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(10, self.refresh_data)
 
+    # _sort_by_column, refresh_data, and _on_close methods remain unchanged from Phase 2, Step 1
+    # For completeness, they are included here if you replace the whole class.
     def _sort_by_column(self, column_id_clicked):
-        # Handles click on a header label to change sort order.
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Sorting by column '{column_id_clicked}'")
         if self.current_sort_column_id == column_id_clicked:
             self.current_sort_direction_is_asc = not self.current_sort_direction_is_asc
         else:
             self.current_sort_column_id = column_id_clicked
-            self.current_sort_direction_is_asc = True # Default to ascending on new column
+            self.current_sort_direction_is_asc = True 
 
-        # Update header label texts to show sort indicators (optional visual polish)
         for col_id, label_widget in self.header_labels.items():
-            text = label_widget.cget("text").replace(" ?", "").replace(" ?", "") # Remove old indicator
-            if col_id == self.current_sort_column_id:
-                text += " ?" if self.current_sort_direction_is_asc else " ?"
+            # Ensure label_widget exists before trying to cget/config
+            if not label_widget.winfo_exists(): continue
+            
+            # Attempt to get text, handle potential TclError if widget is bad
             try:
-                if label_widget.winfo_exists():
-                    label_widget.config(text=text)
+                current_text = label_widget.cget("text")
+            except tk.TclError:
+                current_text = col_id # Fallback to id if cget fails
+            
+            text = current_text.replace(" ▲", "").replace(" ▼", "") 
+            if col_id == self.current_sort_column_id:
+                text += " ▲" if self.current_sort_direction_is_asc else " ▼"
+            
+            try:
+                label_widget.config(text=text)
             except tk.TclError: pass
 
-        self.refresh_data() # Re-fetch, re-sort, and re-populate the tree
-
-    # refresh_data and _on_close remain the same as Step 1P
-    # The sorting logic will be added to refresh_data in the next step.
-    # For now, refresh_data just needs to be aware that it *will* use these sorting state vars.
+        self.refresh_data()
 
     def refresh_data(self): 
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
@@ -272,10 +278,9 @@ class ColorUsageWindow(tk.Toplevel):
         usage_data = [] 
         if hasattr(self.app_ref, '_calculate_color_usage_data'):
             try:
-                usage_data = self.app_ref._calculate_color_usage_data() # This returns a list of dicts
+                usage_data = self.app_ref._calculate_color_usage_data() 
             except Exception as e:
                 self.app_ref.debug(f"[DEBUG] Error calling _calculate_color_usage_data: {e}")
-                # Populate with dummy data for UI testing if calculation fails
                 for i in range(16): 
                      usage_data.append({
                         'slot_index': i,
@@ -284,33 +289,40 @@ class ColorUsageWindow(tk.Toplevel):
                     })
         else: 
             self.app_ref.debug("[DEBUG] ColorUsageWindow: _calculate_color_usage_data not found for refresh.")
-            for i in range(16): # Dummy data
+            for i in range(16): 
                 usage_data.append({
                     'slot_index': i,
                     'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF",
                     'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0
                 })
         
-        # --- Apply Sorting ---
-        # The column_id_clicked corresponds to keys in our item_data dictionaries
-        if self.current_sort_column_id in usage_data[0]: # Check if sort key is valid
-            try:
-                usage_data.sort(key=lambda item: item[self.current_sort_column_id], 
-                                reverse=not self.current_sort_direction_is_asc)
-            except TypeError as e_sort: # e.g. if trying to sort by a non-sortable key like the hex string directly without conversion
-                self.app_ref.debug(f"[DEBUG] TypeError during sorting by '{self.current_sort_column_id}': {e_sort}. Defaulting to slot_index sort.")
-                usage_data.sort(key=lambda item: item['slot_index'], reverse=False) # Fallback sort
-            except KeyError as e_key: # Should not happen if column_id is from our dict keys
-                self.app_ref.debug(f"[DEBUG] KeyError during sorting by '{self.current_sort_column_id}': {e_key}. Defaulting to slot_index sort.")
-                usage_data.sort(key=lambda item: item['slot_index'], reverse=False) # Fallback sort
+        valid_sort_key = self.current_sort_column_id
+        if self.current_sort_column_id not in usage_data[0]: # Check if sort key is valid
+            self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}' in refresh_data. Defaulting to slot_index.")
+            valid_sort_key = 'slot_index' # Fallback sort key
+            # Also update the state to reflect this fallback for consistency
+            self.current_sort_column_id = 'slot_index'
+            self.current_sort_direction_is_asc = True
+            # Update header labels again to reflect this forced default sort
+            for col_id_hdr, label_widget_hdr in self.header_labels.items():
+                if not label_widget_hdr.winfo_exists(): continue
+                try:
+                    hdr_text = label_widget_hdr.cget("text").replace(" ▲", "").replace(" ▼", "")
+                    if col_id_hdr == self.current_sort_column_id: # which is now 'slot_index'
+                        hdr_text += " ▲" if self.current_sort_direction_is_asc else " ▼"
+                    label_widget_hdr.config(text=hdr_text)
+                except tk.TclError: pass
 
-        else: # Fallback if sort column ID is somehow invalid
-            self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}'. Defaulting to slot_index sort.")
-            usage_data.sort(key=lambda item: item['slot_index'], reverse=False)
-        # --- End Apply Sorting ---
 
+        try:
+            usage_data.sort(key=lambda item: item[valid_sort_key], 
+                            reverse=not self.current_sort_direction_is_asc)
+        except (TypeError, KeyError) as e_sort: 
+            self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
+            # Data remains unsorted or sorted by previous valid key if error
+       
         preview_image_size = 16
-        for item_data in usage_data: # Iterate through the (now sorted) data
+        for item_data in usage_data: 
             slot_idx = item_data['slot_index']
             hex_color = item_data['current_color_hex']
             
