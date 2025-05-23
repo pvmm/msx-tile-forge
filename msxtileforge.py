@@ -44,7 +44,7 @@ DRAG_THRESHOLD_PIXELS = 3 # Minimum pixels mouse must move to initiate a drag
 RESERVED_BYTES_COUNT = 4 # NEW constant for clarity
 
 # --- Constants for TileUsageWindow (can be placed near other constants or here) ---
-TILE_USAGE_PREVIEW_SIZE = 16 # Pixel size for tile previews in the usage window
+TILE_USAGE_PREVIEW_SIZE = 24 # Pixel size for tile previews in the usage window
 
 
 # --- Palette Editor Constants ---
@@ -352,42 +352,63 @@ class TileUsageWindow(tk.Toplevel):
         header_frame = ttk.Frame(main_frame)
         header_frame.grid(row=0, column=0, sticky="ew", columnspan=2) 
         
-        col_width_preview = TILE_USAGE_PREVIEW_SIZE + 8 
-        col_width_index = 60   
-        col_width_counts = 120 # Adjusted to "Tile Refs" and "ST Refs" potentially needing more space
+        # --- Adjust Column Widths ---
+        # Make "Tile" (image) column wider: e.g., image (24px) + 8px padding on each side
+        col_width_tile_image = TILE_USAGE_PREVIEW_SIZE + 16 # Example: 24 + 16 = 40
+        col_width_index_data = 60   # Keep as is or adjust if needed
+        col_width_refs_data = 110 # Slightly reduce ref columns if trying to match ColorUsage total width
 
-        header_frame.grid_columnconfigure(0, weight=0, minsize=col_width_preview) 
-        header_frame.grid_columnconfigure(1, weight=0, minsize=col_width_index)  
-        header_frame.grid_columnconfigure(2, weight=0, minsize=col_width_counts)  
-        header_frame.grid_columnconfigure(3, weight=0, minsize=col_width_counts)  
+        header_frame.grid_columnconfigure(0, weight=0, minsize=col_width_tile_image) 
+        header_frame.grid_columnconfigure(1, weight=0, minsize=col_width_index_data)  
+        header_frame.grid_columnconfigure(2, weight=0, minsize=col_width_refs_data)  
+        header_frame.grid_columnconfigure(3, weight=0, minsize=col_width_refs_data)  
 
         self.header_labels = {} 
 
-        lbl_tile_preview_header = ttk.Label(header_frame, text="Tile", anchor="center") # Changed "Preview" to "Tile"
-        lbl_tile_preview_header.grid(row=0, column=0, sticky="ew", padx=(2,0))
+        # --- Adjust Header Label Padding ---
+        lbl_tile_preview_header = ttk.Label(header_frame, text="Tile", anchor="center") 
+        # Increase left padding to shift "Tile" header right. e.g., padx=(10,0)
+        lbl_tile_preview_header.grid(row=0, column=0, sticky="ew", padx=(10, 0)) # Adjusted padx
 
-        lbl_tile_index_header = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") # Changed "Tile #" to "Index"
-        lbl_tile_index_header.grid(row=0, column=1, sticky="ew") 
+        lbl_tile_index_header = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") 
+        # Add left padding to shift "Index" header right. e.g., padx=(5,0)
+        lbl_tile_index_header.grid(row=0, column=1, sticky="ew", padx=(5, 0)) # Adjusted padx
         lbl_tile_index_header.bind("<Button-1>", lambda e, col_id="tile_index": self._sort_by_column(col_id))
         self.header_labels["tile_index"] = lbl_tile_index_header
 
-        lbl_tile_refs_header = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") # Changed "Total Uses (in STs)"
+        lbl_tile_refs_header = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") 
         lbl_tile_refs_header.grid(row=0, column=2, sticky="ew")
         lbl_tile_refs_header.bind("<Button-1>", lambda e, col_id="total_uses_count": self._sort_by_column(col_id))
         self.header_labels["total_uses_count"] = lbl_tile_refs_header
         
-        lbl_st_refs_header = ttk.Label(header_frame, text="ST Refs", anchor="center", cursor="hand2") # Changed "Used By #STs"
+        lbl_st_refs_header = ttk.Label(header_frame, text="ST Refs", anchor="center", cursor="hand2") 
         lbl_st_refs_header.grid(row=0, column=3, sticky="ew")
         lbl_st_refs_header.bind("<Button-1>", lambda e, col_id="used_by_sts_count": self._sort_by_column(col_id))
         self.header_labels["used_by_sts_count"] = lbl_st_refs_header
 
         self.data_column_ids_for_values = ("tile_index_val", "total_uses_val", "used_by_sts_val") 
-        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16, selectmode="browse") 
         
-        self.tree.column("#0", width=col_width_preview, minwidth=col_width_preview, stretch=tk.NO, anchor="center") 
-        self.tree.column("tile_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="center") 
-        self.tree.column("total_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center") 
-        self.tree.column("used_by_sts_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
+        style = ttk.Style()
+        custom_treeview_style_name = "TileUsage.Treeview" 
+        target_row_height_style = TILE_USAGE_PREVIEW_SIZE + 2 
+        try:
+            style.configure(custom_treeview_style_name, rowheight=target_row_height_style)
+            self.app_ref.debug(f"[DEBUG] TileUsageWindow: Configured style '{custom_treeview_style_name}' with rowheight={target_row_height_style}.")
+        except tk.TclError as e_style:
+            self.app_ref.debug(f"[DEBUG] TileUsageWindow: TclError configuring style '{custom_treeview_style_name}' for rowheight: {e_style}")
+            try:
+                style.configure('Treeview', rowheight=target_row_height_style)
+                self.app_ref.debug(f"[DEBUG] TileUsageWindow: Fallback - Configured generic 'Treeview' style with rowheight={target_row_height_style}.")
+            except tk.TclError as e_style_generic:
+                 self.app_ref.debug(f"[DEBUG] TileUsageWindow: TclError configuring generic 'Treeview' style for rowheight: {e_style_generic}")
+
+        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16, selectmode="browse", style=custom_treeview_style_name) 
+        
+        # --- Apply new Treeview column widths ---
+        self.tree.column("#0", width=col_width_tile_image, minwidth=col_width_tile_image, stretch=tk.NO, anchor="center") 
+        self.tree.column("tile_index_val", width=col_width_index_data, minwidth=col_width_index_data, stretch=tk.NO, anchor="center") 
+        self.tree.column("total_uses_val", width=col_width_refs_data, minwidth=col_width_refs_data, stretch=tk.NO, anchor="center") 
+        self.tree.column("used_by_sts_val", width=col_width_refs_data, minwidth=col_width_refs_data, stretch=tk.NO, anchor="center")  
         
         self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
         
@@ -407,7 +428,7 @@ class TileUsageWindow(tk.Toplevel):
             self.refresh_button.pack(pady=5) 
         
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.after(10, self.refresh_data) 
+        self.after(10, self.refresh_data)
 
     def request_refresh(self, delay_ms=300): 
         # self.app_ref.debug(f"[DEBUG] TileUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}")
@@ -448,9 +469,7 @@ class TileUsageWindow(tk.Toplevel):
         self.refresh_data()
 
     def refresh_data(self): 
-        # self.app_ref.debug(f"[DEBUG] TileUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
         if not hasattr(self, 'tree') or not self.tree.winfo_exists():
-            # self.app_ref.debug("[DEBUG] Treeview not ready for refresh_data.")
             return
         
         for i in self.tree.get_children():
@@ -463,7 +482,6 @@ class TileUsageWindow(tk.Toplevel):
                 usage_data = self.app_ref._calculate_tile_usage_data() 
             except Exception as e:
                 self.app_ref.debug(f"[DEBUG] Error calling _calculate_tile_usage_data: {e}")
-                # Create placeholder data if calculation fails
                 for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)): 
                      usage_data.append({'tile_index': i, 'total_uses_count': 0, 'used_by_sts_count': 0})
         else: 
@@ -471,23 +489,19 @@ class TileUsageWindow(tk.Toplevel):
             for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)): 
                 usage_data.append({'tile_index': i, 'total_uses_count': 0, 'used_by_sts_count': 0})
 
-        # Validate sort key and sort data
         valid_sort_key = self.current_sort_column_id
         if usage_data and self.current_sort_column_id not in usage_data[0]: 
-            # self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}' in refresh_data. Defaulting to tile_index.")
-            valid_sort_key = 'tile_index' # Default sort key from the data itself
-            # Also reset UI to reflect this default
+            valid_sort_key = 'tile_index' 
             self.current_sort_column_id = 'tile_index'
             self.current_sort_direction_is_asc = True
             for col_id_hdr, label_widget_hdr in self.header_labels.items():
                 if not label_widget_hdr.winfo_exists(): continue
                 try:
                     hdr_text = label_widget_hdr.cget("text").replace(" ▲", "").replace(" ▼", "")
-                    if col_id_hdr == self.current_sort_column_id: hdr_text += " ▲" # Default to ascending
+                    if col_id_hdr == self.current_sort_column_id: hdr_text += " ▲" 
                     label_widget_hdr.config(text=hdr_text)
                 except tk.TclError: pass
         elif not usage_data: 
-            # self.app_ref.debug("[DEBUG] usage_data is empty, skipping sort.")
             pass
 
         if usage_data: 
@@ -496,31 +510,30 @@ class TileUsageWindow(tk.Toplevel):
             except (TypeError, KeyError) as e_sort: 
                 self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         
-        preview_image_size = TILE_USAGE_PREVIEW_SIZE # Use the defined constant
+        preview_image_size = TILE_USAGE_PREVIEW_SIZE 
         for item_data in usage_data: 
             tile_idx = item_data['tile_index']
             
             photo = None
             try:
-                # Create tile image using app_ref method
                 if hasattr(self.app_ref, 'create_tile_image'):
                     photo = self.app_ref.create_tile_image(tile_idx, preview_image_size)
                     if photo:
                         self._image_references.append(photo) 
                 else:
                     self.app_ref.debug(f"[DEBUG] create_tile_image not found on app_ref for tile {tile_idx}")
-            except Exception as e_photo: # Broader catch for image creation issues
+            except Exception as e_photo: 
                 self.app_ref.debug(f"[DEBUG] Error creating preview image for tile {tile_idx}: {e_photo}")
 
-            # Treeview values: Index, Total Uses, Used By #STs
             self.tree.insert("", "end", 
                              iid=f"tile_{tile_idx}", 
-                             text="",  # No text in the #0 column
+                             text=" ",  # Changed: Add a space character for column #0
                              image=photo if photo else '', 
                              values=(f" {tile_idx}", 
                                      item_data['total_uses_count'], 
-                                     item_data['used_by_sts_count']))
-
+                                     item_data['used_by_sts_count']),
+                             tags=('large_font_for_test',)) # Apply the large font tag to the row
+        
     def _on_item_selected(self, event):
         if not self.tree.winfo_exists(): return
         selected_items = self.tree.selection() 
@@ -593,6 +606,8 @@ class TileEditorApp:
         # Default supertile dimensions for the project
         self.supertile_grid_width = SUPERTILE_GRID_DIM 
         self.supertile_grid_height = SUPERTILE_GRID_DIM 
+
+        self.num_tiles_in_set = 1
 
         # Image Caches
         self.tile_image_cache = {}      
