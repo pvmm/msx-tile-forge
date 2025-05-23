@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.41"
+APP_VERSION = "0.0.42"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -535,6 +535,7 @@ class TileUsageWindow(tk.Toplevel):
                              tags=('large_font_for_test',)) # Apply the large font tag to the row
         
     def _on_item_selected(self, event):
+        global num_tiles_in_set
         if not self.tree.winfo_exists(): return
         selected_items = self.tree.selection() 
         if not selected_items: return
@@ -551,8 +552,8 @@ class TileUsageWindow(tk.Toplevel):
             self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error parsing tile_index from iid '{item_id_str}': {e}")
             return
         
-        # Validate index against current num_tiles_in_set from app_ref
-        if 0 <= actual_item_idx < self.app_ref.num_tiles_in_set: 
+        # Validate index against current num_tiles_in_set
+        if 0 <= actual_item_idx < num_tiles_in_set: 
             # self.app_ref.debug(f"[DEBUG] TileUsageWindow: Item selected, tile_index: {actual_item_idx}")
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
                 self.app_ref.synchronize_selection_from_usage_window("tile", actual_item_idx)
@@ -606,8 +607,6 @@ class TileEditorApp:
         # Default supertile dimensions for the project
         self.supertile_grid_width = SUPERTILE_GRID_DIM 
         self.supertile_grid_height = SUPERTILE_GRID_DIM 
-
-        self.num_tiles_in_set = 1
 
         # Image Caches
         self.tile_image_cache = {}      
@@ -7811,13 +7810,12 @@ class TileEditorApp:
         
         self._adjust_marked_indices_after_delete(self.marked_unused_supertiles, delete_idx)
 
-        success = self._delete_supertile(delete_idx) # _delete_supertile now calls _request_tile_usage_refresh
+        success = self._delete_supertile(delete_idx) # Core data deletion
 
         if success:
-            num_supertiles -= 1
+            num_supertiles -= 1 # Update count *after* successful deletion
             current_supertile_index = min(delete_idx, num_supertiles - 1)
-            current_supertile_index = max(0, current_supertile_index)
-
+            current_supertile_index = max(0, current_supertile_index) # Ensure not -1
 
             if selected_supertile_for_map == delete_idx:
                 selected_supertile_for_map = 0
@@ -7826,13 +7824,13 @@ class TileEditorApp:
             selected_supertile_for_map = min(selected_supertile_for_map, num_supertiles - 1)
             selected_supertile_for_map = max(0, selected_supertile_for_map)
 
-
             self.supertile_image_cache.clear()
             self.invalidate_minimap_background_cache()
             self.update_all_displays(changed_level="all") 
             self.scroll_selectors_to_supertile(current_supertile_index)
             self._update_editor_button_states()
             # self._mark_project_modified() is in _delete_supertile
+            self._request_tile_usage_refresh() # Refresh now that num_supertiles is updated
             print(f"Deleted supertile at index {delete_idx}")
         else:
             messagebox.showerror(
@@ -11674,8 +11672,9 @@ class TileEditorApp:
 
     def synchronize_selection_from_usage_window(self, item_type, index):
         self.debug(f"[DEBUG] Synchronizing selection from usage window: type='{item_type}', index={index}")
-        global selected_color_index, current_tile_index, selected_tile_for_supertile # Add tile globals
-        global current_supertile_index, selected_supertile_for_map # Add supertile globals
+        global selected_color_index, current_tile_index, selected_tile_for_supertile 
+        global current_supertile_index, selected_supertile_for_map 
+        global num_tiles_in_set # Assuming num_tiles_in_set remains global for now
 
         if item_type == "color":
             if not (0 <= index <= 15):
@@ -11690,9 +11689,10 @@ class TileEditorApp:
                         current_tab_widget = self.notebook.nametowidget(selected_tab_path)
 
                 self.selected_palette_slot = index
-                selected_color_index = index
+                selected_color_index = index 
                 
-                if current_tab_widget != self.tab_tile_editor:
+                if current_tab_widget != self.tab_tile_editor and \
+                   current_tab_widget != self.tab_palette_editor:
                     if self.notebook.winfo_exists() and self.tab_palette_editor.winfo_exists():
                         self.notebook.select(self.tab_palette_editor)
                     else:
@@ -11707,20 +11707,43 @@ class TileEditorApp:
                 self.debug(f"[DEBUG] Unexpected error during color selection synchronization: {e}")
 
         elif item_type == "tile":
-            if not (0 <= index < num_tiles_in_set): # Use num_tiles_in_set for upper bound
-                self.debug(f"[DEBUG] Invalid tile index {index} for synchronization.")
+            if not (0 <= index < num_tiles_in_set): 
+                self.debug(f"[DEBUG] Invalid tile index {index} for synchronization (num_tiles_in_set: {num_tiles_in_set}).")
                 return
             
             try:
-                if self.notebook.winfo_exists() and self.tab_tile_editor.winfo_exists():
-                    self.notebook.select(self.tab_tile_editor)
-                
-                current_tile_index = index
-                selected_tile_for_supertile = index # Also sync the tile selected for ST definition
+                active_tab_widget = None
+                if self.notebook.winfo_exists():
+                    selected_tab_path = self.notebook.select()
+                    if selected_tab_path:
+                        active_tab_widget = self.notebook.nametowidget(selected_tab_path)
 
-                self.update_all_displays(changed_level="all") # "all" to ensure ST tab also updates its tile selector if visible
-                self.scroll_viewers_to_tile(index)
-                self.root.lift()
+                if active_tab_widget == self.tab_supertile_editor:
+                    # Supertile tab is active, keep it active
+                    self.debug("[DEBUG] Sync Tile: Supertile Editor tab active. Updating its selection.")
+                    if selected_tile_for_supertile != index:
+                        selected_tile_for_supertile = index
+                        # Redraw only the ST tab's tileset viewer and its info labels
+                        if hasattr(self, 'st_tileset_canvas') and self.st_tileset_canvas.winfo_exists():
+                            self.draw_tileset_viewer(self.st_tileset_canvas, selected_tile_for_supertile)
+                        self.update_supertile_info_labels() 
+                    # Also ensure the main tile editor's current_tile_index is synced if user switches later
+                    current_tile_index = index 
+                else:
+                    # Default behavior: switch to Tile Editor tab
+                    self.debug("[DEBUG] Sync Tile: Other tab active. Switching to Tile Editor.")
+                    if self.notebook.winfo_exists() and self.tab_tile_editor.winfo_exists():
+                        if active_tab_widget != self.tab_tile_editor: # Avoid redundant select if already there
+                            self.notebook.select(self.tab_tile_editor)
+                    else:
+                        self.debug("[DEBUG] Sync: Tile editor tab or notebook not available for switch.")
+                    
+                    current_tile_index = index
+                    selected_tile_for_supertile = index 
+                    self.update_all_displays(changed_level="all") # "all" to ensure consistency
+                
+                self.scroll_viewers_to_tile(index) 
+                self.root.lift() 
 
             except tk.TclError as e:
                 self.debug(f"[DEBUG] TclError during tile selection synchronization: {e}")
@@ -11729,7 +11752,7 @@ class TileEditorApp:
 
         elif item_type == "supertile":
             self.debug(f"[DEBUG] Supertile synchronization requested for index {index} - to be implemented.")
-            pass # To be implemented later
+            pass 
         else:
             self.debug(f"[DEBUG] Unknown item_type '{item_type}' for synchronization.")
 
