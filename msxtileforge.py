@@ -47,19 +47,10 @@ RESERVED_BYTES_COUNT = 4 # NEW constant for clarity
 TILE_USAGE_PREVIEW_SIZE = 24 # Pixel size for tile previews in the usage window
 
 # --- Constants for SupertileUsageWindow (can be placed near other constants or here) ---
-SUPERTILE_USAGE_PREVIEW_MSX_PIXEL_HEIGHT = 64 # Example: Supertile's height in MSX pixels for preview scaling
 SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL = 1 # Example: Scale factor for display (1 means 1 screen pixel per MSX pixel)
-# If you want previews twice as big as their MSX pixel dimensions, set this to 2.
-# Let's start with 1 for potentially more items visible without making rows extremely tall.
-# You can adjust this later.
-
-SUPERTILE_USAGE_PREVIEW_TARGET_H = SUPERTILE_USAGE_PREVIEW_MSX_PIXEL_HEIGHT * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
 SUPERTILE_USAGE_ROW_PADDING = 4
-SUPERTILE_USAGE_TREEVIEW_ROW_H = SUPERTILE_USAGE_PREVIEW_TARGET_H + SUPERTILE_USAGE_ROW_PADDING
-
 SUPERTILE_USAGE_COL0_OFFSET_GUESS = 20 # For tree indicator/padding in column #0
 SUPERTILE_USAGE_MIN_IMAGE_MSX_W = 8    # Min MSX pixel width for ST content area to be visible
-SUPERTILE_USAGE_MIN_COL0_W = (SUPERTILE_USAGE_MIN_IMAGE_MSX_W * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL) + SUPERTILE_USAGE_COL0_OFFSET_GUESS
 
 # --- Palette Editor Constants ---
 MSX2_PICKER_COLS = 32
@@ -591,139 +582,113 @@ class SupertileUsageWindow(tk.Toplevel):
         self.app_ref = master_app
         self.title("Supertile Usage")
         self.transient(master_app.root)
-        self.grab_set() # Makes it modal
-        self.resizable(False, True) # Lock horizontal resize
+        self.resizable(True, True) 
 
         self._image_references = []
-        self.current_sort_column_id = "st_index" # Default sort: 'st_index' or 'uses_on_map_count'
+        self.current_sort_column_id = "st_index" 
         self.current_sort_direction_is_asc = True
         self.refresh_timer_id = None
         
-        # For column resize detection
         self._is_dragging_col_separator = False
         self._col0_width_at_drag_start = 0
-        self._treeview_refresh_timer_id = None # For debouncing Treeview <Configure>
+        self._treeview_refresh_timer_id = None
+
+        # --- DYNAMICALLY CALCULATE HEIGHTS BASED ON CURRENT PROJECT ---
+        app_st_grid_h = self.app_ref.supertile_grid_height
+        tile_h_const = TILE_HEIGHT # Should be 8
+        scale_const = SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL # Should be 1 or 2
+
+        # === ADD DEBUG PRINTS ===
+        self.app_ref.debug(f"[STU_INIT] app_ref.supertile_grid_height: {app_st_grid_h}")
+        self.app_ref.debug(f"[STU_INIT] TILE_HEIGHT: {tile_h_const}")
+        self.app_ref.debug(f"[STU_INIT] SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL: {scale_const}")
+        # === END DEBUG PRINTS ===
+
+        self.preview_target_content_h = (app_st_grid_h * tile_h_const * scale_const)
+        self.preview_target_content_h = max(1, int(self.preview_target_content_h))
+
+        treeview_styled_row_h = self.preview_target_content_h + SUPERTILE_USAGE_ROW_PADDING
+        
+        # === ADD DEBUG PRINTS ===
+        self.app_ref.debug(f"[STU_INIT] Calculated self.preview_target_content_h (for image): {self.preview_target_content_h}")
+        self.app_ref.debug(f"[STU_INIT] Calculated treeview_styled_row_h (for style): {treeview_styled_row_h}")
+        # === END DEBUG PRINTS ===
+        
+        min_col0_image_area_w = SUPERTILE_USAGE_MIN_IMAGE_MSX_W * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
+        self.min_col0_total_width = max(1, int(min_col0_image_area_w + SUPERTILE_USAGE_COL0_OFFSET_GUESS))
 
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
-        main_frame.grid_rowconfigure(1, weight=1) # Treeview row
-        main_frame.grid_columnconfigure(0, weight=1) # Treeview column
+        main_frame.grid_rowconfigure(1, weight=1) 
+        main_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Treeview Styling for Row Height ---
         self.style = ttk.Style()
-        # Use a unique style name to avoid conflict if other Treeviews have different row heights
-        self.treeview_style_name = "SupertileUsage.Treeview"
+        self.treeview_style_name = f"SupertileUsage_{id(self)}.Treeview" 
         try:
-            self.style.configure(self.treeview_style_name, rowheight=SUPERTILE_USAGE_TREEVIEW_ROW_H)
-            # Optional: Ensure selected rows use a consistent background if needed
+            self.style.configure(self.treeview_style_name, rowheight=treeview_styled_row_h)
             self.style.map(self.treeview_style_name,
                            background=[('selected', self.style.lookup(self.treeview_style_name, 'background'))],
                            foreground=[('selected', self.style.lookup(self.treeview_style_name, 'foreground'))])
         except tk.TclError as e_style:
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}")
-            # Fallback to generic Treeview if custom fails (though less ideal)
-            try:
-                self.style.configure('Treeview', rowheight=SUPERTILE_USAGE_TREEVIEW_ROW_H)
-                self.treeview_style_name = 'Treeview' # Use generic name if fallback used
-            except tk.TclError as e_style_generic:
-                self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: TclError configuring generic 'Treeview' style: {e_style_generic}")
+            try: 
+                # Check if app_ref has style, or create a temp one if needed just for lookup
+                app_style = getattr(self.app_ref, 'style', ttk.Style()) # Fallback to new Style if app_ref has no .style
+                app_style.configure('Treeview', rowheight=treeview_styled_row_h)
+                self.treeview_style_name = 'Treeview' 
+            except Exception as e_gen:
+                 self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Failed to apply generic Treeview rowheight: {e_gen}")
 
-
-        # --- Header Frame (for static labels if not using Treeview internal headers) ---
-        # For consistency with the test script (v7.2) which used internal headers, we'll proceed that way.
-        # If you preferred static labels above, this section would be different.
-
-        # --- Treeview Widget ---
         self.data_column_ids_for_values = ("st_index_val", "uses_on_map_val")
         self.tree = ttk.Treeview(
             main_frame,
             columns=self.data_column_ids_for_values,
-            show="tree headings", # Show tree column (#0) and data column headings
-            height=16, # Initial number of rows visible
+            show="tree headings",
+            height=16, 
             selectmode="browse",
-            style=self.treeview_style_name # Apply custom or fallback style
+            style=self.treeview_style_name
         )
 
-        # --- Column Definitions & Headings (Treeview's built-in) ---
-        # Column #0: Supertile Image
-        col0_initial_width = 150 # Example initial width
-        self.tree.column(
-            "#0",
-            width=col0_initial_width,
-            minwidth=SUPERTILE_USAGE_MIN_COL0_W,
-            stretch=tk.YES,
-            anchor=tk.W # Left-align image
-        )
-        self.tree.heading(
-            "#0",
-            text="Supertile", # Heading for the image column
-            command=lambda: self._sort_by_column("#0") # Sort by image might mean sort by index
-        )
+        col0_initial_width = 150 
+        self.tree.column("#0", width=col0_initial_width, minwidth=self.min_col0_total_width, stretch=tk.YES, anchor=tk.W)
+        self.tree.heading("#0", text="Supertile", command=lambda: self._sort_by_column("#0"))
 
-        # Column 1: Index
         index_col_width = 70
-        self.tree.column(
-            "st_index_val",
-            width=index_col_width,
-            minwidth=50,
-            stretch=tk.YES, # Allow stretching
-            anchor=tk.CENTER
-        )
-        self.tree.heading(
-            "st_index_val",
-            text="Index",
-            command=lambda: self._sort_by_column("st_index")
-        )
-        # Store header labels for sort indicator updates
-        self.header_labels = {"#0": self.tree.heading("#0"), "st_index": self.tree.heading("st_index_val")}
+        self.tree.column("st_index_val", width=index_col_width, minwidth=50, stretch=tk.YES, anchor=tk.CENTER)
+        self.tree.heading("st_index_val", text="Index", command=lambda: self._sort_by_column("st_index"))
+        
+        self.header_labels = {} 
+        self.header_labels["#0"] = {"id": "#0"} 
+        self.header_labels["st_index"] = {"id": "st_index_val"}
 
-
-        # Column 2: Uses on Map
         uses_col_width = 100
-        self.tree.column(
-            "uses_on_map_val",
-            width=uses_col_width,
-            minwidth=80,
-            stretch=tk.YES,
-            anchor=tk.CENTER
-        )
-        self.tree.heading(
-            "uses_on_map_val",
-            text="Uses on Map",
-            command=lambda: self._sort_by_column("uses_on_map_count")
-        )
-        self.header_labels["uses_on_map_count"] = self.tree.heading("uses_on_map_val")
+        self.tree.column("uses_on_map_val", width=uses_col_width, minwidth=80, stretch=tk.YES, anchor=tk.CENTER)
+        self.tree.heading("uses_on_map_val", text="Uses on Map", command=lambda: self._sort_by_column("uses_on_map_count"))
+        self.header_labels["uses_on_map_count"] = {"id": "uses_on_map_val"}
 
-
-        # --- Scrollbars ---
         v_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scrollbar.set)
         h_scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(xscrollcommand=h_scrollbar.set)
 
-        # Layout Treeview and Scrollbars
-        self.tree.grid(row=1, column=0, sticky="nsew") # Treeview below static headers (if used) or at row 0
+        self.tree.grid(row=1, column=0, sticky="nsew")
         v_scrollbar.grid(row=1, column=1, sticky="ns")
-        h_scrollbar.grid(row=2, column=0, sticky="ew") # Horizontal scrollbar below tree
+        h_scrollbar.grid(row=2, column=0, sticky="ew")
 
-        # --- Debug Refresh Button ---
         button_frame_container = ttk.Frame(main_frame)
         button_frame_container.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5,0))
         self.refresh_button = None
         if self.app_ref.debug_enabled:
             self.refresh_button = ttk.Button(button_frame_container, text="Refresh (Debug)", command=self.refresh_data)
-            self.refresh_button.pack(pady=5) # Centered
+            self.refresh_button.pack(pady=5)
 
-        # --- Bindings ---
         self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         
-        # Bindings for dynamic column #0 image refresh
         self.tree.bind("<ButtonPress-1>", self._on_tree_button_press)
-        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+') # Bind to Toplevel
+        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+')
         self.tree.bind("<Configure>", self._on_tree_configure_debounced)
 
-        # Initial data population
         self.after(50, self.refresh_data_if_ready)
 
     def refresh_data_if_ready(self):
@@ -739,7 +704,6 @@ class SupertileUsageWindow(tk.Toplevel):
             self.app_ref.debug("[DEBUG] SupertileUsageWindow: Treeview not ready for refresh_data.")
             return
 
-        # Clear existing items
         for i in self.tree.get_children():
             self.tree.delete(i)
         self._image_references.clear()
@@ -750,7 +714,6 @@ class SupertileUsageWindow(tk.Toplevel):
                 usage_data = self.app_ref._calculate_supertile_usage_data()
             except Exception as e:
                 self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error calling _calculate_supertile_usage_data: {e}")
-                # Fallback: create dummy entries if calculation fails
                 for i in range(getattr(self.app_ref, 'num_supertiles', 0)):
                      usage_data.append({'st_index': i, 'uses_on_map_count': 0})
         else:
@@ -758,18 +721,16 @@ class SupertileUsageWindow(tk.Toplevel):
             for i in range(getattr(self.app_ref, 'num_supertiles', 0)):
                  usage_data.append({'st_index': i, 'uses_on_map_count': 0})
 
-        # Validate sort key and sort data
         valid_sort_key = self.current_sort_column_id
-        # For column #0 ("Supertile" image), we sort by 'st_index'
         if self.current_sort_column_id == "#0":
             valid_sort_key = 'st_index'
         
         if usage_data and valid_sort_key not in usage_data[0]:
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Invalid sort column '{valid_sort_key}'. Defaulting to 'st_index'.")
             valid_sort_key = 'st_index'
-            self.current_sort_column_id = 'st_index' # Or #0 if you want the header to reflect 'Supertile'
+            self.current_sort_column_id = 'st_index' 
             self.current_sort_direction_is_asc = True
-            self._update_header_sort_indicators() # Update visual indicators
+            self._update_header_sort_indicators() 
 
         if usage_data:
             try:
@@ -777,22 +738,25 @@ class SupertileUsageWindow(tk.Toplevel):
             except (TypeError, KeyError) as e_sort:
                 self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         
-        # Calculate image area width for previews
-        # Ensure tree is updated for width query
         self.tree.update_idletasks() 
         total_col0_width = self.tree.column("#0", "width")
-        image_content_area_width = max(1, total_col0_width - SUPERTILE_USAGE_COL0_OFFSET_GUESS)
+        # Use self.min_col0_total_width as the floor for total_col0_width if it's too small
+        # This ensures image_content_area_width doesn't become negative if COL0_INTERNAL_LEFT_OFFSET_GUESS is large
+        # and total_col0_width is smaller than the offset guess (which shouldn't happen if minwidth is set correctly).
+        effective_total_col0_width = max(total_col0_width, self.min_col0_total_width)
+        image_content_area_width = max(1, effective_total_col0_width - SUPERTILE_USAGE_COL0_OFFSET_GUESS)
 
-        # Populate Treeview
         for item_data in usage_data:
             st_idx = item_data['st_index']
             photo = None
             try:
                 if hasattr(self.app_ref, 'create_cropped_supertile_preview_for_usage_window'):
+                    # Pass self.preview_target_content_h (calculated in __init__)
+                    # This is the height the PhotoImage for the row content should be.
                     photo = self.app_ref.create_cropped_supertile_preview_for_usage_window(
                         st_idx,
                         image_content_area_width,
-                        SUPERTILE_USAGE_PREVIEW_TARGET_H # Fixed height for the image content
+                        self.preview_target_content_h 
                     )
                     if photo:
                         self._image_references.append(photo)
@@ -804,19 +768,17 @@ class SupertileUsageWindow(tk.Toplevel):
             self.tree.insert(
                 "", "end",
                 iid=f"st_{st_idx}",
-                text="", # No text for column #0 item itself, only image
+                text="", 
                 image=photo if photo else '',
                 values=(f"  {st_idx}", item_data['uses_on_map_count']),
-                tags=('st_row',) # For potential future row-specific styling
+                tags=('st_row',) 
             )
         
-        # Ensure row background is opaque (helps if theme has transparent rows)
         try:
             row_bg = self.style.lookup(self.treeview_style_name, 'background')
             self.tree.tag_configure('st_row', background=row_bg)
         except tk.TclError:
-            pass # Style or widget might not be fully ready
-
+            pass
 
     def _sort_by_column(self, column_id_clicked):
         self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Sorting by column '{column_id_clicked}'")
@@ -872,11 +834,12 @@ class SupertileUsageWindow(tk.Toplevel):
                 pass # Widget might be gone
 
     def _on_item_selected(self, event):
+        global num_supertiles # MODIFIED: Declare access to global
         if not self.tree.winfo_exists(): return
         selected_items = self.tree.selection()
         if not selected_items: return
 
-        item_iid_str = selected_items[0] # e.g., "st_5"
+        item_iid_str = selected_items[0] 
         try:
             if item_iid_str.startswith("st_"):
                 actual_st_idx = int(item_iid_str.split("_")[1])
@@ -887,13 +850,15 @@ class SupertileUsageWindow(tk.Toplevel):
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error parsing st_index from iid '{item_iid_str}': {e}")
             return
 
-        # Validate index against current num_supertiles in the app
-        if hasattr(self.app_ref, 'num_supertiles') and 0 <= actual_st_idx < self.app_ref.num_supertiles:
+        # MODIFIED: Use the global num_supertiles directly for the check
+        self.app_ref.debug(f"[STU_SELECT_DEBUG] Parsed actual_st_idx: {actual_st_idx}. Current global num_supertiles: {num_supertiles}")
+        
+        if 0 <= actual_st_idx < num_supertiles: # MODIFIED: Check against global
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Item selected, st_index: {actual_st_idx}")
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
                 self.app_ref.synchronize_selection_from_usage_window("supertile", actual_st_idx)
         else:
-            self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Parsed invalid st_index {actual_st_idx} for selection sync.")
+            self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Parsed invalid st_index {actual_st_idx} (global num_supertiles: {num_supertiles}) for selection sync.")
 
     def request_refresh(self, delay_ms=300):
         self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}")
@@ -912,8 +877,21 @@ class SupertileUsageWindow(tk.Toplevel):
 
     def _on_close(self):
         if self.refresh_timer_id is not None:
-            self.after_cancel(self.refresh_timer_id)
+            try: self.after_cancel(self.refresh_timer_id) # Add try-except
+            except tk.TclError: pass
             self.refresh_timer_id = None
+        
+        if hasattr(self, '_treeview_refresh_timer_id') and self._treeview_refresh_timer_id:
+            try: self.after_cancel(self._treeview_refresh_timer_id) # Add try-except
+            except tk.TclError: pass
+            self._treeview_refresh_timer_id = None
+
+        self.app_ref.debug("[DEBUG] SupertileUsageWindow closed.")
+        if self.app_ref: 
+            self.app_ref.supertile_usage_window = None 
+        try: # Add try-except for destroy
+            if self.winfo_exists(): self.destroy()
+        except tk.TclError: pass
         
         # Cancel column resize debounce timer if it exists
         if hasattr(self, '_treeview_refresh_timer_id') and self._treeview_refresh_timer_id:
@@ -4199,7 +4177,7 @@ class TileEditorApp:
         global supertiles_data, current_supertile_index, num_supertiles, selected_tile_for_supertile
         global map_data, map_width, map_height, selected_supertile_for_map, last_painted_map_cell
         global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data
-        global selected_color_index # Ensure this global is also reset if needed
+        global selected_color_index 
 
         confirm_new = True
         if self.project_modified:
@@ -4208,13 +4186,13 @@ class TileEditorApp:
             )
 
         if confirm_new:
+            # Get new supertile dimensions from user (existing dialog logic)
             new_dim_w_str = simpledialog.askstring(
                 "New Supertile Width",
                 "Enter supertile grid width (number of tiles, 1-32):",
                 parent=self.root, initialvalue=str(self.supertile_grid_width)
             )
             if new_dim_w_str is None: return 
-
             try:
                 new_dim_w = int(new_dim_w_str)
                 if not (1 <= new_dim_w <= 32):
@@ -4230,7 +4208,6 @@ class TileEditorApp:
                 parent=self.root, initialvalue=str(self.supertile_grid_height)
             )
             if new_dim_h_str is None: return 
-            
             try:
                 new_dim_h = int(new_dim_h_str)
                 if not (1 <= new_dim_h <= 32):
@@ -4240,10 +4217,25 @@ class TileEditorApp:
                 messagebox.showerror("Invalid Input", "Height must be a whole number.", parent=self.root)
                 return
 
+            # --- MODIFICATION: Destroy existing usage windows BEFORE resetting project data ---
+            if self.color_usage_window and tk.Toplevel.winfo_exists(self.color_usage_window):
+                self.color_usage_window.destroy()
+            self.color_usage_window = None
+            
+            if self.tile_usage_window and tk.Toplevel.winfo_exists(self.tile_usage_window):
+                self.tile_usage_window.destroy()
+            self.tile_usage_window = None
+
+            if self.supertile_usage_window and tk.Toplevel.winfo_exists(self.supertile_usage_window):
+                self.supertile_usage_window.destroy()
+            self.supertile_usage_window = None
+            # --- END MODIFICATION ---
+
             self.supertile_grid_width = new_dim_w
             self.supertile_grid_height = new_dim_h
             self.debug(f"New project: Supertile dimensions set to {self.supertile_grid_width}W x {self.supertile_grid_height}H.")
 
+            # ... (rest of the new_project data reset logic remains the same) ...
             self._clear_marked_unused(trigger_redraw=False)
 
             tileset_patterns = [
@@ -4279,12 +4271,12 @@ class TileEditorApp:
             for r_pal, g_pal, b_pal in MSX2_RGB7_VALUES:
                  self.active_msx_palette.append(self._rgb7_to_hex(r_pal, g_pal, b_pal))
             self.selected_palette_slot = 0
-            selected_color_index = WHITE_IDX # Reset global selected_color_index
+            selected_color_index = WHITE_IDX
 
             self.map_zoom_level = 1.0
             self.show_supertile_grid.set(False)
             self.show_window_view.set(False)
-            self.grid_color_index = 1 # Default back to black if white is 0
+            self.grid_color_index = 1 
             self.window_view_tile_x = 0
             self.window_view_tile_y = 0
             self.window_view_tile_w.set(DEFAULT_WIN_VIEW_WIDTH_TILES)
@@ -4304,11 +4296,12 @@ class TileEditorApp:
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
             
-            self._reconfigure_supertile_definition_canvas()
+            self._reconfigure_supertile_definition_canvas() # Important after ST dim change
             
             self.update_all_displays(changed_level="all")
             self._trigger_minimap_reconfigure() 
             
+            # These will now not try to refresh non-existent windows
             self._request_color_usage_refresh()
             self._request_tile_usage_refresh()
             self._request_supertile_usage_refresh()
@@ -4317,7 +4310,6 @@ class TileEditorApp:
             self._update_edit_menu_state()
             self._update_supertile_rotate_button_state() 
             
-            # Ensure map canvas gets focus if it's the active tab after new project
             try:
                 if self.notebook and self.notebook.winfo_exists():
                     selected_tab_path = self.notebook.select()
@@ -4371,22 +4363,21 @@ class TileEditorApp:
             )
             return False
 
-    def open_palette(self, filepath=None, is_part_of_project_load=False): # Added is_part_of_project_load
+    def open_palette(self, filepath=None): # MODIFIED: Removed is_part_of_project_load
         load_path = filepath
         if not load_path:
-            # Only ask for file if not part of project load and no path given
-            if not is_part_of_project_load:
-                load_path = filedialog.askopenfilename(
-                    filetypes=[("SC4 Palette File", "*.SC4Pal"), ("Old MSX Palette File", "*.msxpal"), ("All Files", "*.*")], 
-                    title="Open SC4 Palette",
-                    parent=self.root
-                )
-            if not load_path: # If still no load_path (user cancelled or was project load with no path)
+            # This block for interactive "Open Palette..." via menu
+            load_path = filedialog.askopenfilename(
+                filetypes=[("SC4 Palette File", "*.SC4Pal"), ("Old MSX Palette File", "*.msxpal"), ("All Files", "*.*")], 
+                title="Open SC4 Palette",
+                parent=self.root
+            )
+            if not load_path:
                 return False
 
         try:
             expected_color_data_size = 16 * 3  
-            new_palette_hex_from_file = [] # Renamed for clarity
+            new_palette_hex_from_file = [] 
             
             try:
                 file_size = os.path.getsize(load_path)
@@ -4399,10 +4390,8 @@ class TileEditorApp:
 
             if file_size == expected_size_new:
                 is_new_format_with_reserved_bytes = True
-                self.debug(f"Info: Detected new format SC4Pal file (size {file_size} with reserved bytes).")
             elif file_size == expected_size_old:
                 is_new_format_with_reserved_bytes = False 
-                self.debug(f"Info: Detected old format msxpal/SC4Pal file (size {file_size} without reserved bytes).")
             else:
                 raise ValueError(
                     f"Invalid file size for palette. Expected {expected_size_old} (old) or {expected_size_new} (new) bytes, got {file_size}."
@@ -4413,7 +4402,6 @@ class TileEditorApp:
                     reserved_bytes_read = f.read(RESERVED_BYTES_COUNT)
                     if len(reserved_bytes_read) < RESERVED_BYTES_COUNT:
                         raise EOFError("EOF while reading reserved bytes from new format palette file.")
-                    self.debug(f"Info: Read and skipped {RESERVED_BYTES_COUNT} reserved bytes from palette file.")
                 
                 palette_data_bytes = f.read(expected_color_data_size)
                 if len(palette_data_bytes) < expected_color_data_size:
@@ -4442,8 +4430,7 @@ class TileEditorApp:
                     self.debug(f"Warning: Palette file '{os.path.basename(load_path)}' contains additional unexpected data at the end.")
 
             confirm_load = True
-            # Only ask confirm if interactive open (not part of project load)
-            if not is_part_of_project_load and filepath is None: 
+            if filepath is None: # Only ask confirm if interactive open
                 confirm_load = messagebox.askokcancel(
                     "Load Palette",
                     "Replace the current active palette with data from this file?",
@@ -4454,42 +4441,38 @@ class TileEditorApp:
                 if self._clear_marked_unused(trigger_redraw=False):
                     pass
                 
-                self.active_msx_palette = list(new_palette_hex_from_file) # Use a copy
-                self.selected_palette_slot = 0 # Reset selection in palette editor
+                self.active_msx_palette = list(new_palette_hex_from_file)
+                self.selected_palette_slot = 0
+                global selected_color_index 
+                selected_color_index = WHITE_IDX
                 
-                global selected_color_index # Access global for tile editor palette
-                selected_color_index = WHITE_IDX # Reset tile editor's color selection
-                
-                self.clear_all_caches()
-                self.invalidate_minimap_background_cache()
-                self.update_all_displays(changed_level="all") # "all" due to palette change
-                
-                self._request_color_usage_refresh()
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
-
-                if not is_part_of_project_load and filepath is None:
+                # UI updates and cache clears only if NOT part of project load (i.e., interactive)
+                if filepath is None: 
+                    self.clear_all_caches()
+                    self.invalidate_minimap_background_cache()
+                    self.update_all_displays(changed_level="all")
+                    self._request_color_usage_refresh()
+                    self._request_tile_usage_refresh()
+                    self._request_supertile_usage_refresh() # Palette change affects ST previews
+                    
                     try: 
                         if self.notebook and self.notebook.winfo_exists() and self.tab_palette_editor.winfo_exists():
                              self.notebook.select(self.tab_palette_editor)
-                    except tk.TclError:
-                        self.debug("[DEBUG] open_palette: TclError selecting palette editor tab.")
+                    except tk.TclError: pass
                     messagebox.showinfo(
                         "Load Successful",
                         f"Loaded palette from {os.path.basename(load_path)}",
                         parent=self.root
                     )
-                # Mark modified only for standalone interactive open, not for project load
-                if not is_part_of_project_load and filepath is None: 
                     self._mark_project_modified()
                 return True
-            else: # User cancelled confirmation dialog
+            else:
                 return False
 
         except FileNotFoundError:
             messagebox.showerror("Open Error", f"File not found:\n{load_path}", parent=self.root)
             return False
-        except (struct.error, ValueError, EOFError) as e: # ValueError includes our custom size/format checks
+        except (struct.error, ValueError, EOFError) as e:
             messagebox.showerror(
                 "Open Palette Error",
                 f"Invalid data, size, or format in palette file '{os.path.basename(load_path)}':\n{e}",
@@ -5174,23 +5157,25 @@ class TileEditorApp:
             )
             return False
 
-    def open_map(self, filepath=None):
+    def open_map(self, filepath=None): # MODIFIED: Removed is_part_of_project_load
         global map_data, map_width, map_height, num_supertiles # Using globals
         load_path = filepath
         if not load_path:
+            # This block is for interactive "Open Map..." via menu
             load_path = filedialog.askopenfilename(
                 filetypes=[("MSX Map", "*.SC4Map"), ("All Files", "*.*")],
                 title="Open Map",
+                parent=self.root
             )
-        if not load_path:
-            return False
+            if not load_path:
+                return False
 
         try:
             loaded_w_map = 0
             loaded_h_map = 0
             new_map_data_from_file_temp = [] 
-            map_uses_2byte_indices_in_file = False # To store how indices are in the file
-            header_size_map_calc = 4 # For dimension bytes (HH)
+            map_uses_2byte_indices_in_file = False
+            header_size_map_calc = 4 
 
             try:
                 file_size_check = os.path.getsize(load_path)
@@ -5207,36 +5192,25 @@ class TileEditorApp:
                 if not (min_dim_map <= loaded_w_map <= max_dim_map and min_dim_map <= loaded_h_map <= max_dim_map):
                     raise ValueError(f"Invalid map dimensions in file: {loaded_w_map}x{loaded_h_map} (must be {min_dim_map}-{max_dim_map} per side)")
 
-                # Calculate expected payload sizes based on dimensions
                 num_cells_map = loaded_w_map * loaded_h_map
                 expected_payload_1byte_indices = num_cells_map * 1
                 expected_payload_2byte_indices = num_cells_map * 2
-
-                # Calculate expected total file sizes for different formats
-                # Old format: Dims + 1-byte indices (no reserved bytes)
-                expected_size_old_format_map = header_size_map_calc + expected_payload_1byte_indices
                 
-                # New format: Dims + Reserved + 1-byte indices
+                expected_size_old_format_map = header_size_map_calc + expected_payload_1byte_indices
                 expected_size_new_format_map_1byte = header_size_map_calc + RESERVED_BYTES_COUNT + expected_payload_1byte_indices
-                # New format: Dims + Reserved + 2-byte indices
                 expected_size_new_format_map_2byte = header_size_map_calc + RESERVED_BYTES_COUNT + expected_payload_2byte_indices
 
                 has_reserved_bytes_to_read = False
-                is_old_format_detected = False
-
+                
                 if file_size_check == expected_size_new_format_map_1byte:
                     has_reserved_bytes_to_read = True
-                    map_uses_2byte_indices_in_file = False # New format, 1-byte indices
-                    self.debug(f"Info: Map file '{os.path.basename(load_path)}' matches new format (1-byte indices).")
+                    map_uses_2byte_indices_in_file = False
                 elif file_size_check == expected_size_new_format_map_2byte:
                     has_reserved_bytes_to_read = True
-                    map_uses_2byte_indices_in_file = True  # New format, 2-byte indices
-                    self.debug(f"Info: Map file '{os.path.basename(load_path)}' matches new format (2-byte indices).")
+                    map_uses_2byte_indices_in_file = True
                 elif file_size_check == expected_size_old_format_map:
-                    has_reserved_bytes_to_read = False
-                    map_uses_2byte_indices_in_file = False # Old format always 1-byte
-                    is_old_format_detected = True
-                    self.debug(f"Info: Map file '{os.path.basename(load_path)}' matches old format (1-byte indices, no reserved).")
+                    has_reserved_bytes_to_read = False # Old format implies no reserved bytes
+                    map_uses_2byte_indices_in_file = False # Old format implies 1-byte indices
                 else:
                     raise ValueError(
                         f"Map file '{os.path.basename(load_path)}' has an unexpected size ({file_size_check} bytes) "
@@ -5248,9 +5222,7 @@ class TileEditorApp:
                     reserved_bytes_read = f.read(RESERVED_BYTES_COUNT)
                     if len(reserved_bytes_read) < RESERVED_BYTES_COUNT:
                         raise EOFError("Unexpected EOF while trying to read reserved bytes in a new format map file.")
-                    self.debug(f"Info: Read and skipped {RESERVED_BYTES_COUNT} reserved bytes from map file.")
                 
-                # Read map data based on inferred index size for the file
                 new_map_data_from_file_temp = [[0 for _c in range(loaded_w_map)] for _r in range(loaded_h_map)]
                 for r_map_load in range(loaded_h_map):
                     for c_map_load in range(loaded_w_map):
@@ -5259,7 +5231,7 @@ class TileEditorApp:
                             idx_bytes = f.read(2)
                             if len(idx_bytes) < 2: raise EOFError(f"EOF reading 2-byte ST index at map ({r_map_load},{c_map_load}).")
                             st_index_val_read = struct.unpack(">H", idx_bytes)[0]
-                        else: # 1-byte indices
+                        else: 
                             idx_byte = f.read(1)
                             if not idx_byte: raise EOFError(f"EOF reading 1-byte ST index at map ({r_map_load},{c_map_load}).")
                             st_index_val_read = struct.unpack("B", idx_byte)[0]
@@ -5269,73 +5241,74 @@ class TileEditorApp:
                 if extra_data_check:
                     self.debug(f"Warning: Map file '{os.path.basename(load_path)}' contains additional unexpected data at the end.")
             
-            # --- End of file reading block ---
-
             confirm_load_map = True
-            if filepath is None:
-                confirm_load_map = messagebox.askokcancel("Load Map", "Replace current map with data from this file?")
+            if filepath is None: # Only ask confirmation if interactive
+                confirm_load_map = messagebox.askokcancel("Load Map", "Replace current map with data from this file?", parent=self.root)
 
             if confirm_load_map:
                 if self._clear_marked_unused(trigger_redraw=False):
-                    pass # Redraw handled by update_all_displays
+                    pass
 
-                temp_project_map_data = [[0 for _c in range(loaded_w_map)] for _r in range(loaded_h_map)]
+                temp_project_map_data_final = [[0 for _c in range(loaded_w_map)] for _r in range(loaded_h_map)] # Renamed
                 missing_supertile_indices_referenced = set()
 
                 for r_val in range(loaded_h_map):
                     for c_val in range(loaded_w_map):
                         supertile_index_from_file = new_map_data_from_file_temp[r_val][c_val]
-                        if not (0 <= supertile_index_from_file < num_supertiles):
+                        if not (0 <= supertile_index_from_file < num_supertiles): # Check against current project's num_supertiles
                             missing_supertile_indices_referenced.add(supertile_index_from_file)
-                            temp_project_map_data[r_val][c_val] = 0 
+                            temp_project_map_data_final[r_val][c_val] = 0 
                         else:
-                            temp_project_map_data[r_val][c_val] = supertile_index_from_file
+                            temp_project_map_data_final[r_val][c_val] = supertile_index_from_file
                 
                 map_width = loaded_w_map
                 map_height = loaded_h_map
-                map_data = temp_project_map_data 
+                map_data = temp_project_map_data_final # Assign to global
 
-                if missing_supertile_indices_referenced:
+                if missing_supertile_indices_referenced and filepath is None: # Show warning only for interactive load
                     sorted_missing = sorted(list(missing_supertile_indices_referenced))
                     msg = "Warning: The loaded map references supertile indices that do not exist in the current project's supertile set.\n\n"
                     msg += f"Missing indices found: {', '.join(map(str, sorted_missing[:20]))}"
                     if len(sorted_missing) > 20: msg += "..."
                     msg += "\n\nThese map cells have been defaulted to use Supertile 0."
-                    messagebox.showwarning("Map Load Warning", msg, parent=(self.root if filepath is None else None))
+                    messagebox.showwarning("Map Load Warning", msg, parent=self.root)
 
-                self.invalidate_minimap_background_cache()
-                self.update_all_displays(changed_level="all") 
-                self._trigger_minimap_reconfigure() 
-                
-                if filepath is None:
+                if filepath is None: # Interactive standalone open
+                    self.map_render_cache.clear() # Clear map render cache
+                    self.invalidate_minimap_background_cache()
+                    self.update_all_displays(changed_level="all") 
+                    self._trigger_minimap_reconfigure() 
+                    self._request_supertile_usage_refresh() # Map data changed
+
                     try:
                         if self.notebook and self.notebook.winfo_exists() and self.tab_map_editor.winfo_exists():
                             self.notebook.select(self.tab_map_editor)
-                    except tk.TclError:
-                        self.debug("[DEBUG] open_map: TclError selecting map editor tab.")
+                    except tk.TclError: pass
                     messagebox.showinfo(
                         "Load Successful",
                         f"Loaded {map_width}x{map_height} map from {os.path.basename(load_path)}",
+                        parent=self.root
                     )
-                if filepath is None: # Only mark modified if opened interactively
                     self._mark_project_modified()
                 return True
-            else: # User cancelled confirmation dialog
+            else: 
                 return False
 
         except FileNotFoundError:
-            messagebox.showerror("Open Error", f"File not found:\n{load_path}")
+            messagebox.showerror("Open Error", f"File not found:\n{load_path}", parent=self.root)
             return False
-        except (EOFError, ValueError, struct.error) as e: # ValueError includes our custom size/format checks
+        except (EOFError, ValueError, struct.error) as e:
             messagebox.showerror(
                 "Open Map Error",
                 f"Invalid data, size, or format in map file '{os.path.basename(load_path)}':\n{e}",
+                parent=self.root
             )
             return False
         except Exception as e:
             messagebox.showerror(
                 "Open Map Error",
                 f"Failed to open or parse map file '{os.path.basename(load_path)}':\n{e}",
+                parent=self.root
             )
             return False
 
@@ -5488,10 +5461,8 @@ class TileEditorApp:
         actual_pal_path_to_load = None
         if os.path.exists(pal_path_new):
             actual_pal_path_to_load = pal_path_new
-            self.debug(f"[DEBUG] open_project: Found new palette format: {actual_pal_path_to_load}")
-        elif os.path.exists(pal_path_old):
+        elif os.path.exists(pal_path_old): 
             actual_pal_path_to_load = pal_path_old
-            self.debug(f"[DEBUG] open_project: Found old palette format: {actual_pal_path_to_load}")
 
         til_path = base_path + ".SC4Tiles"
         sup_path = base_path + ".SC4Super"
@@ -5517,30 +5488,38 @@ class TileEditorApp:
             if not confirm_discard:
                 return
         
-        # Reset interaction states before loading
+        if self.color_usage_window and tk.Toplevel.winfo_exists(self.color_usage_window):
+            self.color_usage_window.destroy()
+        self.color_usage_window = None
+        if self.tile_usage_window and tk.Toplevel.winfo_exists(self.tile_usage_window):
+            self.tile_usage_window.destroy()
+        self.tile_usage_window = None
+        if self.supertile_usage_window and tk.Toplevel.winfo_exists(self.supertile_usage_window):
+            self.supertile_usage_window.destroy()
+        self.supertile_usage_window = None
+
         self.is_ctrl_pressed = False
         self.is_shift_pressed = False
         self.current_mouse_action = None
-        global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data # Access globals
+        global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data 
         tile_clipboard_pattern = None
         tile_clipboard_colors = None
-        supertile_clipboard_data = None # Clear global supertile clipboard
-        self.map_clipboard_data = None # Clear instance map clipboard
+        supertile_clipboard_data = None 
+        self.map_clipboard_data = None
         self._clear_map_selection()
         self._clear_paste_preview_rect()
         self._clear_marked_unused(trigger_redraw=False) 
         
-        # Clear caches before loading new data
         self.clear_all_caches() 
         self.invalidate_minimap_background_cache() 
 
         success = True
         self.debug(f"Loading project '{base_name}'...")
         
-        # Load components sequentially
+        # MODIFIED: Removed is_part_of_project_load from palette, tileset, map calls
         if success: self.debug(f"  Loading palette: {actual_pal_path_to_load}"); success = self.open_palette(actual_pal_path_to_load)
         if success: self.debug(f"  Loading tileset: {til_path}"); success = self.open_tileset(til_path)
-        # Pass is_part_of_project_load=True to open_supertiles to suppress its internal confirmations
+        # Keep is_part_of_project_load for open_supertiles as it uses it internally
         if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path, is_part_of_project_load=True) 
         if success: self.debug(f"  Loading map: {map_path}"); success = self.open_map(map_path)
         
@@ -5549,9 +5528,10 @@ class TileEditorApp:
             self.current_project_base_path = base_path 
             self._update_window_title()
             
-            def deferred_refresh_and_updates_after_project_load(): # Renamed for clarity
-                self._perform_project_load_ui_updates() # Existing UI update helper
-                # Refresh all usage windows as all data has changed
+            self._reconfigure_supertile_definition_canvas()
+
+            def deferred_refresh_and_updates_after_project_load():
+                self._perform_project_load_ui_updates()
                 self._request_color_usage_refresh() 
                 self._request_tile_usage_refresh()
                 self._request_supertile_usage_refresh()
@@ -5559,21 +5539,19 @@ class TileEditorApp:
             self.root.after_idle(deferred_refresh_and_updates_after_project_load) 
             self.debug(f"[DEBUG] open_project: Project '{base_name}' load sequence initiated. UI updates and usage refreshes deferred.")
 
-        else: # Load failed for one or more components
+        else: 
             messagebox.showerror("Project Open Error", 
                                  f"Failed to load one or more components for project '{base_name}'. The application state might be inconsistent.",
                                  parent=self.root)
-            # Even on failure, project is considered "modified" from its previous state (or from blank)
             self.project_modified = True 
             self._update_window_title()
+            self._reconfigure_supertile_definition_canvas() 
             
-            # Attempt to refresh UI and usage windows with whatever data was loaded
-            def deferred_fail_refresh_and_updates_after_project_load(): # Renamed
+            def deferred_fail_refresh_and_updates_after_project_load():
                 self.update_all_displays(changed_level="all") 
                 self._update_edit_menu_state()
                 self._update_editor_button_states()
                 self._update_supertile_rotate_button_state()
-
                 self._request_color_usage_refresh() 
                 self._request_tile_usage_refresh()
                 self._request_supertile_usage_refresh()
@@ -12649,13 +12627,14 @@ class TileEditorApp:
         # else: window doesn't exist or isn't visible, no action.
 
     def toggle_supertile_usage_window(self):
-        # Toggles the visibility of the Supertile Usage window.
         if self.supertile_usage_window is None or not tk.Toplevel.winfo_exists(self.supertile_usage_window):
             self.debug("[DEBUG] Creating new Supertile Usage window.")
-            self.supertile_usage_window = SupertileUsageWindow(self) # Pass self (the app instance)
+            self.supertile_usage_window = SupertileUsageWindow(self)
             
-            # Position the window (example: centered on main window)
             self.root.update_idletasks() 
+            if not tk.Toplevel.winfo_exists(self.supertile_usage_window): # Check again if creation failed
+                self.supertile_usage_window = None # Reset if failed
+                return
             self.supertile_usage_window.update_idletasks()
             
             main_x = self.root.winfo_rootx()
@@ -12663,9 +12642,13 @@ class TileEditorApp:
             main_w = self.root.winfo_width()
             main_h = self.root.winfo_height()
 
-            suw_w = self.supertile_usage_window.winfo_reqwidth()
-            suw_h = self.supertile_usage_window.winfo_reqheight()
-            
+            try: # Add try-except for reqwidth/reqheight in case window closed during this
+                suw_w = self.supertile_usage_window.winfo_reqwidth()
+                suw_h = self.supertile_usage_window.winfo_reqheight()
+            except tk.TclError:
+                self.supertile_usage_window = None # Window likely destroyed
+                return
+
             pos_x = main_x + (main_w // 2) - (suw_w // 2)
             pos_y = main_y + (main_h // 2) - (suw_h // 2)
             
@@ -12674,16 +12657,15 @@ class TileEditorApp:
             pos_x = max(0, min(pos_x, screen_w - suw_w)) 
             pos_y = max(0, min(pos_y, screen_h - suw_h)) 
 
-            self.supertile_usage_window.geometry(f"+{pos_x}+{pos_y}")
-            # grab_set() is called in SupertileUsageWindow.__init__
-            # wait_window() would make it blocking, which we decided against for this window type.
-            self.supertile_usage_window.focus_set() # Ensure it gets focus
+            if tk.Toplevel.winfo_exists(self.supertile_usage_window): # Final check before geometry
+                self.supertile_usage_window.geometry(f"+{pos_x}+{pos_y}")
+                self.supertile_usage_window.focus_set() 
+            else:
+                self.supertile_usage_window = None # Window destroyed
         else:
-            # Window exists, lift and focus it.
             self.debug("[DEBUG] Lifting existing Supertile Usage window.")
             self.supertile_usage_window.lift()
             self.supertile_usage_window.focus_set()
-            # No automatic refresh on lift (Guideline 2.2.2.2)
 
     def _calculate_supertile_usage_data(self):
         # Calculates usage counts for each supertile in the current project.
@@ -12721,143 +12703,134 @@ class TileEditorApp:
         # else: window doesn't exist or isn't visible, no action.
 
     def create_cropped_supertile_preview_for_usage_window(self, supertile_index, 
-                                                          target_image_content_area_width, 
-                                                          fixed_scaled_preview_height):
-        # --- Part 1: Calculate full scaled dimensions ---
-        full_scaled_content_w = self.supertile_grid_width * TILE_WIDTH * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
-        full_scaled_content_h = fixed_scaled_preview_height 
+                                                          # target_image_content_area_width is the available space in col #0
+                                                          target_image_content_area_width_in_col0, 
+                                                          final_photo_target_height): 
+        # --- Part 1: Calculate actual scaled dimensions of the supertile content ---
+        actual_content_msx_w = self.supertile_grid_width * TILE_WIDTH
+        actual_content_msx_h = self.supertile_grid_height * TILE_HEIGHT
+
+        temp_full_photo_w = actual_content_msx_w * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
+        temp_full_photo_h = actual_content_msx_h * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
         
-        full_scaled_content_w = max(1, int(full_scaled_content_w))
+        temp_full_photo_w = max(1, int(temp_full_photo_w))
+        temp_full_photo_h = max(1, int(temp_full_photo_h))
 
-        if supertile_index == 0: 
-            self.debug(f"[STP DEBUG {supertile_index}] Full scaled content WxH: {full_scaled_content_w}x{full_scaled_content_h}")
-            self.debug(f"[STP DEBUG {supertile_index}] Target image area width for final photo: {target_image_content_area_width}")
-
+        # --- Part 2: Create temp_full_photo with actual scaled content dimensions ---
         try:
-            temp_full_photo = tk.PhotoImage(width=full_scaled_content_w, height=full_scaled_content_h)
+            temp_full_photo = tk.PhotoImage(width=temp_full_photo_w, height=temp_full_photo_h)
         except tk.TclError as e:
-            self.debug(f"[DEBUG] Error creating temp_full_photo for ST preview ({full_scaled_content_w}x{full_scaled_content_h}): {e}")
-            placeholder_w = max(1,int(target_image_content_area_width))
-            placeholder_h = max(1,int(fixed_scaled_preview_height))
+            self.debug(f"[DEBUG] Error creating temp_full_photo ({temp_full_photo_w}x{temp_full_photo_h}): {e}")
+            # Fallback placeholder if temp_full_photo creation fails
+            placeholder_w = max(1, int(target_image_content_area_width_in_col0))
+            placeholder_h = max(1, int(final_photo_target_height))
             ph_photo = tk.PhotoImage(width=placeholder_w, height=placeholder_h)
-            ph_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0,placeholder_w, placeholder_h)) # Use defined invalid color
+            try:
+                ph_photo.put(INVALID_SUPERTILE_COLOR, to=(0, 0, placeholder_w, placeholder_h))
+            except tk.TclError: pass
             return ph_photo
 
+        # --- Part 3: Render supertile content onto temp_full_photo ---
+        # (This extensive rendering logic remains the same as in Step 12/ your last working version of it)
         if not (0 <= supertile_index < num_supertiles):
-            temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, full_scaled_content_w, full_scaled_content_h))
+            temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, temp_full_photo_w, temp_full_photo_h))
         else:
             definition = supertiles_data[supertile_index]
             if not (definition and 
                     len(definition) == self.supertile_grid_height and
                     (self.supertile_grid_height == 0 or (self.supertile_grid_width > 0 and len(definition[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
-                temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, full_scaled_content_w, full_scaled_content_h))
-                if supertile_index == 0: self.debug(f"[STP DEBUG {supertile_index}] Definition mismatch. Filled with invalid ST color.")
+                temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, temp_full_photo_w, temp_full_photo_h))
             else:
-                temp_full_photo.put("#00FF00", to=(0,0,full_scaled_content_w, full_scaled_content_h)) # DEBUG: Bright Green BG
-
-                px_per_base_tile_w = TILE_WIDTH * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
-                px_per_base_tile_h = TILE_HEIGHT * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
+                # No initial green fill here; temp_full_photo should be fully covered by actual content or error colors
+                px_per_base_tile_w_on_temp = TILE_WIDTH * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
+                px_per_base_tile_h_on_temp = TILE_HEIGHT * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
 
                 for r_st_def in range(self.supertile_grid_height):
                     for c_st_def in range(self.supertile_grid_width):
                         tile_idx_val = definition[r_st_def][c_st_def]
-                        
-                        base_tile_draw_x = int(c_st_def * px_per_base_tile_w)
-                        base_tile_draw_y = int(r_st_def * px_per_base_tile_h)
-
-                        if supertile_index == 0 and r_st_def == 0 and c_st_def == 0:
-                            self.debug(f"[STP DEBUG {supertile_index}] ST Cell ({r_st_def},{c_st_def}): Uses Tile Index {tile_idx_val}. Draws at ({base_tile_draw_x},{base_tile_draw_y}) on temp_full_photo.")
+                        base_tile_draw_x = int(c_st_def * px_per_base_tile_w_on_temp)
+                        base_tile_draw_y = int(r_st_def * px_per_base_tile_h_on_temp)
 
                         if not (0 <= tile_idx_val < num_tiles_in_set):
-                            if supertile_index == 0 and r_st_def == 0 and c_st_def == 0: self.debug(f"[STP DEBUG {supertile_index}] Invalid tile_idx_val {tile_idx_val}.")
-                            for y_fill_invalid in range(int(px_per_base_tile_h)):
-                                for x_fill_invalid in range(int(px_per_base_tile_w)):
-                                    dest_x_invalid = base_tile_draw_x + x_fill_invalid
-                                    dest_y_invalid = base_tile_draw_y + y_fill_invalid
-                                    if dest_x_invalid < full_scaled_content_w and dest_y_invalid < full_scaled_content_h:
-                                        temp_full_photo.put(INVALID_TILE_COLOR, to=(dest_x_invalid, dest_y_invalid))
+                            for y_fill_inv in range(int(px_per_base_tile_h_on_temp)):
+                                for x_fill_inv in range(int(px_per_base_tile_w_on_temp)):
+                                    dest_x_inv = base_tile_draw_x + x_fill_inv
+                                    dest_y_inv = base_tile_draw_y + y_fill_inv
+                                    if dest_x_inv < temp_full_photo_w and dest_y_inv < temp_full_photo_h:
+                                        temp_full_photo.put(INVALID_TILE_COLOR, to=(dest_x_inv, dest_y_inv))
                             continue
-
                         pattern = tileset_patterns[tile_idx_val]
                         colors = tileset_colors[tile_idx_val]
-
                         for r_msx in range(TILE_HEIGHT): 
                             fg_idx, bg_idx = WHITE_IDX, BLACK_IDX 
                             if r_msx < len(colors): fg_idx, bg_idx = colors[r_msx]
-                            
                             safe_fg_idx = fg_idx if 0 <= fg_idx < 16 else WHITE_IDX
                             safe_bg_idx = bg_idx if 0 <= bg_idx < 16 else BLACK_IDX
                             fg_color_hex = self.active_msx_palette[safe_fg_idx]
                             bg_color_hex = self.active_msx_palette[safe_bg_idx]
-                            
-                            if supertile_index == 0 and r_st_def == 0 and c_st_def == 0 and r_msx < 2:
-                                self.debug(f"[STP DEBUG {supertile_index}]   Tile {tile_idx_val}, MSX Row {r_msx}: FG Idx {safe_fg_idx} ({fg_color_hex}), BG Idx {safe_bg_idx} ({bg_color_hex})")
-
                             row_pattern_data_list = []
                             if r_msx < len(pattern): row_pattern_data_list = pattern[r_msx]
-
                             for c_msx in range(TILE_WIDTH):
                                 pixel_pattern_bit = 0
                                 if c_msx < len(row_pattern_data_list): pixel_pattern_bit = row_pattern_data_list[c_msx]
-                                
                                 color_to_draw_hex = fg_color_hex if pixel_pattern_bit == 1 else bg_color_hex
-                                if supertile_index == 0 and r_st_def == 0 and c_st_def == 0 and r_msx < 1 and c_msx < 2:
-                                     self.debug(f"[STP DEBUG {supertile_index}]     MSX Pixel ({r_msx},{c_msx}): Bit {pixel_pattern_bit}, Color {color_to_draw_hex}")
-                                
                                 for y_offset_in_block in range(SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL):
                                     for x_offset_in_block in range(SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL):
                                         dest_screen_x = base_tile_draw_x + (c_msx * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL) + x_offset_in_block
                                         dest_screen_y = base_tile_draw_y + (r_msx * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL) + y_offset_in_block
-                                        
-                                        if dest_screen_x < full_scaled_content_w and dest_screen_y < full_scaled_content_h:
+                                        if dest_screen_x < temp_full_photo_w and dest_screen_y < temp_full_photo_h:
                                             try:
                                                 temp_full_photo.put(color_to_draw_hex, to=(dest_screen_x, dest_screen_y))
-                                            except tk.TclError as e_put_pixel:
-                                                self.debug(f"[STP DEBUG {supertile_index}] TclError on pixel put: {e_put_pixel} at ({dest_screen_x},{dest_screen_y}) color {color_to_draw_hex}")
-                                                break 
+                                            except tk.TclError: break 
                                     else: continue
                                     break 
-        
-        if supertile_index == 0:
-            self.debug(f"[STP DEBUG {supertile_index}] temp_full_photo rendering complete (filled with green then pixels).")
+        # --- End of rendering onto temp_full_photo ---
 
-        final_photo_width = max(1, int(target_image_content_area_width))
-        final_photo_height = fixed_scaled_preview_height
-        final_photo = tk.PhotoImage(width=final_photo_width, height=final_photo_height)
+        # --- MODIFIED Part 4: Determine final_photo_width and create final_photo ---
+        # final_photo_width is the minimum of the actual scaled content width and the available column area
+        calculated_final_photo_width = min(temp_full_photo_w, max(1, int(target_image_content_area_width_in_col0)))
         
-        hex_bg_color = "#F0F0F0" # Default fallback light grey
+        # final_photo_height is the target row height for the Treeview cell
+        final_photo_height = max(1, int(final_photo_target_height)) 
+        
+        final_photo = tk.PhotoImage(width=calculated_final_photo_width, height=final_photo_height)
+        
+        if supertile_index == 0: # Debug
+             self.debug(f"[STP DEBUG {supertile_index}] temp_full_photo WxH: {temp_full_photo_w}x{temp_full_photo_h}")
+             self.debug(f"[STP DEBUG {supertile_index}] target_image_content_area_width_in_col0: {target_image_content_area_width_in_col0}")
+             self.debug(f"[STP DEBUG {supertile_index}] final_photo will be WxH: {calculated_final_photo_width}x{final_photo_height}")
+
+        # --- Part 5: Fill final_photo with background ---
+        hex_bg_color_final = "#F0F0F0" 
         try:
-            # Try to get a common system background color via the app's root window
-            # Using 'SystemButtonFace' as it's generally available and neutral.
-            # Or use self.root.cget('background') if your root window has a defined bg.
             system_bg_name = "SystemButtonFace" 
             rgb_tuple = self.root.winfo_rgb(system_bg_name) 
             r_8bit, g_8bit, b_8bit = rgb_tuple[0]//256, rgb_tuple[1]//256, rgb_tuple[2]//256
-            hex_bg_color = f"#{r_8bit:02x}{g_8bit:02x}{b_8bit:02x}"
-            if supertile_index == 0: self.debug(f"[STP DEBUG {supertile_index}] Resolved system BG '{system_bg_name}' for final_photo to: {hex_bg_color}")
-        except tk.TclError:
-            if supertile_index == 0: self.debug(f"[STP DEBUG {supertile_index}] Could not resolve system BG for final_photo, using fallback {hex_bg_color}")
-            pass 
+            hex_bg_color_final = f"#{r_8bit:02x}{g_8bit:02x}{b_8bit:02x}"
+        except tk.TclError: pass 
+        final_photo.put(hex_bg_color_final, to=(0,0, calculated_final_photo_width, final_photo_height))
 
-        if supertile_index == 0: self.debug(f"[STP DEBUG {supertile_index}] Final photo bg fill color for final_photo: {hex_bg_color}")
-        final_photo.put(hex_bg_color, to=(0,0, final_photo_width, final_photo_height))
+        # --- Part 6: Copy/Crop from temp_full_photo to final_photo, vertically centering ---
+        # Width to copy from source is limited by final_photo's (potentially cropped) width
+        width_to_copy_from_source = calculated_final_photo_width 
+        # Height to copy from source is the actual content height from temp_full_photo
+        height_to_copy_from_source = temp_full_photo_h 
 
-        width_to_copy = min(temp_full_photo.width(), final_photo.width())
-        height_to_copy = fixed_scaled_preview_height 
+        if width_to_copy_from_source > 0 and height_to_copy_from_source > 0:
+            y_offset_for_centering = 0
+            if final_photo.height() > temp_full_photo.height(): # If row is taller than content
+                y_offset_for_centering = (final_photo.height() - temp_full_photo.height()) // 2
+            y_offset_for_centering = max(0, y_offset_for_centering)
 
-        if supertile_index == 0:
-            self.debug(f"[STP DEBUG {supertile_index}] Copying from temp_full (w:{temp_full_photo.width()}) to final (w:{final_photo.width()}). Width to copy: {width_to_copy}")
-
-        if width_to_copy > 0 and height_to_copy > 0:
             try:
+                # Copy from temp_full_photo (0,0) up to (width_to_copy_from_source, height_to_copy_from_source)
+                # To final_photo at (0, y_offset_for_centering)
                 final_photo.tk.call(final_photo, 'copy', temp_full_photo,
-                                    '-from', 0, 0, width_to_copy, height_to_copy,
-                                    '-to', 0, 0)
-                if supertile_index == 0: self.debug(f"[STP DEBUG {supertile_index}] Copy operation performed.")
+                                    '-from', 0, 0, width_to_copy_from_source, height_to_copy_from_source,
+                                    '-to', 0, y_offset_for_centering)
+                if supertile_index == 0: self.debug(f"[STP DEBUG {supertile_index}] Copied {width_to_copy_from_source}x{height_to_copy_from_source} from temp to final at y_offset {y_offset_for_centering}")
             except tk.TclError as e:
                 self.debug(f"[DEBUG] Error during PhotoImage copy for ST preview: {e}")
-        elif supertile_index == 0:
-             self.debug(f"[STP DEBUG {supertile_index}] Skipped copy op: width_to_copy={width_to_copy}, height_to_copy={height_to_copy}")
         
         return final_photo
 
