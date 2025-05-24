@@ -582,37 +582,36 @@ class SupertileUsageWindow(tk.Toplevel):
         self.app_ref = master_app
         self.title("Supertile Usage")
         self.transient(master_app.root)
-        self.resizable(True, True) 
+        self.resizable(True, True)
 
         self._image_references = []
-        self.current_sort_column_id = "st_index" 
+        self.current_sort_column_id = "st_index"
         self.current_sort_direction_is_asc = True
         self.refresh_timer_id = None
         
         self._is_dragging_col_separator = False
         self._col0_width_at_drag_start = 0
         self._treeview_refresh_timer_id = None
+        self.styled_row_height = 0 # Will be set after style configuration
+        self._update_images_timer_id = None # Timer for lazy image loading
 
         # --- DYNAMICALLY CALCULATE HEIGHTS BASED ON CURRENT PROJECT ---
         app_st_grid_h = self.app_ref.supertile_grid_height
-        tile_h_const = TILE_HEIGHT # Should be 8
-        scale_const = SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL # Should be 1 or 2
+        tile_h_const = TILE_HEIGHT 
+        scale_const = SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL 
 
-        # === ADD DEBUG PRINTS ===
         self.app_ref.debug(f"[STU_INIT] app_ref.supertile_grid_height: {app_st_grid_h}")
         self.app_ref.debug(f"[STU_INIT] TILE_HEIGHT: {tile_h_const}")
         self.app_ref.debug(f"[STU_INIT] SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL: {scale_const}")
-        # === END DEBUG PRINTS ===
 
         self.preview_target_content_h = (app_st_grid_h * tile_h_const * scale_const)
         self.preview_target_content_h = max(1, int(self.preview_target_content_h))
 
         treeview_styled_row_h = self.preview_target_content_h + SUPERTILE_USAGE_ROW_PADDING
+        self.styled_row_height = treeview_styled_row_h # Store for lazy loading calculation
         
-        # === ADD DEBUG PRINTS ===
         self.app_ref.debug(f"[STU_INIT] Calculated self.preview_target_content_h (for image): {self.preview_target_content_h}")
         self.app_ref.debug(f"[STU_INIT] Calculated treeview_styled_row_h (for style): {treeview_styled_row_h}")
-        # === END DEBUG PRINTS ===
         
         min_col0_image_area_w = SUPERTILE_USAGE_MIN_IMAGE_MSX_W * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
         self.min_col0_total_width = max(1, int(min_col0_image_area_w + SUPERTILE_USAGE_COL0_OFFSET_GUESS))
@@ -632,8 +631,7 @@ class SupertileUsageWindow(tk.Toplevel):
         except tk.TclError as e_style:
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}")
             try: 
-                # Check if app_ref has style, or create a temp one if needed just for lookup
-                app_style = getattr(self.app_ref, 'style', ttk.Style()) # Fallback to new Style if app_ref has no .style
+                app_style = getattr(self.app_ref, 'style', ttk.Style()) 
                 app_style.configure('Treeview', rowheight=treeview_styled_row_h)
                 self.treeview_style_name = 'Treeview' 
             except Exception as e_gen:
@@ -688,6 +686,20 @@ class SupertileUsageWindow(tk.Toplevel):
         self.tree.bind("<ButtonPress-1>", self._on_tree_button_press)
         self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+')
         self.tree.bind("<Configure>", self._on_tree_configure_debounced)
+        
+        # Bind scroll events for lazy loading
+        v_scrollbar.bind("<ButtonRelease-1>", lambda e: self._schedule_update_visible_images(delay_ms=100), add='+')
+        v_scrollbar.bind("<B1-Motion>", lambda e: self._schedule_update_visible_images(delay_ms=150), add='+')
+        self.tree.bind("<MouseWheel>", lambda e: self._schedule_update_visible_images(delay_ms=50), add='+')
+        self.tree.bind("<Button-4>", lambda e: self._schedule_update_visible_images(delay_ms=50), add='+')
+        self.tree.bind("<Button-5>", lambda e: self._schedule_update_visible_images(delay_ms=50), add='+')
+        self.tree.bind("<KeyPress-Up>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
+        self.tree.bind("<KeyPress-Down>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
+        self.tree.bind("<KeyPress-Prior>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+') # PageUp
+        self.tree.bind("<KeyPress-Next>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')  # PageDown
+        self.tree.bind("<KeyPress-Home>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
+        self.tree.bind("<KeyPress-End>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
+
 
         self.after(50, self.refresh_data_if_ready)
 
@@ -706,7 +718,7 @@ class SupertileUsageWindow(tk.Toplevel):
 
         for i in self.tree.get_children():
             self.tree.delete(i)
-        self._image_references.clear()
+        self._image_references.clear() # Cleared here, images added during lazy load
 
         usage_data = []
         if hasattr(self.app_ref, '_calculate_supertile_usage_data'):
@@ -722,7 +734,7 @@ class SupertileUsageWindow(tk.Toplevel):
                  usage_data.append({'st_index': i, 'uses_on_map_count': 0})
 
         valid_sort_key = self.current_sort_column_id
-        if self.current_sort_column_id == "#0":
+        if self.current_sort_column_id == "#0": # Special case for image column
             valid_sort_key = 'st_index'
         
         if usage_data and valid_sort_key not in usage_data[0]:
@@ -738,38 +750,16 @@ class SupertileUsageWindow(tk.Toplevel):
             except (TypeError, KeyError) as e_sort:
                 self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         
-        self.tree.update_idletasks() 
-        total_col0_width = self.tree.column("#0", "width")
-        # Use self.min_col0_total_width as the floor for total_col0_width if it's too small
-        # This ensures image_content_area_width doesn't become negative if COL0_INTERNAL_LEFT_OFFSET_GUESS is large
-        # and total_col0_width is smaller than the offset guess (which shouldn't happen if minwidth is set correctly).
-        effective_total_col0_width = max(total_col0_width, self.min_col0_total_width)
-        image_content_area_width = max(1, effective_total_col0_width - SUPERTILE_USAGE_COL0_OFFSET_GUESS)
+        # self.tree.update_idletasks() # Not strictly needed before inserting items
 
         for item_data in usage_data:
             st_idx = item_data['st_index']
-            photo = None
-            try:
-                if hasattr(self.app_ref, 'create_cropped_supertile_preview_for_usage_window'):
-                    # Pass self.preview_target_content_h (calculated in __init__)
-                    # This is the height the PhotoImage for the row content should be.
-                    photo = self.app_ref.create_cropped_supertile_preview_for_usage_window(
-                        st_idx,
-                        image_content_area_width,
-                        self.preview_target_content_h 
-                    )
-                    if photo:
-                        self._image_references.append(photo)
-                else:
-                    self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: create_cropped_supertile_preview_for_usage_window not found.")
-            except Exception as e_photo:
-                self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error creating preview for ST {st_idx}: {e_photo}")
-
+            # For lazy loading, initially set image to empty or a placeholder
             self.tree.insert(
                 "", "end",
                 iid=f"st_{st_idx}",
                 text="", 
-                image=photo if photo else '',
+                image='', # No image loaded initially
                 values=(f"  {st_idx}", item_data['uses_on_map_count']),
                 tags=('st_row',) 
             )
@@ -779,6 +769,9 @@ class SupertileUsageWindow(tk.Toplevel):
             self.tree.tag_configure('st_row', background=row_bg)
         except tk.TclError:
             pass
+        
+        # Schedule initial image loading for visible items after data is populated
+        self.after_idle(self._schedule_update_visible_images)
 
     def _sort_by_column(self, column_id_clicked):
         self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Sorting by column '{column_id_clicked}'")
@@ -877,32 +870,28 @@ class SupertileUsageWindow(tk.Toplevel):
 
     def _on_close(self):
         if self.refresh_timer_id is not None:
-            try: self.after_cancel(self.refresh_timer_id) # Add try-except
+            try: self.after_cancel(self.refresh_timer_id) 
             except tk.TclError: pass
             self.refresh_timer_id = None
         
         if hasattr(self, '_treeview_refresh_timer_id') and self._treeview_refresh_timer_id:
-            try: self.after_cancel(self._treeview_refresh_timer_id) # Add try-except
+            try: self.after_cancel(self._treeview_refresh_timer_id) 
             except tk.TclError: pass
             self._treeview_refresh_timer_id = None
 
+        # Cancel lazy image loading timer
+        if hasattr(self, '_update_images_timer_id') and self._update_images_timer_id is not None:
+            try: self.after_cancel(self._update_images_timer_id)
+            except tk.TclError: pass
+            self._update_images_timer_id = None
+
+        # self.grab_release() # Not needed if window is not modal
         self.app_ref.debug("[DEBUG] SupertileUsageWindow closed.")
         if self.app_ref: 
             self.app_ref.supertile_usage_window = None 
-        try: # Add try-except for destroy
+        try: 
             if self.winfo_exists(): self.destroy()
         except tk.TclError: pass
-        
-        # Cancel column resize debounce timer if it exists
-        if hasattr(self, '_treeview_refresh_timer_id') and self._treeview_refresh_timer_id:
-            self.after_cancel(self._treeview_refresh_timer_id)
-            self._treeview_refresh_timer_id = None
-
-        self.grab_release() # Release grab before destroying
-        self.app_ref.debug("[DEBUG] SupertileUsageWindow closed.")
-        if self.app_ref: # Check if app_ref is still valid
-            self.app_ref.supertile_usage_window = None # Clear reference in the main app
-        self.destroy()
 
     # --- Column Resize Event Handlers (adapted from test script v7.2) ---
     def _on_tree_configure_debounced(self, event=None):
@@ -969,6 +958,98 @@ class SupertileUsageWindow(tk.Toplevel):
             #     self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Col #0 width ({current_col0_width}) unchanged after drag.")
         except tk.TclError:
             self.app_ref.debug("[DEBUG] SupertileUsageWindow: TclError during _check_col0_width_and_refresh_after_drag (widget likely gone).")
+
+    def _schedule_update_visible_images(self, delay_ms=50):
+        if not self.winfo_exists():
+            return
+        if self._update_images_timer_id is not None:
+            try:
+                self.after_cancel(self._update_images_timer_id)
+            except tk.TclError: # Timer might have already fired or window is being destroyed
+                pass
+        self._update_images_timer_id = self.after(delay_ms, self._update_visible_item_images)
+
+    def _update_visible_item_images(self):
+        self._update_images_timer_id = None
+        if not self.winfo_exists() or not hasattr(self, 'tree') or not self.tree.winfo_exists() or not self.app_ref:
+            return
+
+        children = self.tree.get_children()
+        if not children:
+            return
+
+        num_items = len(children)
+        try:
+            yview = self.tree.yview() 
+            tree_height_px = self.tree.winfo_height()
+        except tk.TclError: 
+            return
+
+        row_h = self.styled_row_height 
+
+        if row_h <= 0 or tree_height_px <= 0 : return
+
+        # Calculate visible item indices
+        first_visible_model_idx = int(yview[0] * num_items)
+        
+        # Estimate how many items fit based on tree height and row height
+        # Add a small buffer (e.g., 2-3 items) above and below to preload slightly.
+        buffer_items = 3 
+        num_items_on_screen_estimate = math.ceil(tree_height_px / row_h) if row_h > 0 else num_items
+        
+        start_load_idx = max(0, first_visible_model_idx - buffer_items)
+        end_load_idx = min(num_items, first_visible_model_idx + num_items_on_screen_estimate + buffer_items)
+
+        # self.app_ref.debug(f"[STU LazyLoad] Updating visible items: Model indices {start_load_idx} to {end_load_idx-1} (Total: {num_items})")
+        # self.app_ref.debug(f"  yview: {yview}, tree_h_px: {tree_height_px}, row_h: {row_h}, items_on_screen_est: {num_items_on_screen_estimate}")
+
+        total_col0_width = 0
+        try:
+            total_col0_width = self.tree.column("#0", "width")
+        except tk.TclError:
+            return # Column info not available
+
+        effective_total_col0_width = max(total_col0_width, self.min_col0_total_width)
+        image_content_area_width = max(1, effective_total_col0_width - SUPERTILE_USAGE_COL0_OFFSET_GUESS)
+
+        newly_added_images = []
+
+        for i in range(start_load_idx, end_load_idx):
+            item_iid = children[i]
+            
+            current_img_name_in_tree_list = self.tree.item(item_iid, "image")
+            current_img_name_in_tree = ""
+            if isinstance(current_img_name_in_tree_list, (list, tuple)) and current_img_name_in_tree_list:
+                current_img_name_in_tree = str(current_img_name_in_tree_list[0])
+            elif isinstance(current_img_name_in_tree_list, str):
+                current_img_name_in_tree = current_img_name_in_tree_list
+            
+            if not current_img_name_in_tree: # If image name is empty string, it needs an image
+                try:
+                    if item_iid.startswith("st_"):
+                        st_idx = int(item_iid.split("_")[1])
+                    else:
+                        continue
+                except (ValueError, IndexError):
+                    continue
+
+                photo = None
+                try:
+                    if hasattr(self.app_ref, 'create_cropped_supertile_preview_for_usage_window'):
+                        photo = self.app_ref.create_cropped_supertile_preview_for_usage_window(
+                            st_idx,
+                            image_content_area_width,
+                            self.preview_target_content_h 
+                        )
+                        if photo:
+                            newly_added_images.append(photo)
+                            self.tree.item(item_iid, image=photo)
+                            # self.app_ref.debug(f"  Lazy loaded image for {item_iid}")
+                except Exception as e_photo:
+                    self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error creating lazy-load preview for ST {st_idx}: {e_photo}")
+        
+        if newly_added_images:
+            self._image_references.extend(newly_added_images)
 
 # --- Application Class  -----------------------------------------------------------------------------------------------
 class TileEditorApp:
