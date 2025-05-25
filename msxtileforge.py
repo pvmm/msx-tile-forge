@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.45"
+APP_VERSION = "0.0.46"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -162,157 +162,243 @@ class ColorUsageWindow(tk.Toplevel):
         self.app_ref = master_app
         self.title("Color Usage")
         self.transient(master_app.root)
-        self.resizable(False, True) 
+        self.resizable(True, True) # Window is now fully resizable
 
         self._image_references = [] 
-        self.current_sort_column_id = "slot_index" 
+        self.current_sort_column_id = "slot_index" # Default sort: palette slot index
         self.current_sort_direction_is_asc = True   
         self.refresh_timer_id = None 
 
+        # For column resize handling (though image in col #0 has fixed content size)
+        self._is_dragging_col_separator = False 
+        self._treeview_refresh_timer_id = None 
+
+        self.style = ttk.Style()
+
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
-        main_frame.grid_rowconfigure(1, weight=1) 
+        main_frame.grid_rowconfigure(0, weight=1) # Treeview will be in row 0
         main_frame.grid_columnconfigure(0, weight=1)
 
-        header_frame = ttk.Frame(main_frame)
-        header_frame.grid(row=0, column=0, sticky="ew", columnspan=2) 
+        # --- Treeview Setup ---
+        # Column identifiers for data values in the treeview
+        self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val")
         
-        col_width_swatch = 30  
-        col_width_index = 40   
-        col_width_counts = 70  
+        self.tree = ttk.Treeview(
+            main_frame,
+            columns=self.data_column_ids_for_values,
+            show="tree headings", # Show tree for image (#0) and headings for data columns
+            height=16, # Initial height for 16 colors
+            selectmode="browse"
+        )
 
-        header_frame.grid_columnconfigure(0, weight=0, minsize=col_width_swatch) 
-        header_frame.grid_columnconfigure(1, weight=0, minsize=col_width_index)  
-        header_frame.grid_columnconfigure(2, weight=0, minsize=col_width_counts)  
-        header_frame.grid_columnconfigure(3, weight=0, minsize=col_width_counts)  
-        header_frame.grid_columnconfigure(4, weight=0, minsize=col_width_counts) 
+        # --- Column Configuration ---
+        # Column #0: Color Swatch (User-resizable, image fixed size, anchored West)
+        col0_swatch_content_width = 16 # Fixed size of the swatch image
+        col0_initial_width = col0_swatch_content_width + 14 # Image + padding + anchor space
+        self.tree.column("#0", width=col0_initial_width, minwidth=col0_swatch_content_width + 4, stretch=tk.YES, anchor="w") # Anchor West
+        self.tree.heading("#0", text="Color", command=lambda: self._sort_by_column("#0"))
 
-        self.header_labels = {}
-        lbl_color = ttk.Label(header_frame, text="Color", anchor="center", cursor="hand2")
-        lbl_color.grid(row=0, column=0, sticky="ew")
-        lbl_index = ttk.Label(header_frame, text="Index ▲", anchor="center", cursor="hand2") 
-        lbl_index.grid(row=0, column=1, sticky="ew") 
-        lbl_index.bind("<Button-1>", lambda e, col_id="slot_index": self._sort_by_column(col_id))
-        self.header_labels["slot_index"] = lbl_index
-        lbl_pixel_uses = ttk.Label(header_frame, text="Pixel Uses", anchor="center", cursor="hand2") 
-        lbl_pixel_uses.grid(row=0, column=2, sticky="ew")
-        lbl_pixel_uses.bind("<Button-1>", lambda e, col_id="pixel_uses_count": self._sort_by_column(col_id))
-        self.header_labels["pixel_uses_count"] = lbl_pixel_uses
-        lbl_line_refs = ttk.Label(header_frame, text="Line Refs", anchor="center", cursor="hand2") 
-        lbl_line_refs.grid(row=0, column=3, sticky="ew")
-        lbl_line_refs.bind("<Button-1>", lambda e, col_id="line_refs_count": self._sort_by_column(col_id))
-        self.header_labels["line_refs_count"] = lbl_line_refs
-        lbl_tile_refs = ttk.Label(header_frame, text="Tile Refs", anchor="center", cursor="hand2") 
-        lbl_tile_refs.grid(row=0, column=4, sticky="ew")
-        lbl_tile_refs.bind("<Button-1>", lambda e, col_id="tile_refs_count": self._sort_by_column(col_id))
-        self.header_labels["tile_refs_count"] = lbl_tile_refs
+        # Data Columns (All user-resizable)
+        col_index_width = 60
+        self.tree.column("slot_index_val", width=col_index_width, minwidth=40, stretch=tk.YES, anchor="center")
+        self.tree.heading("slot_index_val", text="Index", command=lambda: self._sort_by_column("slot_index"))
 
-        self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val") 
-        self.tree = ttk.Treeview(main_frame, columns=self.data_column_ids_for_values, show="tree", height=16, selectmode="browse") 
-        self.tree.column("#0", width=col_width_swatch, minwidth=col_width_swatch, stretch=tk.NO, anchor="center") 
-        self.tree.column("slot_index_val", width=col_width_index, minwidth=col_width_index, stretch=tk.NO, anchor="center") 
-        self.tree.column("pixel_uses_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center") 
-        self.tree.column("line_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
-        self.tree.column("tile_refs_val", width=col_width_counts, minwidth=col_width_counts, stretch=tk.NO, anchor="center")  
+        col_counts_width = 80
+        self.tree.column("pixel_uses_val", width=col_counts_width, minwidth=60, stretch=tk.YES, anchor="center")
+        self.tree.heading("pixel_uses_val", text="Pixel Uses", command=lambda: self._sort_by_column("pixel_uses_count"))
+
+        self.tree.column("line_refs_val", width=col_counts_width, minwidth=60, stretch=tk.YES, anchor="center")
+        self.tree.heading("line_refs_val", text="Line Refs", command=lambda: self._sort_by_column("line_refs_count"))
+
+        self.tree.column("tile_refs_val", width=col_counts_width, minwidth=60, stretch=tk.YES, anchor="center")
+        self.tree.heading("tile_refs_val", text="Tile Refs", command=lambda: self._sort_by_column("tile_refs_count"))
+        
+        # Store header details for updating sort indicators on Treeview headers
+        self.header_details = {
+            "#0": {"id": "#0", "data_key": "slot_index"}, # Image column sorts by slot_index
+            "slot_index": {"id": "slot_index_val", "data_key": "slot_index"},
+            "pixel_uses_count": {"id": "pixel_uses_val", "data_key": "pixel_uses_count"},
+            "line_refs_count": {"id": "line_refs_val", "data_key": "line_refs_count"},
+            "tile_refs_count": {"id": "tile_refs_val", "data_key": "tile_refs_count"}
+        }
+        self._update_header_sort_indicators() # Set initial sort indicator
+
+        # --- Scrollbars ---
+        v_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=v_scrollbar.set)
+        h_scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(xscrollcommand=h_scrollbar.set)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        v_scrollbar.grid(row=0, column=1, sticky="ns")
+        h_scrollbar.grid(row=1, column=0, sticky="ew") # Horizontal scrollbar below tree
+
+        # --- Row Styling for Image Height ---
+        # Color swatch preview size (fixed)
+        color_swatch_preview_height = 16 
+        self.treeview_style_name = f"ColorUsage_{id(self)}.Treeview"
+        target_row_height_style = color_swatch_preview_height + 2 # Image size + small padding
+        
+        style = ttk.Style()
+        try:
+            style.configure(self.treeview_style_name, rowheight=target_row_height_style)
+            # Ensure selected items don't change background/foreground making image hard to see
+            style.map(self.treeview_style_name,
+                      background=[('selected', style.lookup(self.treeview_style_name, 'background'))],
+                      foreground=[('selected', style.lookup(self.treeview_style_name, 'foreground'))])
+            self.tree.configure(style=self.treeview_style_name)
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Configured style '{self.treeview_style_name}' with rowheight={target_row_height_style}.")
+        except tk.TclError as e_style:
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}. Using default row height.")
+
+        # --- Event Bindings ---
         self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
-        tree_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=tree_scrollbar.set)
-        self.tree.grid(row=1, column=0, sticky="nsew") 
-        tree_scrollbar.grid(row=1, column=1, sticky="ns")
-        main_frame.grid_columnconfigure(1, weight=0)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Bindings for column resize detection (all columns are user-resizable here)
+        self.tree.bind("<ButtonPress-1>", self._on_tree_button_press) # For detecting separator drag
+        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+') # For drag release outside tree
+        self.tree.bind("<Configure>", self._on_tree_configure_debounced) # For overall tree resize
+
+        # --- Debug Refresh Button (Optional) ---
+        # Placed below the horizontal scrollbar
         button_frame_container = ttk.Frame(main_frame) 
         button_frame_container.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
         self.refresh_button = None 
         if self.app_ref.debug_enabled:
             self.refresh_button = ttk.Button(button_frame_container, text="Refresh (Debug)", command=self.refresh_data)
             self.refresh_button.pack(pady=5)
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.after(10, self.refresh_data) 
+        
+        self.after(10, self.refresh_data_if_ready) # Initial data load
+
+    def refresh_data_if_ready(self):
+        # Helper to ensure widget is ready before initial refresh_data call
+        if self.winfo_exists() and self.winfo_ismapped():
+            self.refresh_data()
+        else:
+            self.after(50, self.refresh_data_if_ready)
 
     def request_refresh(self, delay_ms=300): 
-        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}") # Added debug
         if not self.winfo_exists(): 
             return
         if self.refresh_timer_id is not None:
             self.after_cancel(self.refresh_timer_id)
         self.refresh_timer_id = self.after(delay_ms, self._perform_debounced_refresh)
-        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: new refresh_timer_id set to: {self.refresh_timer_id}") # Added debug
-
 
     def _perform_debounced_refresh(self): 
-        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: _perform_debounced_refresh executing for timer {self.refresh_timer_id}.") # Added debug
         self.refresh_timer_id = None 
-        if self.winfo_exists(): 
+        if self.winfo_exists() and self.winfo_ismapped(): 
             self.refresh_data()
 
-    def _sort_by_column(self, column_id_clicked):
-        self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Sorting by column '{column_id_clicked}'")
-        if self.current_sort_column_id == column_id_clicked:
+    def _sort_by_column(self, column_clicked_key):
+        # column_clicked_key is the key from self.header_details (e.g., "#0", "slot_index")
+        data_sort_key = self.header_details.get(column_clicked_key, {}).get("data_key")
+        if not data_sort_key:
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Invalid column key '{column_clicked_key}' for sorting.")
+            return
+
+        if self.current_sort_column_id == data_sort_key:
             self.current_sort_direction_is_asc = not self.current_sort_direction_is_asc
         else:
-            self.current_sort_column_id = column_id_clicked
+            self.current_sort_column_id = data_sort_key
             self.current_sort_direction_is_asc = True 
-        for col_id, label_widget in self.header_labels.items():
-            if not label_widget.winfo_exists(): continue
-            try: current_text = label_widget.cget("text")
-            except tk.TclError: current_text = col_id 
-            text = current_text.replace(" ▲", "").replace(" ▼", "") 
-            if col_id == self.current_sort_column_id:
-                text += " ▲" if self.current_sort_direction_is_asc else " ▼"
-            try: label_widget.config(text=text)
-            except tk.TclError: pass
+        
+        self._update_header_sort_indicators()
         self.refresh_data()
+
+    def _update_header_sort_indicators(self):
+        for key, details in self.header_details.items():
+            col_id_for_tree = details["id"] 
+            data_key_for_sort = details["data_key"]
+            
+            current_heading_options = {}
+            try:
+                if not self.tree.winfo_exists(): continue
+                current_heading_options = self.tree.heading(col_id_for_tree)
+            except tk.TclError:
+                continue
+
+            current_text = current_heading_options.get("text", "")
+            text_to_set = current_text.replace(" ▲", "").replace(" ▼", "")
+
+            if data_key_for_sort == self.current_sort_column_id:
+                text_to_set += " ▲" if self.current_sort_direction_is_asc else " ▼"
+            
+            try:
+                if not self.tree.winfo_exists(): continue
+                self.tree.heading(col_id_for_tree, text=text_to_set)
+            except tk.TclError:
+                pass
 
     def refresh_data(self): 
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
         if not hasattr(self, 'tree') or not self.tree.winfo_exists():
-            self.app_ref.debug("[DEBUG] Treeview not ready for refresh_data.")
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Treeview not ready for refresh_data.")
             return
+        
         for i in self.tree.get_children():
             self.tree.delete(i)
         self._image_references.clear()
+        
         usage_data = [] 
         if hasattr(self.app_ref, '_calculate_color_usage_data'):
             try: usage_data = self.app_ref._calculate_color_usage_data() 
             except Exception as e:
-                self.app_ref.debug(f"[DEBUG] Error calling _calculate_color_usage_data: {e}")
+                self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error calling _calculate_color_usage_data: {e}")
                 for i in range(16): 
                      usage_data.append({'slot_index': i, 'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF", 'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0})
         else: 
             self.app_ref.debug("[DEBUG] ColorUsageWindow: _calculate_color_usage_data not found for refresh.")
             for i in range(16): 
                 usage_data.append({'slot_index': i, 'current_color_hex': self.app_ref.active_msx_palette[i] if i < len(self.app_ref.active_msx_palette) else "#FF00FF", 'pixel_uses_count': 0, 'line_refs_count': 0, 'tile_refs_count': 0})
+
         valid_sort_key = self.current_sort_column_id
         if usage_data and self.current_sort_column_id not in usage_data[0]: 
-            self.app_ref.debug(f"[DEBUG] Invalid sort column '{self.current_sort_column_id}' in refresh_data. Defaulting to slot_index.")
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Invalid sort column '{self.current_sort_column_id}' in refresh_data. Defaulting to slot_index.")
             valid_sort_key = 'slot_index' 
             self.current_sort_column_id = 'slot_index'
             self.current_sort_direction_is_asc = True
-            for col_id_hdr, label_widget_hdr in self.header_labels.items():
-                if not label_widget_hdr.winfo_exists(): continue
-                try:
-                    hdr_text = label_widget_hdr.cget("text").replace(" ▲", "").replace(" ▼", "")
-                    if col_id_hdr == self.current_sort_column_id: hdr_text += " ▲" if self.current_sort_direction_is_asc else " ▼"
-                    label_widget_hdr.config(text=hdr_text)
-                except tk.TclError: pass
-        elif not usage_data: self.app_ref.debug("[DEBUG] usage_data is empty, skipping sort.")
+            self._update_header_sort_indicators()
+        elif not usage_data: self.app_ref.debug("[DEBUG] ColorUsageWindow: usage_data is empty, skipping sort.")
+        
         if usage_data: 
             try: usage_data.sort(key=lambda item: item[valid_sort_key], reverse=not self.current_sort_direction_is_asc)
-            except (TypeError, KeyError) as e_sort: self.app_ref.debug(f"[DEBUG] Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
-        preview_image_size = 16
+            except (TypeError, KeyError) as e_sort: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
+        
+        preview_image_size = 16 # Fixed size for color swatch
         for item_data in usage_data: 
             slot_idx = item_data['slot_index']
             hex_color = item_data['current_color_hex']
-            img_w = max(1, preview_image_size); img_h = max(1, preview_image_size)
+            
             photo = None
             try:
+                # Create a PhotoImage for the color swatch
+                img_w, img_h = max(1, preview_image_size), max(1, preview_image_size)
                 photo = tk.PhotoImage(width=img_w, height=img_h)
                 hex_color_to_put = hex_color
-                if not (isinstance(hex_color, str) and hex_color.startswith('#') and len(hex_color) == 7): hex_color_to_put = "#FF00FF"
+                # Basic validation for hex color string for PhotoImage.put
+                if not (isinstance(hex_color, str) and hex_color.startswith('#') and (len(hex_color) == 7 or len(hex_color) == 9)): # Allow #RRGGBBAA for PhotoImage
+                    hex_color_to_put = "#FF00FF" # Magenta for error
                 photo.put(hex_color_to_put, to=(0, 0, img_w, img_h))
                 self._image_references.append(photo) 
-            except tk.TclError as e_photo: self.app_ref.debug(f"[DEBUG] TclError creating/putting color swatch for slot {slot_idx} color '{hex_color}': {e_photo}")
-            self.tree.insert("", "end", iid=f"slot_{slot_idx}", text="", image=photo if photo else '', values=(f" {slot_idx}", item_data['pixel_uses_count'], item_data['line_refs_count'], item_data['tile_refs_count']))
+            except tk.TclError as e_photo: 
+                self.app_ref.debug(f"[DEBUG] ColorUsageWindow: TclError creating/putting color swatch for slot {slot_idx} color '{hex_color}': {e_photo}")
+            
+            self.tree.insert("", "end", 
+                             iid=f"slot_{slot_idx}", 
+                             image=photo if photo else '', # Image for column #0
+                             text="", # No text for column #0 if image is present
+                             values=(f" {slot_idx}", 
+                                     item_data['pixel_uses_count'], 
+                                     item_data['line_refs_count'], 
+                                     item_data['tile_refs_count']),
+                             tags=('color_row',) 
+                            )
+        try: # Apply background color for the row from style
+            row_bg = self.style.lookup(self.treeview_style_name, 'background')
+            self.tree.tag_configure('color_row', background=row_bg)
+        except tk.TclError: pass
 
     def _on_item_selected(self, event):
         if not self.tree.winfo_exists(): return
@@ -323,6 +409,7 @@ class ColorUsageWindow(tk.Toplevel):
             if item_id_str.startswith("slot_"): slot_index = int(item_id_str.split("_")[1])
             else: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Could not parse slot_index from iid '{item_id_str}'."); return
         except (ValueError, IndexError) as e: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error parsing slot_index from iid '{item_id_str}': {e}"); return
+        
         if 0 <= slot_index <= 15: 
             self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Item selected, slot_index: {slot_index}")
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'): self.app_ref.synchronize_selection_from_usage_window("color", slot_index)
@@ -330,11 +417,54 @@ class ColorUsageWindow(tk.Toplevel):
 
     def _on_close(self): 
         if self.refresh_timer_id is not None:
-            self.after_cancel(self.refresh_timer_id)
+            try: self.after_cancel(self.refresh_timer_id)
+            except tk.TclError: pass
             self.refresh_timer_id = None
+        
+        if hasattr(self, '_treeview_refresh_timer_id') and self._treeview_refresh_timer_id:
+            try: self.after_cancel(self._treeview_refresh_timer_id)
+            except tk.TclError: pass
+            self._treeview_refresh_timer_id = None
+            
         self.app_ref.debug("[DEBUG] ColorUsageWindow closed.")
         if self.app_ref: self.app_ref.color_usage_window = None 
-        self.destroy()
+        
+        try: 
+            if self.winfo_exists(): self.destroy()
+        except tk.TclError: pass
+
+    # --- Column Resize Event Handlers (Simplified as images are fixed size) ---
+    def _on_tree_configure_debounced(self, event=None):
+        # For ColorUsageWindow, this is less critical as images are fixed size.
+        if not self.winfo_exists(): return
+        if self._treeview_refresh_timer_id:
+            self.after_cancel(self._treeview_refresh_timer_id)
+        self._treeview_refresh_timer_id = self.after(100, self._do_refresh_if_tree_valid_from_configure)
+
+    def _do_refresh_if_tree_valid_from_configure(self):
+        self._treeview_refresh_timer_id = None
+        if self.winfo_exists() and self.winfo_ismapped():
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> -> Refreshing data.")
+            self.refresh_data() 
+        else:
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> -> Skipped refresh (window not valid/mapped).")
+
+    def _on_tree_button_press(self, event):
+        # Detects start of column drag for resizable columns.
+        if not self.winfo_exists(): return
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "separator": # All columns are resizable, so no specific column check needed here
+            self._is_dragging_col_separator = True
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Drag started on separator.")
+        else:
+            self._is_dragging_col_separator = False
+
+    def _on_window_button_release(self, event):
+        if not self.winfo_exists(): return
+        if self._is_dragging_col_separator:
+            self._is_dragging_col_separator = False
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Column drag ended.")
+            # No specific image re-rendering needed here as images are fixed size.
 
 class TileUsageWindow(tk.Toplevel):
     def __init__(self, master_app):
