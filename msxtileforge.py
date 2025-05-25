@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.42"
+APP_VERSION = "0.0.43"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
