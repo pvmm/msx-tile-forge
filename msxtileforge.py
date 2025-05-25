@@ -16,7 +16,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.43"
+APP_VERSION = "0.0.44"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -12538,14 +12538,15 @@ class TileEditorApp:
                 self.color_usage_window.refresh_data() # Refresh when brought to front
 
     def synchronize_selection_from_usage_window(self, item_type, index):
-        self.debug(f"[DEBUG] Synchronizing selection from usage window: type='{item_type}', index={index}")
+        self.debug(f"\n[DEBUG] Synchronizing from USAGE WINDOW: type='{item_type}', index={index}")
         global selected_color_index, current_tile_index, selected_tile_for_supertile 
         global current_supertile_index, selected_supertile_for_map 
-        global num_tiles_in_set, num_supertiles # Add num_supertiles global access
+        global num_tiles_in_set, num_supertiles 
 
         if item_type == "color":
+            # ... (existing color logic - assuming it's okay for now) ...
             if not (0 <= index <= 15):
-                self.debug(f"[DEBUG] Invalid color slot index {index} for synchronization.")
+                self.debug(f"  [DEBUG] Invalid color slot index {index}. Sync aborted.")
                 return
 
             try:
@@ -12560,22 +12561,27 @@ class TileEditorApp:
                 
                 if current_tab_widget != self.tab_tile_editor and \
                    current_tab_widget != self.tab_palette_editor:
+                    self.debug(f"  [DEBUG] Color sync: Current tab is not Tile/Palette Editor. Switching to Palette Editor.")
                     if self.notebook.winfo_exists() and self.tab_palette_editor.winfo_exists():
                         self.notebook.select(self.tab_palette_editor)
+                        self.root.update_idletasks() # Allow tab switch to process
                     else:
-                        self.debug("[DEBUG] Sync: Palette editor tab or notebook not available for switch.")
+                        self.debug("  [DEBUG] Sync: Palette editor tab or notebook not available for switch.")
                 
+                self.debug(f"  [DEBUG] Color sync: Calling update_all_displays(all).")
                 self.update_all_displays(changed_level="all") 
                 self.root.lift()
+                self.debug(f"  [DEBUG] Color sync: Finished.")
 
             except tk.TclError as e:
-                self.debug(f"[DEBUG] TclError during color selection synchronization: {e}")
+                self.debug(f"  [DEBUG] TclError during color selection synchronization: {e}")
             except Exception as e:
-                self.debug(f"[DEBUG] Unexpected error during color selection synchronization: {e}")
+                self.debug(f"  [DEBUG] Unexpected error during color selection synchronization: {e}")
 
         elif item_type == "tile":
+            # ... (existing tile logic - assuming it's okay for now) ...
             if not (0 <= index < num_tiles_in_set): 
-                self.debug(f"[DEBUG] Invalid tile index {index} for synchronization (num_tiles_in_set: {num_tiles_in_set}).")
+                self.debug(f"  [DEBUG] Invalid tile index {index} (num_tiles_in_set: {num_tiles_in_set}). Sync aborted.")
                 return
             
             try:
@@ -12584,78 +12590,116 @@ class TileEditorApp:
                     selected_tab_path = self.notebook.select()
                     if selected_tab_path:
                         active_tab_widget = self.notebook.nametowidget(selected_tab_path)
+                self.debug(f"  [DEBUG] Tile sync: Current active tab widget: {active_tab_widget}")
 
+                # Update selections first
+                current_tile_index = index # Always update this for Tile Editor
                 if active_tab_widget == self.tab_supertile_editor:
-                    self.debug("[DEBUG] Sync Tile: Supertile Editor tab active. Updating its selection.")
-                    if selected_tile_for_supertile != index:
-                        selected_tile_for_supertile = index
-                        if hasattr(self, 'st_tileset_canvas') and self.st_tileset_canvas.winfo_exists():
-                            self.draw_tileset_viewer(self.st_tileset_canvas, selected_tile_for_supertile)
-                        self.update_supertile_info_labels() 
-                    current_tile_index = index 
-                else:
-                    self.debug("[DEBUG] Sync Tile: Other tab active. Switching to Tile Editor.")
+                    self.debug(f"  [DEBUG] Tile sync: Supertile Editor tab active. Updating its tile selection to {index}.")
+                    selected_tile_for_supertile = index
+                # else:
+                    # For other tabs, like Palette or Map, we might also want selected_tile_for_supertile to follow
+                    # This ensures consistency if user switches back to ST editor
+                    # selected_tile_for_supertile = index 
+                    # For now, let's assume current_tile_index is the primary one to sync if not on ST editor.
+
+
+                # Switch to Tile Editor tab if not already there or on Supertile Editor
+                if active_tab_widget != self.tab_tile_editor and active_tab_widget != self.tab_supertile_editor:
+                    self.debug(f"  [DEBUG] Tile sync: Current tab is not Tile/Supertile Editor. Switching to Tile Editor.")
                     if self.notebook.winfo_exists() and self.tab_tile_editor.winfo_exists():
-                        if active_tab_widget != self.tab_tile_editor: 
-                            self.notebook.select(self.tab_tile_editor)
+                        self.notebook.select(self.tab_tile_editor)
+                        self.root.update_idletasks() # Allow tab switch to process
                     else:
-                        self.debug("[DEBUG] Sync: Tile editor tab or notebook not available for switch.")
-                    
-                    current_tile_index = index
-                    selected_tile_for_supertile = index 
-                    self.update_all_displays(changed_level="all") 
+                        self.debug("  [DEBUG] Sync: Tile editor tab or notebook not available for switch.")
                 
+                self.debug(f"  [DEBUG] Tile sync: Calling update_all_displays(all).")
+                self.update_all_displays(changed_level="all") # This will draw based on current (possibly new) tab
+                
+                self.debug(f"  [DEBUG] Tile sync: Calling scroll_viewers_to_tile({index}).")
                 self.scroll_viewers_to_tile(index) 
+                
                 self.root.lift() 
+                self.debug(f"  [DEBUG] Tile sync: Finished.")
 
             except tk.TclError as e:
-                self.debug(f"[DEBUG] TclError during tile selection synchronization: {e}")
+                self.debug(f"  [DEBUG] TclError during tile selection synchronization: {e}")
             except Exception as e:
-                self.debug(f"[DEBUG] Unexpected error during tile selection synchronization: {e}")
+                self.debug(f"  [DEBUG] Unexpected error during tile selection synchronization: {e}")
 
-        elif item_type == "supertile": # ADD THIS ELIF BLOCK
+        elif item_type == "supertile":
             if not (0 <= index < num_supertiles):
-                self.debug(f"[DEBUG] Invalid supertile index {index} for synchronization (num_supertiles: {num_supertiles}).")
+                self.debug(f"  [DEBUG] Invalid supertile index {index} (num_supertiles: {num_supertiles}). Sync aborted.")
                 return
             
             try:
-                active_tab_widget = None
+                self.debug(f"  [DEBUG] ST Sync: Starting for index {index}.")
+                # 1. Update model state (the selected indices)
+                current_supertile_index = index    # For Supertile Editor tab's main selection
+                selected_supertile_for_map = index # For Map Editor tab's palette selection
+                self.debug(f"  [DEBUG] ST Sync: Updated current_supertile_index to {current_supertile_index}, selected_supertile_for_map to {selected_supertile_for_map}.")
+
+                # 2. Determine target tab and switch if necessary
+                active_tab_widget_before_switch = None
                 if self.notebook.winfo_exists():
                     selected_tab_path = self.notebook.select()
                     if selected_tab_path:
-                        active_tab_widget = self.notebook.nametowidget(selected_tab_path)
-
-                if active_tab_widget == self.tab_map_editor:
-                    self.debug("[DEBUG] Sync Supertile: Map Editor tab active. Updating its selection.")
-                    if selected_supertile_for_map != index:
-                        selected_supertile_for_map = index
-                        # Redraw map tab's supertile selector and its info labels
-                        if hasattr(self, 'map_supertile_selector_canvas') and self.map_supertile_selector_canvas.winfo_exists():
-                            self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
-                        self.update_map_info_labels()
-                    # Also sync current_supertile_index for ST editor if user switches
-                    current_supertile_index = index
-                else: # Default behavior: switch to Supertile Editor tab
-                    self.debug("[DEBUG] Sync Supertile: Other tab active. Switching to Supertile Editor.")
-                    if self.notebook.winfo_exists() and self.tab_supertile_editor.winfo_exists():
-                        if active_tab_widget != self.tab_supertile_editor:
-                             self.notebook.select(self.tab_supertile_editor)
-                    else:
-                        self.debug("[DEBUG] Sync: Supertile editor tab or notebook not available for switch.")
-                    
-                    current_supertile_index = index
-                    selected_supertile_for_map = index # Keep consistent
-                    self.update_all_displays(changed_level="all")
+                        active_tab_widget_before_switch = self.notebook.nametowidget(selected_tab_path)
                 
+                target_tab_to_ensure_visible = self.tab_supertile_editor # Default to ST editor
+                if active_tab_widget_before_switch == self.tab_map_editor:
+                    target_tab_to_ensure_visible = self.tab_map_editor # Stay on map editor if already there
+                
+                self.debug(f"  [DEBUG] ST Sync: Active tab before switch: {active_tab_widget_before_switch}")
+                self.debug(f"  [DEBUG] ST Sync: Target tab to ensure visible: {target_tab_to_ensure_visible}")
+
+                if active_tab_widget_before_switch != target_tab_to_ensure_visible:
+                    if self.notebook.winfo_exists() and target_tab_to_ensure_visible.winfo_exists():
+                        self.debug(f"  [DEBUG] ST Sync: Switching to target tab.")
+                        self.notebook.select(target_tab_to_ensure_visible)
+                        self.root.update_idletasks() # Crucial: Allow tab switch and geometry updates to process
+                        self.debug(f"  [DEBUG] ST Sync: Tab switched and idletasks updated.")
+                    else:
+                        self.debug(f"  [DEBUG] ST Sync: Target tab or notebook not available for switch. Problems may occur.")
+                
+                # 3. Call update_all_displays. This will redraw the content of the *now active* tab.
+                #    It should use the updated selection indices.
+                self.debug(f"  [DEBUG] ST Sync: Calling update_all_displays(all). This should redraw the active tab's selector with correct highlight.")
+                self.update_all_displays(changed_level="all") 
+                # self.root.update_idletasks() # Let draw operations from update_all_displays complete
+
+                # 4. Call scroll_selectors_to_supertile. This will now operate on the
+                #    selector of the (potentially newly) active and drawn tab.
+                self.debug(f"  [DEBUG] ST Sync: Calling scroll_selectors_to_supertile({index}).")
                 self.scroll_selectors_to_supertile(index)
+                # self.root.update_idletasks() # Let scroll operations complete
+
+                # 5. If the scroll happened, the selector items might need to be redrawn *again*
+                #    for the new viewport if `scroll_selectors_to_supertile` itself doesn't redraw.
+                #    However, our modified `scroll_selectors_to_supertile` doesn't redraw.
+                #    The `draw_supertile_selector` is called by `update_all_displays` (step 3).
+                #    The crucial part is that the scroll in step 4 happens *after* the draw from step 3.
+                #    So, we need a final redraw *after* the scroll.
+
+                self.debug(f"  [DEBUG] ST Sync: Performing a final targeted redraw of the active selector AFTER scrolling.")
+                if target_tab_to_ensure_visible == self.tab_supertile_editor:
+                    if hasattr(self, 'supertile_selector_canvas') and self.supertile_selector_canvas.winfo_exists():
+                        self.debug(f"    [DEBUG] Redrawing SupertileTabSelector for ST {current_supertile_index}")
+                        self.draw_supertile_selector(self.supertile_selector_canvas, current_supertile_index)
+                elif target_tab_to_ensure_visible == self.tab_map_editor:
+                    if hasattr(self, 'map_supertile_selector_canvas') and self.map_supertile_selector_canvas.winfo_exists():
+                        self.debug(f"    [DEBUG] Redrawing MapTabSelector for ST {selected_supertile_for_map}")
+                        self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
+                
                 self.root.lift()
+                self.debug(f"  [DEBUG] ST Sync: Finished for index {index}.")
 
             except tk.TclError as e:
-                self.debug(f"[DEBUG] TclError during supertile selection synchronization: {e}")
+                self.debug(f"  [DEBUG] TclError during supertile selection synchronization: {e}")
             except Exception as e:
-                self.debug(f"[DEBUG] Unexpected error during supertile selection synchronization: {e}")
+                self.debug(f"  [DEBUG] Unexpected error during supertile selection synchronization: {e}")
         else:
-            self.debug(f"[DEBUG] Unknown item_type '{item_type}' for synchronization.")
+            self.debug(f"  [DEBUG] Unknown item_type '{item_type}' for synchronization.")
 
     def _request_color_usage_refresh(self):
         # Helper to request a refresh of the color usage window if it's open.
