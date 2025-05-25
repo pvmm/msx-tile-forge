@@ -1873,12 +1873,12 @@ class TileEditorApp:
         main_frame = ttk.Frame(parent_frame)
         main_frame.pack(expand=True, fill="both")
         left_frame = ttk.Frame(main_frame)
-        left_frame.grid(row=0, column=0, sticky=tk.N, padx=(0, 10)) # left_frame itself is sticky N (top)
+        left_frame.grid(row=0, column=0, sticky=tk.N, padx=(0, 10)) 
 
         def_frame = ttk.LabelFrame(
             left_frame, text="Supertile Definition (Click to place selected tile)"
         )
-        def_frame.grid(row=0, column=0, pady=(0, 5), sticky="ew") # def_frame is sticky EW (expand horizontally)
+        def_frame.grid(row=0, column=0, pady=(0, 5), sticky="ew") 
         
         def_canvas_width_actual = self.supertile_grid_width * SUPERTILE_DEF_TILE_SIZE
         def_canvas_height_actual = self.supertile_grid_height * SUPERTILE_DEF_TILE_SIZE
@@ -2017,12 +2017,27 @@ class TileEditorApp:
         )
         st_sel_hbar = ttk.Scrollbar(st_selector_frame, orient=tk.HORIZONTAL)
         st_sel_vbar = ttk.Scrollbar(st_selector_frame, orient=tk.VERTICAL)
+        
+        # --- Modified scrollbar commands for supertile_selector_canvas ---
+        def st_sel_canvas_xview_wrapper(*args):
+            self.debug(f"[DEBUG] ST Editor - Supertile Selector XScrollbar: args={args}")
+            self.supertile_selector_canvas.xview(*args)
+            # Potentially trigger redraw if lazy loading images horizontally
+            self.draw_supertile_selector(self.supertile_selector_canvas, current_supertile_index)
+
+
+        def st_sel_canvas_yview_wrapper(*args):
+            self.debug(f"[DEBUG] ST Editor - Supertile Selector YScrollbar: args={args}")
+            self.supertile_selector_canvas.yview(*args)
+            self.draw_supertile_selector(self.supertile_selector_canvas, current_supertile_index)
+
         self.supertile_selector_canvas.config(
             xscrollcommand=st_sel_hbar.set,
             yscrollcommand=st_sel_vbar.set
         )
-        st_sel_hbar.config(command=self.supertile_selector_canvas.xview)
-        st_sel_vbar.config(command=self.supertile_selector_canvas.yview)
+        st_sel_hbar.config(command=st_sel_canvas_xview_wrapper) # Use wrapper
+        st_sel_vbar.config(command=st_sel_canvas_yview_wrapper) # Use wrapper
+        # --- End of modification ---
 
         self.supertile_selector_canvas.grid(
             row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E)
@@ -2169,9 +2184,24 @@ class TileEditorApp:
         self.map_supertile_selector_canvas = tk.Canvas(st_selector_frame,bg="lightgrey", scrollregion=(0, 0, 1, 1), width=min_one_supertile_preview_width)
         map_st_sel_hbar = ttk.Scrollbar(st_selector_frame, orient=tk.HORIZONTAL)
         map_st_sel_vbar = ttk.Scrollbar(st_selector_frame, orient=tk.VERTICAL)
+
+        # --- Modified scrollbar commands for map_supertile_selector_canvas ---
+        def map_st_sel_canvas_xview_wrapper(*args):
+            self.debug(f"[DEBUG] Map Editor - Supertile Palette XScrollbar: args={args}")
+            self.map_supertile_selector_canvas.xview(*args)
+            # Potentially trigger redraw if lazy loading images horizontally
+            self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
+
+        def map_st_sel_canvas_yview_wrapper(*args):
+            self.debug(f"[DEBUG] Map Editor - Supertile Palette YScrollbar: args={args}")
+            self.map_supertile_selector_canvas.yview(*args)
+            self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
+
         self.map_supertile_selector_canvas.config(xscrollcommand=map_st_sel_hbar.set, yscrollcommand=map_st_sel_vbar.set)
-        map_st_sel_hbar.config(command=self.map_supertile_selector_canvas.xview)
-        map_st_sel_vbar.config(command=self.map_supertile_selector_canvas.yview)
+        map_st_sel_hbar.config(command=map_st_sel_canvas_xview_wrapper) # Use wrapper
+        map_st_sel_vbar.config(command=map_st_sel_canvas_yview_wrapper) # Use wrapper
+        # --- End of modification ---
+
         self.map_supertile_selector_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         map_st_sel_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         map_st_sel_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
@@ -6223,57 +6253,138 @@ class TileEditorApp:
             print(f"Error scrolling ST tileset viewer: {e}")
 
     def scroll_selectors_to_supertile(self, supertile_index):
-        """Scrolls the supertile selectors to make the specified index visible."""
-        # Basic input validation
+        self.debug(f"\n[DEBUG] scroll_selectors_to_supertile: Attempting to ensure ST Index {supertile_index} is visible.")
         if supertile_index < 0:
+            self.debug(f"  [DEBUG] Invalid supertile_index {supertile_index}. Aborting.")
             return
 
-        # Define layout parameters
+        canvases_to_scroll = []
+        # Ensure we only try to scroll the selector that is currently visible (on the active tab)
+        # This avoids unnecessary calculations and potential issues with non-mapped canvases.
+        active_tab_widget = None
+        if self.notebook and self.notebook.winfo_exists():
+            try:
+                selected_tab_path = self.notebook.select()
+                if selected_tab_path:
+                    active_tab_widget = self.notebook.nametowidget(selected_tab_path)
+            except tk.TclError:
+                self.debug("  [DEBUG] TclError getting active tab. Cannot determine which selector to scroll.")
+                return
+        
+        if active_tab_widget == self.tab_supertile_editor:
+            if hasattr(self, 'supertile_selector_canvas') and self.supertile_selector_canvas.winfo_exists():
+                canvases_to_scroll.append({"widget": self.supertile_selector_canvas, "name": "SupertileTabSelector"})
+        elif active_tab_widget == self.tab_map_editor:
+            if hasattr(self, 'map_supertile_selector_canvas') and self.map_supertile_selector_canvas.winfo_exists():
+                canvases_to_scroll.append({"widget": self.map_supertile_selector_canvas, "name": "MapTabSelector"})
+        
+        if not canvases_to_scroll:
+            self.debug("  [DEBUG] No relevant selector canvas is active/found to scroll.")
+            return
+
+        item_pixel_h_content = self.supertile_grid_height * TILE_HEIGHT
+        item_pixel_w_content = self.supertile_grid_width * TILE_WIDTH
         padding = 1
-        item_size = SUPERTILE_SELECTOR_PREVIEW_SIZE
-        items_per_row = NUM_SUPERTILES_ACROSS
 
-        # Calculate target row and y-coordinate
-        row, _ = divmod(supertile_index, items_per_row)
-        target_y = row * (item_size + padding)
+        if item_pixel_w_content <= 0 or item_pixel_h_content <= 0:
+            self.debug(f"  [DEBUG] Invalid item content pixel dimensions (W:{item_pixel_w_content}, H:{item_pixel_h_content}). Aborting.")
+            return
 
-        # --- Scroll Supertile tab's selector ---
-        canvas_st = self.supertile_selector_canvas
-        try:
-            scroll_info_tuple = canvas_st.cget("scrollregion")
-            scroll_info = str(scroll_info_tuple).split()
+        for canvas_info in canvases_to_scroll:
+            canvas_widget = canvas_info["widget"]
+            canvas_name = canvas_info["name"]
+            self.debug(f"  [DEBUG] Processing scroll for: {canvas_name} to ST Index {supertile_index}")
 
-            if len(scroll_info) == 4:
-                total_height = float(scroll_info[3])
+            try:
+                if not canvas_widget.winfo_ismapped():
+                    self.debug(f"    [DEBUG] Canvas {canvas_name} is not mapped. Skipping scroll.")
+                    continue
 
-                if total_height > 0:
-                    fraction = target_y / total_height
+                canvas_widget.update_idletasks()
+                actual_canvas_width = canvas_widget.winfo_width()
+                canvas_viewport_height = canvas_widget.winfo_height() # Height of the visible part of the canvas
+                self.debug(f"    [DEBUG] {canvas_name} - Actual Canvas Width: {actual_canvas_width}, Viewport Height: {canvas_viewport_height}")
+
+                if actual_canvas_width <= 1 or canvas_viewport_height <= 1:
+                    self.debug(f"    [DEBUG] {canvas_name} - Canvas dimensions too small. Skipping scroll.")
+                    continue
+                
+                items_across_for_this_canvas = 0
+                denominator_check = item_pixel_w_content + padding
+                if denominator_check <= 0:
+                    items_across_for_this_canvas = 1
+                elif item_pixel_w_content + (2 * padding) > actual_canvas_width:
+                    items_across_for_this_canvas = 0
+                    if item_pixel_w_content <= actual_canvas_width:
+                        items_across_for_this_canvas = 1
+                else:
+                    items_across_for_this_canvas = (actual_canvas_width - padding) // denominator_check
+                items_across_for_this_canvas = max(1, items_across_for_this_canvas)
+                self.debug(f"    [DEBUG] {canvas_name} - Calculated items_across: {items_across_for_this_canvas}")
+
+                target_row, _ = divmod(supertile_index, items_across_for_this_canvas)
+                target_item_y_top_content = target_row * (item_pixel_h_content + padding) + padding
+                target_item_y_bottom_content = target_item_y_top_content + item_pixel_h_content
+                self.debug(f"    [DEBUG] {canvas_name} - Target ST Index: {supertile_index}, Target Row: {target_row}")
+                self.debug(f"    [DEBUG] {canvas_name} - Target Item Y Content (top/bottom): {target_item_y_top_content} / {target_item_y_bottom_content}")
+
+                scroll_region_str_list = canvas_widget.cget("scrollregion")
+                if not scroll_region_str_list: self.debug(f"    [DEBUG] {canvas_name} - Scrollregion is empty/None."); continue
+                scroll_info_parts = str(scroll_region_str_list).split()
+                if len(scroll_info_parts) != 4: self.debug(f"    [DEBUG] {canvas_name} - Invalid scrollregion format: {scroll_info_parts}."); continue
+                
+                total_content_height_in_scrollregion = float(scroll_info_parts[3])
+                self.debug(f"    [DEBUG] {canvas_name} - Total Content Height in Scrollregion: {total_content_height_in_scrollregion}")
+
+                if total_content_height_in_scrollregion <= 0: self.debug(f"    [DEBUG] {canvas_name} - Scrollregion height is zero or negative."); continue
+                
+                # --- Visibility Check ---
+                # Get current viewport in content coordinates
+                current_view_y1_content = canvas_widget.canvasy(0)
+                current_view_y2_content = canvas_widget.canvasy(canvas_viewport_height)
+                self.debug(f"    [DEBUG] {canvas_name} - Current Viewport Y (content coords): {current_view_y1_content:.2f} to {current_view_y2_content:.2f}")
+
+                # Is the item already fully visible?
+                # Add a small tolerance (e.g., 1 pixel) for floating point comparisons
+                tolerance = 1 
+                is_top_edge_visible = target_item_y_top_content >= (current_view_y1_content - tolerance)
+                is_bottom_edge_visible = target_item_y_bottom_content <= (current_view_y2_content + tolerance)
+
+                if is_top_edge_visible and is_bottom_edge_visible:
+                    self.debug(f"    [DEBUG] {canvas_name} - Item {supertile_index} IS ALREADY FULLY VISIBLE. No scroll initiated.")
+                else:
+                    self.debug(f"    [DEBUG] {canvas_name} - Item {supertile_index} NOT fully visible (TopEdgeVis: {is_top_edge_visible}, BotEdgeVis: {is_bottom_edge_visible}). Proceeding with scroll calculation.")
+                    # If item's top is above current view, scroll to bring its top to view_top
+                    # If item's bottom is below current view, scroll to bring its bottom to view_bottom
+                    # If item is larger than viewport, scroll to bring its top to view_top
+
+                    target_scroll_y_content = target_item_y_top_content # Default: bring top of item to top of view
+
+                    if target_item_y_bottom_content > current_view_y2_content and target_item_y_top_content > current_view_y1_content:
+                        # If item's bottom is below view AND its top is also below (or at) view_top (i.e., item is mostly below)
+                        # Scroll to make item's bottom align with viewport bottom
+                        target_scroll_y_content = target_item_y_bottom_content - canvas_viewport_height
+                    
+                    # target_scroll_y_content is the desired content Y coordinate for the top of the viewport
+                    fraction = target_scroll_y_content / total_content_height_in_scrollregion
                     clamped_fraction = min(1.0, max(0.0, fraction))
-                    canvas_st.yview_moveto(clamped_fraction)
-            # else:
-            #     print(f"Warning: Invalid scrollregion format for ST selector: {scroll_info}")
+                
+                    self.debug(f"    [DEBUG] {canvas_name} - Calculated scroll fraction: {fraction:.4f}, Clamped fraction: {clamped_fraction:.4f}")
+                    
+                    # Only call yview_moveto if the new fraction is different enough from the current one
+                    current_y_view_fractions = canvas_widget.yview()
+                    if abs(current_y_view_fractions[0] - clamped_fraction) > (1 / total_content_height_in_scrollregion) : # Only if change is > 1 pixel approx
+                        self.debug(f"    [DEBUG] {canvas_name} - Current yview_frac[0]={current_y_view_fractions[0]:.4f}. Calling yview_moveto({clamped_fraction:.4f}).")
+                        canvas_widget.yview_moveto(clamped_fraction)
+                    else:
+                        self.debug(f"    [DEBUG] {canvas_name} - Calculated scroll fraction {clamped_fraction:.4f} is too close to current yview_frac[0]={current_y_view_fractions[0]:.4f}. Scroll yview_moveto SKIPPED.")
 
-        except Exception as e:
-            print(f"Error scrolling ST selector: {e}")
 
-        # --- Scroll Map tab's selector ---
-        canvas_map = self.map_supertile_selector_canvas
-        try:
-            scroll_info_map_tuple = canvas_map.cget("scrollregion")
-            scroll_info_map = str(scroll_info_map_tuple).split()
-
-            if len(scroll_info_map) == 4:
-                total_height_map = float(scroll_info_map[3])
-
-                if total_height_map > 0:
-                    fraction_map = target_y / total_height_map
-                    clamped_fraction_map = min(1.0, max(0.0, fraction_map))
-                    canvas_map.yview_moveto(clamped_fraction_map)
-            # else:
-            #     print(f"Warning: Invalid scrollregion format for Map selector: {scroll_info_map}")
-
-        except Exception as e:
-            print(f"Error scrolling Map selector: {e}")
+            except tk.TclError as e_scroll:
+                self.debug(f"    [DEBUG] {canvas_name} - TclError during scroll: {e_scroll}")
+            except Exception as e_scroll_generic:
+                self.debug(f"    [DEBUG] {canvas_name} - Unexpected error during scroll: {e_scroll_generic}")
+        self.debug(f"[DEBUG] scroll_selectors_to_supertile: Finished processing for ST Index {supertile_index}\n")
 
     # --- vvv NEW Grid/Window Handlers vvv ---
     def toggle_supertile_grid(self):
