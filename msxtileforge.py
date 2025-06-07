@@ -18,7 +18,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.46"
+APP_VERSION = "0.0.47"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -184,20 +184,6 @@ class ColorUsageWindow(tk.Toplevel):
         self.current_sort_direction_is_asc = initial_sort_asc
         # --- End Load Config ---
 
-        # --- APPLY GEOMETRY (DEFERRED) ---
-        if initial_geometry:
-            # Defer geometry setting to ensure window is stable
-            def apply_geom():
-                self.app_ref.debug("[DEBUG] Color apply_geom started.")
-                try:
-                    if self.winfo_exists():
-                        self.app_ref.debug(f" [DEBUG] Setting window geometry to {initial_geometry}.")
-                        self.geometry(initial_geometry)
-                except tk.TclError:
-                    pass # Window may have been closed before 'after' fires
-            self.after_idle(apply_geom)
-        # --- END APPLY GEOMETRY ---
-
         self._is_dragging_col_separator = False 
         self._treeview_refresh_timer_id = None 
 
@@ -289,10 +275,23 @@ class ColorUsageWindow(tk.Toplevel):
             self.refresh_button = ttk.Button(button_frame_container, text="Refresh (Debug)", command=self.refresh_data)
             self.refresh_button.pack(pady=5)
         
+        if initial_geometry:
+            try:
+                self.geometry(initial_geometry)
+            except tk.TclError as e_geom:
+                self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error applying saved geometry '{initial_geometry}': {e_geom}")
+        else: # Default size if no geometry saved or on first run
+            self.update_idletasks() # Ensure widgets are created
+            # Calculate required height: 16 items * row_height + header_height + scrollbar_height + padding
+            header_h_approx = 30 # Approximate height of Treeview header
+            scrollbar_h_approx = 20 # Approximate height for horizontal scrollbar
+            total_h = (16 * target_row_height_style) + header_h_approx + scrollbar_h_approx + 20 # Overall padding
+            total_w = col0_default_w + col_idx_default_w + (col_counts_default_w * 3) + 20 # Sum of col widths + scrollbar + padding
+            self.geometry(f"{max(300,total_w)}x{max(300,total_h)}")
+
+
         self.app_ref.update_specific_window_config(self.window_class_name, is_open=True) # Mark as open
         self.after(10, self.refresh_data_if_ready)
-
-        self.app_ref.debug(f"DIAGNOSTIC: End of ColorUsageWindow __init__. Geometry is: {self.winfo_geometry()}")
 
     def _get_current_tree_config(self):
         """Returns current sort state and column widths for saving."""
@@ -311,7 +310,6 @@ class ColorUsageWindow(tk.Toplevel):
         }
 
     def refresh_data_if_ready(self):
-
         if self.winfo_exists() and self.winfo_ismapped():
             self.refresh_data()
         else:
@@ -367,7 +365,6 @@ class ColorUsageWindow(tk.Toplevel):
             except tk.TclError: pass
 
     def refresh_data(self): 
-        self.app_ref.debug(f"DIAGNOSTIC: Start of ColorUsageWindow refresh_data. Geometry is: {self.winfo_geometry()}")
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
         if not hasattr(self, 'tree') or not self.tree.winfo_exists():
             self.app_ref.debug("[DEBUG] ColorUsageWindow: Treeview not ready for refresh_data.")
@@ -491,17 +488,12 @@ class ColorUsageWindow(tk.Toplevel):
         except tk.TclError: pass
 
     def _on_tree_configure_debounced(self, event=None):
-
         if not self.winfo_exists(): return
         if event and event.widget != self.tree: return # Ensure event is for the tree itself
-
-        self.app_ref.debug(f"DIAGNOSTIC: Before Tree <Configure> timer. Geometry is: {self.winfo_geometry()}")
 
         if self._treeview_refresh_timer_id:
             self.after_cancel(self._treeview_refresh_timer_id)
         self._treeview_refresh_timer_id = self.after(150, self._do_refresh_if_tree_valid_from_configure) # Increased delay slightly
-
-        self.app_ref.debug(f"DIAGNOSTIC: AFTER Tree <Configure> timer. Geometry is: {self.winfo_geometry()}")
 
     def _do_refresh_if_tree_valid_from_configure(self):
         self._treeview_refresh_timer_id = None
@@ -13155,46 +13147,6 @@ class TileEditorApp:
             else:
                 self.debug("[DEBUG] TileUsageWindow does not have request_refresh method.")
 
-    def toggle_tile_usage_window(self):
-        # Toggles the visibility of the Tile Usage window.
-        if self.tile_usage_window is None or not tk.Toplevel.winfo_exists(self.tile_usage_window):
-            self.debug("[DEBUG] Creating new Tile Usage window.")
-            self.tile_usage_window = TileUsageWindow(self) # Pass self (the app instance)
-            
-            # Position the window
-            self.root.update_idletasks() 
-            self.tile_usage_window.update_idletasks()
-            
-            main_x = self.root.winfo_rootx()
-            main_y = self.root.winfo_rooty()
-            main_w = self.root.winfo_width()
-            main_h = self.root.winfo_height()
-
-            tuw_w = self.tile_usage_window.winfo_reqwidth()
-            tuw_h = self.tile_usage_window.winfo_reqheight()
-            
-            pos_x = main_x + (main_w // 2) - (tuw_w // 2)
-            pos_y = main_y + (main_h // 2) - (tuw_h // 2)
-            
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-            pos_x = max(0, min(pos_x, screen_w - tuw_w)) 
-            pos_y = max(0, min(pos_y, screen_h - tuw_h)) 
-
-            self.tile_usage_window.geometry(f"+{pos_x}+{pos_y}")
-            # Modal behavior handled by grab_set and wait_window in the TileUsageWindow class __init__
-            # based on our decision for it to be modal initially, then changed to non-modal.
-            # For non-modal, we don't call grab_set or wait_window here.
-            # If it should behave like ColorUsageWindow (non-modal, lift/focus):
-            # self.tile_usage_window.focus_set() # For non-modal, just focus
-        else:
-            # Window exists, lift and focus it.
-            # As per user decision (Question 4, option b), no automatic refresh on lift.
-            self.debug("[DEBUG] Lifting existing Tile Usage window.")
-            self.tile_usage_window.lift()
-            self.tile_usage_window.focus_set()
-            # No self.tile_usage_window.request_refresh() here based on Q4 decision.
-
     def _request_tile_usage_refresh(self):
         # Helper to request a refresh of the tile usage window if it's open and visible.
         if self.tile_usage_window and \
@@ -13498,12 +13450,9 @@ class TileEditorApp:
 
         config_entry = self.window_configs[window_class_name]
 
-        self.debug(f"[DEBUG] In-memory config for {window_class_name} about to be updated; config_entry = {config_entry}")
         if geometry is not None:
-            self.debug(f"  [DEBUG] Geometry is not None.")
             config_entry['geometry'] = geometry
         if tree_config is not None:
-            self.debug(f"  [DEBUG] tree_config is not None.")
             if 'sort_column_id' in tree_config:
                 config_entry['sort_column_id'] = tree_config['sort_column_id']
             if 'sort_asc' in tree_config:
@@ -13516,7 +13465,7 @@ class TileEditorApp:
         if is_open is not None:
             config_entry['is_open'] = is_open
         
-        self.debug(f"[DEBUG] In-memory config updated for {window_class_name}. IsOpen: {config_entry.get('is_open')}, Geo: {self.window_configs[window_class_name].get('geometry')}")
+        self.debug(f"[DEBUG] In-memory config updated for {window_class_name}. IsOpen: {config_entry.get('is_open')}, Geo: {config_entry.get('geometry')}")
 
 
     def _gather_current_open_window_states(self, final_save=False):
@@ -13699,4 +13648,3 @@ if __name__ == "__main__":
         if tk.Toplevel.winfo_exists(splash_win): splash_win.destroy()
 
     root.mainloop()
-    
