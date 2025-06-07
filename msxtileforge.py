@@ -1,4 +1,4 @@
-﻿#!/bin/env -S python3
+#!/bin/env -S python3
 # -*- coding: utf-8 -*-
 import json
 import platformdirs # type: ignore
@@ -44,6 +44,10 @@ MINIMAP_INITIAL_HEIGHT = 212  # Default desired height of minimap window in pixe
 DRAG_THRESHOLD_PIXELS = 3 # Minimum pixels mouse must move to initiate a drag
 
 RESERVED_BYTES_COUNT = 4 # NEW constant for clarity
+
+# Unicode constant strings
+UP = " \N{BLACK UP-POINTING TRIANGLE}"
+DOWN = " \N{BLACK DOWN-POINTING TRIANGLE}"
 
 # --- Constants for TileUsageWindow (can be placed near other constants or here) ---
 TILE_USAGE_PREVIEW_SIZE = 24 # Pixel size for tile previews in the usage window
@@ -355,10 +359,10 @@ class ColorUsageWindow(tk.Toplevel):
             except tk.TclError: continue
 
             current_text = current_heading_options.get("text", "")
-            text_to_set = current_text.replace(" ▲", "").replace(" ▼", "")
+            text_to_set = current_text.replace(UP, "").replace(DOWN, "")
 
             if data_key_for_sort == self.current_sort_column_id:
-                text_to_set += " ▲" if self.current_sort_direction_is_asc else " ▼"
+                text_to_set += UP if self.current_sort_direction_is_asc else DOWN
             
             try:
                 self.tree.heading(col_id_for_tree, text=text_to_set)
@@ -715,10 +719,10 @@ class TileUsageWindow(tk.Toplevel):
             except tk.TclError: continue
 
             current_text = current_heading_options.get("text", "")
-            text_to_set = current_text.replace(" ▲", "").replace(" ▼", "")
+            text_to_set = current_text.replace(UP, "").replace(DOWN, "") # Remove old indicators
 
             if data_key_for_sort == self.current_sort_column_id:
-                text_to_set += " ▲" if self.current_sort_direction_is_asc else " ▼"
+                text_to_set += UP if self.current_sort_direction_is_asc else DOWN
             
             try:
                 self.tree.heading(col_id_for_tree, text=text_to_set)
@@ -1173,10 +1177,10 @@ class SupertileUsageWindow(tk.Toplevel):
             except tk.TclError: continue
 
             current_text = current_heading_options.get("text", "")
-            text_to_set = current_text.replace(" ▲", "").replace(" ▼", "")
+            text_to_set = current_text.replace(UP, "").replace(DOWN, "")
 
             if data_key == self.current_sort_column_id: # Compare with the data key
-                text_to_set += " ▲" if self.current_sort_direction_is_asc else " ▼"
+                text_to_set += UP if self.current_sort_direction_is_asc else DOWN
             
             try:
                 self.tree.heading(tree_col_id, text=text_to_set)
