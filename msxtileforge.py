@@ -1,5 +1,7 @@
 #!/bin/env -S python3
 # -*- coding: utf-8 -*-
+import json
+import platformdirs # type: ignore
 import tkinter as tk
 from tkinter import ttk
 from tkinter import colorchooser
@@ -16,7 +18,7 @@ import io
 from PIL import Image, ImageTk
 
 # --- Constants ---
-APP_VERSION = "0.0.46"
+APP_VERSION = "0.0.47"
 
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -166,69 +168,82 @@ class ColorUsageWindow(tk.Toplevel):
         self.app_ref = master_app
         self.title("Color Usage")
         self.transient(master_app.root)
-        self.resizable(True, True) # Window is now fully resizable
+        self.resizable(True, True) 
 
         self._image_references = [] 
-        self.current_sort_column_id = "slot_index" # Default sort: palette slot index
+        self.current_sort_column_id = "slot_index" 
         self.current_sort_direction_is_asc = True   
         self.refresh_timer_id = None 
+        self.style = ttk.Style()
 
-        # For column resize handling (though image in col #0 has fixed content size)
+        # --- Load saved configuration for this window ---
+        self.window_class_name = self.__class__.__name__
+        saved_config = self.app_ref.load_specific_window_config(self.window_class_name)
+        initial_geometry = saved_config.get('geometry')
+        initial_sort_col = saved_config.get('sort_column_id', self.current_sort_column_id)
+        initial_sort_asc = saved_config.get('sort_asc', self.current_sort_direction_is_asc)
+        initial_col_widths = saved_config.get('column_widths', {})
+        
+        self.current_sort_column_id = initial_sort_col
+        self.current_sort_direction_is_asc = initial_sort_asc
+        # --- End Load Config ---
+
         self._is_dragging_col_separator = False 
         self._treeview_refresh_timer_id = None 
 
-        self.style = ttk.Style()
-
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
-        main_frame.grid_rowconfigure(0, weight=1) # Treeview will be in row 0
+        main_frame.grid_rowconfigure(0, weight=1) 
         main_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Treeview Setup ---
-        # Column identifiers for data values in the treeview
         self.data_column_ids_for_values = ("slot_index_val", "pixel_uses_val", "line_refs_val", "tile_refs_val")
         
         self.tree = ttk.Treeview(
             main_frame,
             columns=self.data_column_ids_for_values,
-            show="tree headings", # Show tree for image (#0) and headings for data columns
-            height=16, # Initial height for 16 colors
+            show="tree headings", 
+            height=16, 
             selectmode="browse"
         )
 
-        # --- Column Configuration ---
-        # Column #0: Color Swatch (User-resizable, image fixed size, anchored West)
-        col0_swatch_content_width = 16 # Fixed size of the swatch image
-        col0_initial_width = col0_swatch_content_width + 14 # Image + padding + anchor space
-        self.tree.column("#0", width=col0_initial_width, minwidth=col0_swatch_content_width + 4, stretch=tk.YES, anchor="w") # Anchor West
+        # --- Column Configuration with loaded widths or defaults ---
+        col0_default_w = 60 # Includes swatch + padding
+        self.tree.column("#0", 
+                         width=initial_col_widths.get("#0", col0_default_w), 
+                         minwidth=30, stretch=tk.YES, anchor="w")
         self.tree.heading("#0", text="Color", command=lambda: self._sort_by_column("#0"))
 
-        # Data Columns (All user-resizable)
-        col_index_width = 60
-        self.tree.column("slot_index_val", width=col_index_width, minwidth=40, stretch=tk.YES, anchor="center")
+        col_idx_default_w = 60
+        self.tree.column("slot_index_val", 
+                         width=initial_col_widths.get("slot_index_val", col_idx_default_w), 
+                         minwidth=40, stretch=tk.YES, anchor="center")
         self.tree.heading("slot_index_val", text="Index", command=lambda: self._sort_by_column("slot_index"))
 
-        col_counts_width = 80
-        self.tree.column("pixel_uses_val", width=col_counts_width, minwidth=60, stretch=tk.YES, anchor="center")
+        col_counts_default_w = 80
+        self.tree.column("pixel_uses_val", 
+                         width=initial_col_widths.get("pixel_uses_val", col_counts_default_w), 
+                         minwidth=60, stretch=tk.YES, anchor="center")
         self.tree.heading("pixel_uses_val", text="Pixel Uses", command=lambda: self._sort_by_column("pixel_uses_count"))
 
-        self.tree.column("line_refs_val", width=col_counts_width, minwidth=60, stretch=tk.YES, anchor="center")
+        self.tree.column("line_refs_val", 
+                         width=initial_col_widths.get("line_refs_val", col_counts_default_w), 
+                         minwidth=60, stretch=tk.YES, anchor="center")
         self.tree.heading("line_refs_val", text="Line Refs", command=lambda: self._sort_by_column("line_refs_count"))
 
-        self.tree.column("tile_refs_val", width=col_counts_width, minwidth=60, stretch=tk.YES, anchor="center")
+        self.tree.column("tile_refs_val", 
+                         width=initial_col_widths.get("tile_refs_val", col_counts_default_w), 
+                         minwidth=60, stretch=tk.YES, anchor="center")
         self.tree.heading("tile_refs_val", text="Tile Refs", command=lambda: self._sort_by_column("tile_refs_count"))
         
-        # Store header details for updating sort indicators on Treeview headers
         self.header_details = {
-            "#0": {"id": "#0", "data_key": "slot_index"}, # Image column sorts by slot_index
+            "#0": {"id": "#0", "data_key": "slot_index"},
             "slot_index": {"id": "slot_index_val", "data_key": "slot_index"},
             "pixel_uses_count": {"id": "pixel_uses_val", "data_key": "pixel_uses_count"},
             "line_refs_count": {"id": "line_refs_val", "data_key": "line_refs_count"},
             "tile_refs_count": {"id": "tile_refs_val", "data_key": "tile_refs_count"}
         }
-        self._update_header_sort_indicators() # Set initial sort indicator
+        self._update_header_sort_indicators()
 
-        # --- Scrollbars ---
         v_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scrollbar.set)
         h_scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
@@ -236,37 +251,27 @@ class ColorUsageWindow(tk.Toplevel):
 
         self.tree.grid(row=0, column=0, sticky="nsew")
         v_scrollbar.grid(row=0, column=1, sticky="ns")
-        h_scrollbar.grid(row=1, column=0, sticky="ew") # Horizontal scrollbar below tree
+        h_scrollbar.grid(row=1, column=0, sticky="ew") 
 
-        # --- Row Styling for Image Height ---
-        # Color swatch preview size (fixed)
         color_swatch_preview_height = 16 
         self.treeview_style_name = f"ColorUsage_{id(self)}.Treeview"
-        target_row_height_style = color_swatch_preview_height + 2 # Image size + small padding
+        target_row_height_style = color_swatch_preview_height + 4 # Image size + small padding (increased slightly)
         
-        style = ttk.Style()
         try:
-            style.configure(self.treeview_style_name, rowheight=target_row_height_style)
-            # Ensure selected items don't change background/foreground making image hard to see
-            style.map(self.treeview_style_name,
-                      background=[('selected', style.lookup(self.treeview_style_name, 'background'))],
-                      foreground=[('selected', style.lookup(self.treeview_style_name, 'foreground'))])
+            self.style.configure(self.treeview_style_name, rowheight=target_row_height_style)
+            self.style.map(self.treeview_style_name,
+                      background=[('selected', self.style.lookup(self.treeview_style_name, 'background'))],
+                      foreground=[('selected', self.style.lookup(self.treeview_style_name, 'foreground'))])
             self.tree.configure(style=self.treeview_style_name)
-            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Configured style '{self.treeview_style_name}' with rowheight={target_row_height_style}.")
         except tk.TclError as e_style:
-            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}. Using default row height.")
+            self.app_ref.debug(f"[DEBUG] ColorUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}.")
 
-        # --- Event Bindings ---
         self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.tree.bind("<ButtonPress-1>", self._on_tree_button_press) 
+        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+') 
+        self.tree.bind("<Configure>", self._on_tree_configure_debounced) 
 
-        # Bindings for column resize detection (all columns are user-resizable here)
-        self.tree.bind("<ButtonPress-1>", self._on_tree_button_press) # For detecting separator drag
-        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+') # For drag release outside tree
-        self.tree.bind("<Configure>", self._on_tree_configure_debounced) # For overall tree resize
-
-        # --- Debug Refresh Button (Optional) ---
-        # Placed below the horizontal scrollbar
         button_frame_container = ttk.Frame(main_frame) 
         button_frame_container.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
         self.refresh_button = None 
@@ -274,10 +279,41 @@ class ColorUsageWindow(tk.Toplevel):
             self.refresh_button = ttk.Button(button_frame_container, text="Refresh (Debug)", command=self.refresh_data)
             self.refresh_button.pack(pady=5)
         
-        self.after(10, self.refresh_data_if_ready) # Initial data load
+        if initial_geometry:
+            try:
+                self.geometry(initial_geometry)
+            except tk.TclError as e_geom:
+                self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error applying saved geometry '{initial_geometry}': {e_geom}")
+        else: # Default size if no geometry saved or on first run
+            self.update_idletasks() # Ensure widgets are created
+            # Calculate required height: 16 items * row_height + header_height + scrollbar_height + padding
+            header_h_approx = 30 # Approximate height of Treeview header
+            scrollbar_h_approx = 20 # Approximate height for horizontal scrollbar
+            total_h = (16 * target_row_height_style) + header_h_approx + scrollbar_h_approx + 20 # Overall padding
+            total_w = col0_default_w + col_idx_default_w + (col_counts_default_w * 3) + 20 # Sum of col widths + scrollbar + padding
+            self.geometry(f"{max(300,total_w)}x{max(300,total_h)}")
+
+
+        self.app_ref.update_specific_window_config(self.window_class_name, is_open=True) # Mark as open
+        self.after(10, self.refresh_data_if_ready)
+
+    def _get_current_tree_config(self):
+        """Returns current sort state and column widths for saving."""
+        widths = {}
+        if hasattr(self, 'tree') and self.tree.winfo_exists():
+            try:
+                widths["#0"] = self.tree.column("#0", "width")
+                for col_id in self.data_column_ids_for_values:
+                    widths[col_id] = self.tree.column(col_id, "width")
+            except tk.TclError:
+                self.app_ref.debug("[DEBUG] ColorUsageWindow: TclError getting column widths for save.")
+        return {
+            "sort_column_id": self.current_sort_column_id,
+            "sort_asc": self.current_sort_direction_is_asc,
+            "column_widths": widths
+        }
 
     def refresh_data_if_ready(self):
-        # Helper to ensure widget is ready before initial refresh_data call
         if self.winfo_exists() and self.winfo_ismapped():
             self.refresh_data()
         else:
@@ -287,7 +323,8 @@ class ColorUsageWindow(tk.Toplevel):
         if not self.winfo_exists(): 
             return
         if self.refresh_timer_id is not None:
-            self.after_cancel(self.refresh_timer_id)
+            try: self.after_cancel(self.refresh_timer_id)
+            except tk.TclError: pass
         self.refresh_timer_id = self.after(delay_ms, self._perform_debounced_refresh)
 
     def _perform_debounced_refresh(self): 
@@ -296,7 +333,6 @@ class ColorUsageWindow(tk.Toplevel):
             self.refresh_data()
 
     def _sort_by_column(self, column_clicked_key):
-        # column_clicked_key is the key from self.header_details (e.g., "#0", "slot_index")
         data_sort_key = self.header_details.get(column_clicked_key, {}).get("data_key")
         if not data_sort_key:
             self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Invalid column key '{column_clicked_key}' for sorting.")
@@ -312,16 +348,15 @@ class ColorUsageWindow(tk.Toplevel):
         self.refresh_data()
 
     def _update_header_sort_indicators(self):
+        if not hasattr(self, 'tree') or not self.tree.winfo_exists(): return
         for key, details in self.header_details.items():
             col_id_for_tree = details["id"] 
             data_key_for_sort = details["data_key"]
             
             current_heading_options = {}
             try:
-                if not self.tree.winfo_exists(): continue
                 current_heading_options = self.tree.heading(col_id_for_tree)
-            except tk.TclError:
-                continue
+            except tk.TclError: continue
 
             current_text = current_heading_options.get("text", "")
             text_to_set = current_text.replace(UP, "").replace(DOWN, "")
@@ -330,10 +365,8 @@ class ColorUsageWindow(tk.Toplevel):
                 text_to_set += UP if self.current_sort_direction_is_asc else DOWN
             
             try:
-                if not self.tree.winfo_exists(): continue
                 self.tree.heading(col_id_for_tree, text=text_to_set)
-            except tk.TclError:
-                pass
+            except tk.TclError: pass
 
     def refresh_data(self): 
         self.app_ref.debug(f"[DEBUG] ColorUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
@@ -341,6 +374,10 @@ class ColorUsageWindow(tk.Toplevel):
             self.app_ref.debug("[DEBUG] ColorUsageWindow: Treeview not ready for refresh_data.")
             return
         
+        current_selection_iid = None
+        if self.tree.selection():
+            current_selection_iid = self.tree.selection()[0]
+
         for i in self.tree.get_children():
             self.tree.delete(i)
         self._image_references.clear()
@@ -370,39 +407,42 @@ class ColorUsageWindow(tk.Toplevel):
             try: usage_data.sort(key=lambda item: item[valid_sort_key], reverse=not self.current_sort_direction_is_asc)
             except (TypeError, KeyError) as e_sort: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         
-        preview_image_size = 16 # Fixed size for color swatch
+        preview_image_size = 16 
         for item_data in usage_data: 
             slot_idx = item_data['slot_index']
             hex_color = item_data['current_color_hex']
-            
             photo = None
             try:
-                # Create a PhotoImage for the color swatch
                 img_w, img_h = max(1, preview_image_size), max(1, preview_image_size)
                 photo = tk.PhotoImage(width=img_w, height=img_h)
                 hex_color_to_put = hex_color
-                # Basic validation for hex color string for PhotoImage.put
-                if not (isinstance(hex_color, str) and hex_color.startswith('#') and (len(hex_color) == 7 or len(hex_color) == 9)): # Allow #RRGGBBAA for PhotoImage
-                    hex_color_to_put = "#FF00FF" # Magenta for error
+                if not (isinstance(hex_color, str) and hex_color.startswith('#') and (len(hex_color) == 7 or len(hex_color) == 9)):
+                    hex_color_to_put = "#FF00FF" 
                 photo.put(hex_color_to_put, to=(0, 0, img_w, img_h))
                 self._image_references.append(photo) 
             except tk.TclError as e_photo: 
                 self.app_ref.debug(f"[DEBUG] ColorUsageWindow: TclError creating/putting color swatch for slot {slot_idx} color '{hex_color}': {e_photo}")
             
+            item_iid = f"slot_{slot_idx}"
             self.tree.insert("", "end", 
-                             iid=f"slot_{slot_idx}", 
-                             image=photo if photo else '', # Image for column #0
-                             text="", # No text for column #0 if image is present
+                             iid=item_iid, 
+                             image=photo if photo else '', 
+                             text="", 
                              values=(f" {slot_idx}", 
                                      item_data['pixel_uses_count'], 
                                      item_data['line_refs_count'], 
                                      item_data['tile_refs_count']),
                              tags=('color_row',) 
                             )
-        try: # Apply background color for the row from style
+        try: 
             row_bg = self.style.lookup(self.treeview_style_name, 'background')
             self.tree.tag_configure('color_row', background=row_bg)
         except tk.TclError: pass
+
+        if current_selection_iid and self.tree.exists(current_selection_iid):
+            self.tree.selection_set(current_selection_iid)
+            self.tree.focus(current_selection_iid)
+
 
     def _on_item_selected(self, event):
         if not self.tree.winfo_exists(): return
@@ -420,6 +460,20 @@ class ColorUsageWindow(tk.Toplevel):
         else: self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Parsed invalid slot_index {slot_index}.")
 
     def _on_close(self): 
+        # Update in-memory config before destroying
+        if hasattr(self.app_ref, 'update_specific_window_config') and self.winfo_exists():
+            current_geo = ""
+            try:
+                current_geo = self.winfo_geometry()
+            except tk.TclError: # Window might be closing
+                 pass 
+            self.app_ref.update_specific_window_config(
+                self.window_class_name,
+                geometry=current_geo,
+                tree_config=self._get_current_tree_config(),
+                is_open=False
+            )
+
         if self.refresh_timer_id is not None:
             try: self.after_cancel(self.refresh_timer_id)
             except tk.TclError: pass
@@ -437,27 +491,31 @@ class ColorUsageWindow(tk.Toplevel):
             if self.winfo_exists(): self.destroy()
         except tk.TclError: pass
 
-    # --- Column Resize Event Handlers (Simplified as images are fixed size) ---
     def _on_tree_configure_debounced(self, event=None):
-        # For ColorUsageWindow, this is less critical as images are fixed size.
         if not self.winfo_exists(): return
+        if event and event.widget != self.tree: return # Ensure event is for the tree itself
+
         if self._treeview_refresh_timer_id:
             self.after_cancel(self._treeview_refresh_timer_id)
-        self._treeview_refresh_timer_id = self.after(100, self._do_refresh_if_tree_valid_from_configure)
+        self._treeview_refresh_timer_id = self.after(150, self._do_refresh_if_tree_valid_from_configure) # Increased delay slightly
 
     def _do_refresh_if_tree_valid_from_configure(self):
         self._treeview_refresh_timer_id = None
         if self.winfo_exists() and self.winfo_ismapped():
-            self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> -> Refreshing data.")
-            self.refresh_data() 
+            # For ColorUsageWindow, a configure event on the tree usually means its own size changed.
+            # No need to call refresh_data if only the tree's alloc. width/height changed,
+            # as content (16 rows, fixed image sizes) is static.
+            # However, if a full refresh is desired for some reason:
+            # self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> -> Refreshing data.")
+            # self.refresh_data()
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> event. No data refresh needed.")
         else:
-            self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> -> Skipped refresh (window not valid/mapped).")
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Tree <Configure> -> Skipped (window not valid/mapped).")
 
     def _on_tree_button_press(self, event):
-        # Detects start of column drag for resizable columns.
         if not self.winfo_exists(): return
         region = self.tree.identify_region(event.x, event.y)
-        if region == "separator": # All columns are resizable, so no specific column check needed here
+        if region == "separator": 
             self._is_dragging_col_separator = True
             self.app_ref.debug(f"[DEBUG] ColorUsageWindow: Drag started on separator.")
         else:
@@ -467,8 +525,13 @@ class ColorUsageWindow(tk.Toplevel):
         if not self.winfo_exists(): return
         if self._is_dragging_col_separator:
             self._is_dragging_col_separator = False
-            self.app_ref.debug("[DEBUG] ColorUsageWindow: Column drag ended.")
-            # No specific image re-rendering needed here as images are fixed size.
+            self.app_ref.debug("[DEBUG] ColorUsageWindow: Column drag ended. Updating config for column widths.")
+            # Save new column widths to in-memory config
+            if hasattr(self.app_ref, 'update_specific_window_config'):
+                self.app_ref.update_specific_window_config(
+                    self.window_class_name,
+                    tree_config=self._get_current_tree_config() # This gets widths and sort state
+                )
 
 class TileUsageWindow(tk.Toplevel):
     def __init__(self, master_app):
@@ -476,63 +539,75 @@ class TileUsageWindow(tk.Toplevel):
         self.app_ref = master_app
         self.title("Tile Usage")
         self.transient(master_app.root)
-        self.resizable(True, True) # Window is now fully resizable
+        self.resizable(True, True) 
 
-        self._image_references = []
-        self.current_sort_column_id = "tile_index" # Default sort
-        self.current_sort_direction_is_asc = True
-        self.refresh_timer_id = None
-        
-        # For column resize handling (though col #0 will be fixed)
+        self._image_references = [] 
+        self.current_sort_column_id = "tile_index" 
+        self.current_sort_direction_is_asc = True   
+        self.refresh_timer_id = None 
+        self.style = ttk.Style()
+
+        # --- Load saved configuration for this window ---
+        self.window_class_name = self.__class__.__name__
+        saved_config = self.app_ref.load_specific_window_config(self.window_class_name)
+        initial_geometry = saved_config.get('geometry')
+        initial_sort_col = saved_config.get('sort_column_id', self.current_sort_column_id)
+        initial_sort_asc = saved_config.get('sort_asc', self.current_sort_direction_is_asc)
+        initial_col_widths = saved_config.get('column_widths', {})
+
+        self.current_sort_column_id = initial_sort_col
+        self.current_sort_direction_is_asc = initial_sort_asc
+        # --- End Load Config ---
+
         self._is_dragging_col_separator = False 
-        self._col_width_at_drag_start = {} # Store widths for multiple columns if needed
-        self._treeview_refresh_timer_id = None # For debouncing Treeview configure events
+        self._treeview_refresh_timer_id = None
 
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
-        main_frame.grid_rowconfigure(0, weight=1) # Changed row index for tree to 0
+        main_frame.grid_rowconfigure(0, weight=1) 
         main_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Treeview Setup ---
-        # Column identifiers for data
         self.data_column_ids_for_values = ("tile_index_val", "total_uses_val", "used_by_sts_val")
         
         self.tree = ttk.Treeview(
             main_frame,
             columns=self.data_column_ids_for_values,
-            show="tree headings", # Show tree for image and headings for data
-            height=16,
+            show="tree headings", 
+            height=16, # Default height, can be overridden by saved geometry
             selectmode="browse"
         )
 
-        # --- Column #0: Tile Preview (Fixed Width) ---
-        # Width for the image column (TILE_USAGE_PREVIEW_SIZE + padding)
-        col0_img_width = TILE_USAGE_PREVIEW_SIZE + 8 # e.g., 24px image + 4px padding on each side
-        self.tree.column("#0", width=col0_img_width, minwidth=col0_img_width, stretch=tk.NO, anchor="center")
-        self.tree.heading("#0", text="Tile", command=lambda: self._sort_by_column("#0")) # Sort by tile_index for image column
+        # --- Column #0: Tile Preview (Fixed Width, Not User Resizable) ---
+        col0_img_fixed_width = TILE_USAGE_PREVIEW_SIZE + 8 
+        self.tree.column("#0", width=col0_img_fixed_width, minwidth=col0_img_fixed_width, stretch=tk.NO, anchor="center")
+        self.tree.heading("#0", text="Tile", command=lambda: self._sort_by_column("#0"))
 
-        # --- Data Columns (Resizable) ---
-        col_index_data_width = 70
-        self.tree.column("tile_index_val", width=col_index_data_width, minwidth=50, stretch=tk.YES, anchor="center")
+        # --- Data Columns (User Resizable) ---
+        col_idx_default_w = 70
+        self.tree.column("tile_index_val", 
+                         width=initial_col_widths.get("tile_index_val", col_idx_default_w), 
+                         minwidth=50, stretch=tk.YES, anchor="center")
         self.tree.heading("tile_index_val", text="Index", command=lambda: self._sort_by_column("tile_index"))
 
-        col_refs_data_width = 100
-        self.tree.column("total_uses_val", width=col_refs_data_width, minwidth=70, stretch=tk.YES, anchor="center")
+        col_refs_default_w = 100
+        self.tree.column("total_uses_val", 
+                         width=initial_col_widths.get("total_uses_val", col_refs_default_w), 
+                         minwidth=70, stretch=tk.YES, anchor="center")
         self.tree.heading("total_uses_val", text="Tile Refs", command=lambda: self._sort_by_column("total_uses_count"))
         
-        self.tree.column("used_by_sts_val", width=col_refs_data_width, minwidth=70, stretch=tk.YES, anchor="center")
+        self.tree.column("used_by_sts_val", 
+                         width=initial_col_widths.get("used_by_sts_val", col_refs_default_w), 
+                         minwidth=70, stretch=tk.YES, anchor="center")
         self.tree.heading("used_by_sts_val", text="ST Refs", command=lambda: self._sort_by_column("used_by_sts_count"))
 
-        # Store header details for updating sort indicators
         self.header_details = {
-            "#0": {"id": "#0", "data_key": "tile_index"}, # Image column sorts by tile_index
+            "#0": {"id": "#0", "data_key": "tile_index"}, 
             "tile_index": {"id": "tile_index_val", "data_key": "tile_index"},
             "total_uses_count": {"id": "total_uses_val", "data_key": "total_uses_count"},
             "used_by_sts_count": {"id": "used_by_sts_val", "data_key": "used_by_sts_count"}
         }
-        self._update_header_sort_indicators() # Set initial sort indicator
+        self._update_header_sort_indicators()
 
-        # --- Scrollbars ---
         v_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scrollbar.set)
         h_scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
@@ -540,34 +615,25 @@ class TileUsageWindow(tk.Toplevel):
 
         self.tree.grid(row=0, column=0, sticky="nsew")
         v_scrollbar.grid(row=0, column=1, sticky="ns")
-        h_scrollbar.grid(row=1, column=0, sticky="ew") # H-scroll below tree
-
-        # --- Row Styling for Image Height ---
-        style = ttk.Style()
-        # Use a unique style name to avoid conflicts if multiple Treeviews exist
+        h_scrollbar.grid(row=1, column=0, sticky="ew")
+        
         self.treeview_style_name = f"TileUsage_{id(self)}.Treeview"
-        target_row_height_style = TILE_USAGE_PREVIEW_SIZE + 2 # Image size + small padding
+        target_row_height_style = TILE_USAGE_PREVIEW_SIZE + 4 # Image size + slightly more padding
         try:
-            style.configure(self.treeview_style_name, rowheight=target_row_height_style)
-            # Ensure selected items don't change background/foreground making image hard to see
-            style.map(self.treeview_style_name,
-                      background=[('selected', style.lookup(self.treeview_style_name, 'background'))],
-                      foreground=[('selected', style.lookup(self.treeview_style_name, 'foreground'))])
+            self.style.configure(self.treeview_style_name, rowheight=target_row_height_style)
+            self.style.map(self.treeview_style_name,
+                      background=[('selected', self.style.lookup(self.treeview_style_name, 'background'))],
+                      foreground=[('selected', self.style.lookup(self.treeview_style_name, 'foreground'))])
             self.tree.configure(style=self.treeview_style_name)
         except tk.TclError as e_style:
-            self.app_ref.debug(f"[DEBUG] TileUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}. Using default row height.")
-            # Fallback if custom styling fails (less common with unique names)
+            self.app_ref.debug(f"[DEBUG] TileUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}.")
 
-        # --- Event Bindings ---
         self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        
-        # Bindings for column resize detection (though we only allow data cols to resize)
         self.tree.bind("<ButtonPress-1>", self._on_tree_button_press)
-        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+') # For drag release outside tree
-        self.tree.bind("<Configure>", self._on_tree_configure_debounced) # For overall tree resize
-
-        # --- Debug Refresh Button (Optional) ---
+        self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+')
+        self.tree.bind("<Configure>", self._on_tree_configure_debounced)
+        
         button_frame_container = ttk.Frame(main_frame)
         button_frame_container.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
         self.refresh_button = None
@@ -575,22 +641,58 @@ class TileUsageWindow(tk.Toplevel):
             self.refresh_button = ttk.Button(button_frame_container, text="Refresh (Debug)", command=self.refresh_data)
             self.refresh_button.pack(pady=5)
         
-        self.after(10, self.refresh_data) # Initial data load
+        if initial_geometry:
+            try:
+                self.geometry(initial_geometry)
+            except tk.TclError as e_geom:
+                self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error applying saved geometry '{initial_geometry}': {e_geom}")
+        else: # Default size if no geometry saved
+            self.update_idletasks()
+            # Default height for ~16-20 items, default width based on column estimates
+            default_h = (16 * target_row_height_style) + 60 # Approx header, scrollbar, padding
+            default_w = col0_img_fixed_width + col_idx_default_w + (col_refs_default_w * 2) + 20
+            self.geometry(f"{max(350, default_w)}x{max(300, default_h)}")
 
-    def request_refresh(self, delay_ms=300):
-        if not self.winfo_exists():
+        self.app_ref.update_specific_window_config(self.window_class_name, is_open=True)
+        self.after(10, self.refresh_data_if_ready)
+
+    def _get_current_tree_config(self):
+        """Returns current sort state and column widths for saving."""
+        widths = {}
+        if hasattr(self, 'tree') and self.tree.winfo_exists():
+            try:
+                # Column #0 width is fixed, but we can save its configured fixed width
+                widths["#0"] = self.tree.column("#0", "width") 
+                for col_id in self.data_column_ids_for_values:
+                    widths[col_id] = self.tree.column(col_id, "width")
+            except tk.TclError:
+                self.app_ref.debug("[DEBUG] TileUsageWindow: TclError getting column widths for save.")
+        return {
+            "sort_column_id": self.current_sort_column_id,
+            "sort_asc": self.current_sort_direction_is_asc,
+            "column_widths": widths
+        }
+
+    def refresh_data_if_ready(self):
+        if self.winfo_exists() and self.winfo_ismapped():
+            self.refresh_data()
+        else:
+            self.after(50, self.refresh_data_if_ready)
+
+    def request_refresh(self, delay_ms=300): 
+        if not self.winfo_exists(): 
             return
         if self.refresh_timer_id is not None:
-            self.after_cancel(self.refresh_timer_id)
+            try: self.after_cancel(self.refresh_timer_id)
+            except tk.TclError: pass
         self.refresh_timer_id = self.after(delay_ms, self._perform_debounced_refresh)
 
-    def _perform_debounced_refresh(self):
-        self.refresh_timer_id = None
-        if self.winfo_exists() and self.winfo_ismapped():
+    def _perform_debounced_refresh(self): 
+        self.refresh_timer_id = None 
+        if self.winfo_exists() and self.winfo_ismapped(): 
             self.refresh_data()
 
     def _sort_by_column(self, column_clicked_key):
-        # column_clicked_key is the key from self.header_details (e.g., "#0", "tile_index")
         data_sort_key = self.header_details.get(column_clicked_key, {}).get("data_key")
         if not data_sort_key:
             self.app_ref.debug(f"[DEBUG] TileUsageWindow: Invalid column key '{column_clicked_key}' for sorting.")
@@ -600,116 +702,112 @@ class TileUsageWindow(tk.Toplevel):
             self.current_sort_direction_is_asc = not self.current_sort_direction_is_asc
         else:
             self.current_sort_column_id = data_sort_key
-            self.current_sort_direction_is_asc = True
+            self.current_sort_direction_is_asc = True 
         
         self._update_header_sort_indicators()
         self.refresh_data()
 
     def _update_header_sort_indicators(self):
-        # Updates the Treeview column header texts with sort indicators (UP/DOWN)
+        if not hasattr(self, 'tree') or not self.tree.winfo_exists(): return
         for key, details in self.header_details.items():
-            col_id_for_tree = details["id"] # e.g., "#0", "tile_index_val"
-            data_key_for_sort = details["data_key"] # e.g., "tile_index"
+            col_id_for_tree = details["id"] 
+            data_key_for_sort = details["data_key"]
             
             current_heading_options = {}
-            try: # Fetch current options if widget exists
-                if not self.tree.winfo_exists(): continue
+            try:
                 current_heading_options = self.tree.heading(col_id_for_tree)
-            except tk.TclError: # Widget might be gone during shutdown
-                continue
+            except tk.TclError: continue
 
-            current_text = current_heading_options.get("text", "") # Get current text
+            current_text = current_heading_options.get("text", "")
             text_to_set = current_text.replace(UP, "").replace(DOWN, "") # Remove old indicators
 
             if data_key_for_sort == self.current_sort_column_id:
                 text_to_set += UP if self.current_sort_direction_is_asc else DOWN
             
-            try: # Set new text if widget exists
-                if not self.tree.winfo_exists(): continue
+            try:
                 self.tree.heading(col_id_for_tree, text=text_to_set)
-            except tk.TclError:
-                pass
-
-    def refresh_data(self):
+            except tk.TclError: pass
+            
+    def refresh_data(self): 
         if not hasattr(self, 'tree') or not self.tree.winfo_exists():
             return
         
         self.app_ref.debug(f"[DEBUG] TileUsageWindow: refresh_data() called. Sort by: {self.current_sort_column_id}, Asc: {self.current_sort_direction_is_asc}")
         
+        current_selection_iid = None
+        if self.tree.selection():
+            current_selection_iid = self.tree.selection()[0]
+
         for i in self.tree.get_children():
             self.tree.delete(i)
         self._image_references.clear()
         
-        usage_data = []
+        usage_data = [] 
         if hasattr(self.app_ref, '_calculate_tile_usage_data'):
-            try:
-                usage_data = self.app_ref._calculate_tile_usage_data()
+            try: 
+                usage_data = self.app_ref._calculate_tile_usage_data() 
             except Exception as e:
-                self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error calling _calculate_tile_usage_data: {e}")
-                for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)):
+                self.app_ref.debug(f"[DEBUG] Error calling _calculate_tile_usage_data: {e}")
+                for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)): 
                      usage_data.append({'tile_index': i, 'total_uses_count': 0, 'used_by_sts_count': 0})
-        else:
+        else: 
             self.app_ref.debug("[DEBUG] TileUsageWindow: _calculate_tile_usage_data not found for refresh.")
-            for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)):
+            for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)): 
                 usage_data.append({'tile_index': i, 'total_uses_count': 0, 'used_by_sts_count': 0})
 
-        # Sort data
         valid_sort_key = self.current_sort_column_id
-        if usage_data and valid_sort_key not in usage_data[0]:
+        if usage_data and valid_sort_key not in usage_data[0]: 
             self.app_ref.debug(f"[DEBUG] TileUsageWindow: Invalid sort key '{valid_sort_key}'. Defaulting to 'tile_index'.")
-            valid_sort_key = 'tile_index'
+            valid_sort_key = 'tile_index' 
             self.current_sort_column_id = 'tile_index'
             self.current_sort_direction_is_asc = True
-            self._update_header_sort_indicators() # Reflect default sort in headers
+            self._update_header_sort_indicators()
         
-        if usage_data:
+        if usage_data: 
             try:
                 usage_data.sort(key=lambda item: item[valid_sort_key], reverse=not self.current_sort_direction_is_asc)
-            except (TypeError, KeyError) as e_sort:
-                self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
+            except (TypeError, KeyError) as e_sort: 
+                self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error during sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         
-        preview_image_size = TILE_USAGE_PREVIEW_SIZE
-        for item_data in usage_data:
+        preview_image_size = TILE_USAGE_PREVIEW_SIZE 
+        for item_data in usage_data: 
             tile_idx = item_data['tile_index']
             photo = None
             try:
                 if hasattr(self.app_ref, 'create_tile_image'):
                     photo = self.app_ref.create_tile_image(tile_idx, preview_image_size)
                     if photo:
-                        self._image_references.append(photo)
+                        self._image_references.append(photo) 
                 else:
                     self.app_ref.debug(f"[DEBUG] TileUsageWindow: create_tile_image not found for tile {tile_idx}")
-            except Exception as e_photo:
+            except Exception as e_photo: 
                 self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error creating preview image for tile {tile_idx}: {e_photo}")
 
-            # For Treeview: text is for column #0 if show="tree headings" or "tree"
-            # If image is provided for #0, text is usually ignored or can be used as fallback.
-            # Here, we provide an image and no explicit text for #0.
-            self.tree.insert("", "end",
-                             iid=f"tile_{tile_idx}",
-                             image=photo if photo else '', # Image for column #0
-                             text="", # No text for column #0, image is primary
-                             values=(
-                                 f" {tile_idx}", # Values for data columns
-                                 item_data['total_uses_count'],
-                                 item_data['used_by_sts_count']
-                             ),
-                             tags=('tile_row',)) # Apply a tag for potential future styling
+            item_iid = f"tile_{tile_idx}"
+            self.tree.insert("", "end", 
+                             iid=item_iid, 
+                             image=photo if photo else '', 
+                             text="", 
+                             values=(f" {tile_idx}", 
+                                     item_data['total_uses_count'], 
+                                     item_data['used_by_sts_count']),
+                             tags=('tile_row',))
         
-        # If using a custom style, ensure background is applied (already handled by style.map)
         try:
             row_bg = self.style.lookup(self.treeview_style_name, 'background')
             self.tree.tag_configure('tile_row', background=row_bg)
-        except tk.TclError: pass # Style might not exist or be fully applied yet
-
-
-    def _on_item_selected(self, event):
-        global num_tiles_in_set # Global for num_tiles_in_set is used here
-        if not self.tree.winfo_exists(): return
-        selected_items = self.tree.selection()
-        if not selected_items: return
+        except tk.TclError: pass
         
-        item_id_str = selected_items[0]
+        if current_selection_iid and self.tree.exists(current_selection_iid):
+            self.tree.selection_set(current_selection_iid)
+            self.tree.focus(current_selection_iid)
+        
+    def _on_item_selected(self, event):
+        global num_tiles_in_set
+        if not self.tree.winfo_exists(): return
+        selected_items = self.tree.selection() 
+        if not selected_items: return
+        item_id_str = selected_items[0] 
         try:
             if item_id_str.startswith("tile_"):
                 actual_item_idx = int(item_id_str.split("_")[1])
@@ -720,13 +818,25 @@ class TileUsageWindow(tk.Toplevel):
             self.app_ref.debug(f"[DEBUG] TileUsageWindow: Error parsing tile_index from iid '{item_id_str}': {e}")
             return
         
-        if 0 <= actual_item_idx < num_tiles_in_set: # Use global num_tiles_in_set
+        if 0 <= actual_item_idx < num_tiles_in_set: 
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
                 self.app_ref.synchronize_selection_from_usage_window("tile", actual_item_idx)
         else:
-            self.app_ref.debug(f"[DEBUG] TileUsageWindow: Parsed invalid tile_index {actual_item_idx} for selection sync (num_tiles_in_set: {num_tiles_in_set}).")
+            self.app_ref.debug(f"[DEBUG] TileUsageWindow: Parsed invalid tile_index {actual_item_idx} for selection sync.")
 
-    def _on_close(self):
+    def _on_close(self): 
+        if hasattr(self.app_ref, 'update_specific_window_config') and self.winfo_exists():
+            current_geo = ""
+            try:
+                current_geo = self.winfo_geometry()
+            except tk.TclError: pass
+            self.app_ref.update_specific_window_config(
+                self.window_class_name,
+                geometry=current_geo,
+                tree_config=self._get_current_tree_config(),
+                is_open=False
+            )
+
         if self.refresh_timer_id is not None:
             try: self.after_cancel(self.refresh_timer_id)
             except tk.TclError: pass
@@ -736,65 +846,55 @@ class TileUsageWindow(tk.Toplevel):
             try: self.after_cancel(self._treeview_refresh_timer_id)
             except tk.TclError: pass
             self._treeview_refresh_timer_id = None
-
+        
         self.app_ref.debug("[DEBUG] TileUsageWindow closed.")
-        if self.app_ref:
-            self.app_ref.tile_usage_window = None
+        if self.app_ref: 
+            self.app_ref.tile_usage_window = None 
         
         try:
             if self.winfo_exists(): self.destroy()
         except tk.TclError: pass
 
-    # --- Column Resize Event Handlers (Simplified as col #0 is fixed) ---
     def _on_tree_configure_debounced(self, event=None):
-        # For TileUsageWindow, this is less critical as images are fixed size.
-        # Debounced refresh if the Treeview widget itself is resized.
         if not self.winfo_exists(): return
+        if event and event.widget != self.tree: return
+
         if self._treeview_refresh_timer_id:
             self.after_cancel(self._treeview_refresh_timer_id)
-        # A full refresh_data on tree configure might be overkill if data columns stretch.
-        # But if row visibility changes, it's good to ensure highlights are correct.
-        # Let's keep it for now, can be optimized if it causes issues.
-        self._treeview_refresh_timer_id = self.after(100, self._do_refresh_if_tree_valid_from_configure)
+        self._treeview_refresh_timer_id = self.after(150, self._do_refresh_if_tree_valid_from_configure)
 
     def _do_refresh_if_tree_valid_from_configure(self):
         self._treeview_refresh_timer_id = None
         if self.winfo_exists() and self.winfo_ismapped():
-            self.app_ref.debug("[DEBUG] TileUsageWindow: Tree <Configure> -> Refreshing data.")
-            self.refresh_data() # For now, refresh data on tree configure
+            self.app_ref.debug("[DEBUG] TileUsageWindow: Tree <Configure> event. No data refresh, fixed image size.")
+            # For fixed image sizes, only column data stretch might occur, Treeview handles this.
+            # If rows become clipped/unclipped due to height change, a refresh might be desired
+            # to re-center selection or re-evaluate what's "visible" if lazy loading were used.
+            # For now, no explicit refresh_data() call.
         else:
-            self.app_ref.debug("[DEBUG] TileUsageWindow: Tree <Configure> -> Skipped refresh (window not valid/mapped).")
+            self.app_ref.debug("[DEBUG] TileUsageWindow: Tree <Configure> -> Skipped (window not valid/mapped).")
 
     def _on_tree_button_press(self, event):
-        # Detects start of column drag for resizable columns (not #0).
         if not self.winfo_exists(): return
         region = self.tree.identify_region(event.x, event.y)
-        column_id_pressed = self.tree.identify_column(event.x) # e.g., "#1", "#2"
+        column_id_pressed = self.tree.identify_column(event.x)
 
-        if region == "separator" and column_id_pressed != "#0": # Only allow drag on data column separators
+        if region == "separator" and column_id_pressed != "#0": # Prevent resizing column #0
             self._is_dragging_col_separator = True
-            try:
-                # Store width of the column to the LEFT of the separator
-                # identify_column gives the column clicked ON or to the right of separator.
-                # To get the column being resized (left of separator), we might need more logic if needed.
-                # For now, just knowing a drag started on a valid separator is enough.
-                # self._col_width_at_drag_start[column_id_pressed] = self.tree.column(column_id_pressed, "width")
-                pass # Not strictly needed to store width if we don't re-render based on it for fixed images
-            except tk.TclError:
-                self._is_dragging_col_separator = False
-                return
             self.app_ref.debug(f"[DEBUG] TileUsageWindow: Drag started on separator for data column.")
         else:
             self._is_dragging_col_separator = False
 
     def _on_window_button_release(self, event):
-        # Finalizes column drag if it was active.
         if not self.winfo_exists(): return
         if self._is_dragging_col_separator:
             self._is_dragging_col_separator = False
-            self.app_ref.debug("[DEBUG] TileUsageWindow: Column drag ended. Data columns may have resized.")
-            # No specific image re-rendering needed here as images are fixed size for TileUsageWindow.
-            # The Treeview handles the data column resize automatically.
+            self.app_ref.debug("[DEBUG] TileUsageWindow: Column drag ended. Updating config for column widths.")
+            if hasattr(self.app_ref, 'update_specific_window_config'):
+                self.app_ref.update_specific_window_config(
+                    self.window_class_name,
+                    tree_config=self._get_current_tree_config()
+                )
 
 class SupertileUsageWindow(tk.Toplevel):
     def __init__(self, master_app):
@@ -802,43 +902,48 @@ class SupertileUsageWindow(tk.Toplevel):
         self.app_ref = master_app
         self.title("Supertile Usage")
         self.transient(master_app.root)
-        self.resizable(True, True)
+        self.resizable(True, True) 
 
         self._image_references = []
-        self.current_sort_column_id = "st_index"
+        self.current_sort_column_id = "st_index" 
         self.current_sort_direction_is_asc = True
         self.refresh_timer_id = None
         
+        # --- Load saved configuration for this window ---
+        self.window_class_name = self.__class__.__name__
+        saved_config = self.app_ref.load_specific_window_config(self.window_class_name)
+        initial_geometry = saved_config.get('geometry')
+        initial_sort_col_data_key = saved_config.get('sort_column_id', self.current_sort_column_id) # This is the data key
+        initial_sort_asc = saved_config.get('sort_asc', self.current_sort_direction_is_asc)
+        initial_col_widths = saved_config.get('column_widths', {})
+        
+        # current_sort_column_id in this window can be "#0" (for tree view header) or a data key
+        # We need to map the saved data_key back to the column_id for tree header state
+        self.current_sort_column_id = initial_sort_col_data_key # Store the data key for sorting logic
+        self.current_sort_direction_is_asc = initial_sort_asc
+        # The actual tree header sort indicator will be updated via _update_header_sort_indicators
+        # --- End Load Config ---
+        
         self._is_dragging_col_separator = False
-        self._col0_width_at_drag_start = 0
+        self._col0_width_at_drag_start = 0 # For image column specifically
         self._treeview_refresh_timer_id = None
-        self.styled_row_height = 0 # Will be set after style configuration
-        self._update_images_timer_id = None # Timer for lazy image loading
+        self.styled_row_height = 0 
+        self._update_images_timer_id = None 
 
-        # --- DYNAMICALLY CALCULATE HEIGHTS BASED ON CURRENT PROJECT ---
         app_st_grid_h = self.app_ref.supertile_grid_height
         tile_h_const = TILE_HEIGHT 
         scale_const = SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL 
 
-        self.app_ref.debug(f"[STU_INIT] app_ref.supertile_grid_height: {app_st_grid_h}")
-        self.app_ref.debug(f"[STU_INIT] TILE_HEIGHT: {tile_h_const}")
-        self.app_ref.debug(f"[STU_INIT] SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL: {scale_const}")
-
-        self.preview_target_content_h = (app_st_grid_h * tile_h_const * scale_const)
-        self.preview_target_content_h = max(1, int(self.preview_target_content_h))
-
+        self.preview_target_content_h = max(1, int(app_st_grid_h * tile_h_const * scale_const))
         treeview_styled_row_h = self.preview_target_content_h + SUPERTILE_USAGE_ROW_PADDING
-        self.styled_row_height = treeview_styled_row_h # Store for lazy loading calculation
-        
-        self.app_ref.debug(f"[STU_INIT] Calculated self.preview_target_content_h (for image): {self.preview_target_content_h}")
-        self.app_ref.debug(f"[STU_INIT] Calculated treeview_styled_row_h (for style): {treeview_styled_row_h}")
+        self.styled_row_height = treeview_styled_row_h 
         
         min_col0_image_area_w = SUPERTILE_USAGE_MIN_IMAGE_MSX_W * SUPERTILE_USAGE_SCREEN_PIXELS_PER_MSX_PIXEL
         self.min_col0_total_width = max(1, int(min_col0_image_area_w + SUPERTILE_USAGE_COL0_OFFSET_GUESS))
 
         main_frame = ttk.Frame(self, padding="5")
         main_frame.pack(expand=True, fill="both")
-        main_frame.grid_rowconfigure(1, weight=1) 
+        main_frame.grid_rowconfigure(1, weight=1) # Treeview itself is in row 1
         main_frame.grid_columnconfigure(0, weight=1)
 
         self.style = ttk.Style()
@@ -852,7 +957,7 @@ class SupertileUsageWindow(tk.Toplevel):
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: TclError configuring style '{self.treeview_style_name}': {e_style}")
             try: 
                 app_style = getattr(self.app_ref, 'style', ttk.Style()) 
-                app_style.configure('Treeview', rowheight=treeview_styled_row_h)
+                app_style.configure('Treeview', rowheight=treeview_styled_row_h) # Fallback
                 self.treeview_style_name = 'Treeview' 
             except Exception as e_gen:
                  self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Failed to apply generic Treeview rowheight: {e_gen}")
@@ -867,31 +972,49 @@ class SupertileUsageWindow(tk.Toplevel):
             style=self.treeview_style_name
         )
 
-        col0_initial_width = 150 
-        self.tree.column("#0", width=col0_initial_width, minwidth=self.min_col0_total_width, stretch=tk.YES, anchor=tk.W)
+        col0_default_width = 150 
+        self.tree.column("#0", 
+                         width=initial_col_widths.get("#0", col0_default_width), 
+                         minwidth=self.min_col0_total_width, stretch=tk.YES, anchor=tk.W)
         self.tree.heading("#0", text="Supertile", command=lambda: self._sort_by_column("#0"))
 
-        index_col_width = 70
-        self.tree.column("st_index_val", width=index_col_width, minwidth=50, stretch=tk.YES, anchor=tk.CENTER)
+        index_col_default_width = 70
+        self.tree.column("st_index_val", 
+                         width=initial_col_widths.get("st_index_val", index_col_default_width), 
+                         minwidth=50, stretch=tk.YES, anchor=tk.CENTER)
         self.tree.heading("st_index_val", text="Index", command=lambda: self._sort_by_column("st_index"))
         
-        self.header_labels = {} 
-        self.header_labels["#0"] = {"id": "#0"} 
-        self.header_labels["st_index"] = {"id": "st_index_val"}
+        # This structure maps the sort key used in logic (e.g. "st_index") to the tree column ID and data key.
+        # For column "#0", the "command_key" is what _sort_by_column receives.
+        self.header_details = { 
+            "#0": {"id": "#0", "data_key": "st_index"}, # Sort by ST index when image col header clicked
+            "st_index": {"id": "st_index_val", "data_key": "st_index"},
+            "uses_on_map_count": {"id": "uses_on_map_val", "data_key": "uses_on_map_count"}
+        }
+        # Map the loaded sort data_key back to the command_key for _update_header_sort_indicators
+        self.current_sort_command_key = initial_sort_col_data_key # Default if not found
+        for cmd_key, details_dict in self.header_details.items():
+            if details_dict["data_key"] == initial_sort_col_data_key:
+                self.current_sort_command_key = cmd_key
+                break
+        # self.current_sort_column_id still holds the data_key for sorting the data array.
 
-        uses_col_width = 100
-        self.tree.column("uses_on_map_val", width=uses_col_width, minwidth=80, stretch=tk.YES, anchor=tk.CENTER)
+        uses_col_default_width = 100
+        self.tree.column("uses_on_map_val", 
+                         width=initial_col_widths.get("uses_on_map_val", uses_col_default_width), 
+                         minwidth=80, stretch=tk.YES, anchor=tk.CENTER)
         self.tree.heading("uses_on_map_val", text="Uses on Map", command=lambda: self._sort_by_column("uses_on_map_count"))
-        self.header_labels["uses_on_map_count"] = {"id": "uses_on_map_val"}
+        
+        self._update_header_sort_indicators() # Apply initial sort indicator to headers
 
         v_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scrollbar.set)
         h_scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(xscrollcommand=h_scrollbar.set)
 
-        self.tree.grid(row=1, column=0, sticky="nsew")
+        self.tree.grid(row=1, column=0, sticky="nsew") # Treeview in grid row 1
         v_scrollbar.grid(row=1, column=1, sticky="ns")
-        h_scrollbar.grid(row=2, column=0, sticky="ew")
+        h_scrollbar.grid(row=2, column=0, sticky="ew") # H-scrollbar below tree
 
         button_frame_container = ttk.Frame(main_frame)
         button_frame_container.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5,0))
@@ -907,7 +1030,6 @@ class SupertileUsageWindow(tk.Toplevel):
         self.bind("<ButtonRelease-1>", self._on_window_button_release, add='+')
         self.tree.bind("<Configure>", self._on_tree_configure_debounced)
         
-        # Bind scroll events for lazy loading
         v_scrollbar.bind("<ButtonRelease-1>", lambda e: self._schedule_update_visible_images(delay_ms=100), add='+')
         v_scrollbar.bind("<B1-Motion>", lambda e: self._schedule_update_visible_images(delay_ms=150), add='+')
         self.tree.bind("<MouseWheel>", lambda e: self._schedule_update_visible_images(delay_ms=50), add='+')
@@ -915,16 +1037,43 @@ class SupertileUsageWindow(tk.Toplevel):
         self.tree.bind("<Button-5>", lambda e: self._schedule_update_visible_images(delay_ms=50), add='+')
         self.tree.bind("<KeyPress-Up>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
         self.tree.bind("<KeyPress-Down>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
-        self.tree.bind("<KeyPress-Prior>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+') # PageUp
-        self.tree.bind("<KeyPress-Next>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')  # PageDown
+        self.tree.bind("<KeyPress-Prior>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+') 
+        self.tree.bind("<KeyPress-Next>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+') 
         self.tree.bind("<KeyPress-Home>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
         self.tree.bind("<KeyPress-End>", lambda e: self.after_idle(self._schedule_update_visible_images, 50), add='+')
 
-
+        if initial_geometry:
+            try:
+                self.geometry(initial_geometry)
+            except tk.TclError as e_geom:
+                self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error applying saved geometry '{initial_geometry}': {e_geom}")
+        else: # Default size if no geometry saved
+            self.update_idletasks()
+            default_h = (16 * treeview_styled_row_h) + 60 # Approx for 16 rows + header/scrollbar
+            default_w = col0_default_width + index_col_default_width + uses_col_default_width + 20
+            self.geometry(f"{max(400, default_w)}x{max(400, default_h)}")
+            
+        self.app_ref.update_specific_window_config(self.window_class_name, is_open=True)
         self.after(50, self.refresh_data_if_ready)
 
+    def _get_current_tree_config(self):
+        """Returns current sort state and column widths for saving."""
+        widths = {}
+        if hasattr(self, 'tree') and self.tree.winfo_exists():
+            try:
+                widths["#0"] = self.tree.column("#0", "width")
+                for col_id in self.data_column_ids_for_values: # Correctly iterate defined data columns
+                    widths[col_id] = self.tree.column(col_id, "width")
+            except tk.TclError:
+                self.app_ref.debug("[DEBUG] SupertileUsageWindow: TclError getting column widths for save.")
+        return {
+            # Save the data_key used for sorting, not the command_key
+            "sort_column_id": self.current_sort_column_id, 
+            "sort_asc": self.current_sort_direction_is_asc,
+            "column_widths": widths
+        }
+
     def refresh_data_if_ready(self):
-        # Helper to ensure widget is ready before initial refresh_data call
         if self.winfo_exists() and self.winfo_ismapped():
             self.refresh_data()
         else:
@@ -936,9 +1085,13 @@ class SupertileUsageWindow(tk.Toplevel):
             self.app_ref.debug("[DEBUG] SupertileUsageWindow: Treeview not ready for refresh_data.")
             return
 
+        current_selection_iid = None
+        if self.tree.selection():
+            current_selection_iid = self.tree.selection()[0]
+
         for i in self.tree.get_children():
             self.tree.delete(i)
-        self._image_references.clear() # Cleared here, images added during lazy load
+        self._image_references.clear() 
 
         usage_data = []
         if hasattr(self.app_ref, '_calculate_supertile_usage_data'):
@@ -953,14 +1106,14 @@ class SupertileUsageWindow(tk.Toplevel):
             for i in range(getattr(self.app_ref, 'num_supertiles', 0)):
                  usage_data.append({'st_index': i, 'uses_on_map_count': 0})
 
+        # self.current_sort_column_id here is the data_key (e.g. "st_index", "uses_on_map_count")
         valid_sort_key = self.current_sort_column_id
-        if self.current_sort_column_id == "#0": # Special case for image column
-            valid_sort_key = 'st_index'
         
         if usage_data and valid_sort_key not in usage_data[0]:
-            self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Invalid sort column '{valid_sort_key}'. Defaulting to 'st_index'.")
+            self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Invalid sort column DATA KEY '{valid_sort_key}'. Defaulting to 'st_index'.")
             valid_sort_key = 'st_index'
             self.current_sort_column_id = 'st_index' 
+            self.current_sort_command_key = "#0" # Assuming "#0" is command key for st_index data key
             self.current_sort_direction_is_asc = True
             self._update_header_sort_indicators() 
 
@@ -970,16 +1123,14 @@ class SupertileUsageWindow(tk.Toplevel):
             except (TypeError, KeyError) as e_sort:
                 self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error sorting by '{valid_sort_key}': {e_sort}. Using unsorted.")
         
-        # self.tree.update_idletasks() # Not strictly needed before inserting items
-
         for item_data in usage_data:
             st_idx = item_data['st_index']
-            # For lazy loading, initially set image to empty or a placeholder
+            item_iid = f"st_{st_idx}"
             self.tree.insert(
                 "", "end",
-                iid=f"st_{st_idx}",
+                iid=item_iid,
                 text="", 
-                image='', # No image loaded initially
+                image='', 
                 values=(f"  {st_idx}", item_data['uses_on_map_count']),
                 tags=('st_row',) 
             )
@@ -987,67 +1138,55 @@ class SupertileUsageWindow(tk.Toplevel):
         try:
             row_bg = self.style.lookup(self.treeview_style_name, 'background')
             self.tree.tag_configure('st_row', background=row_bg)
-        except tk.TclError:
-            pass
+        except tk.TclError: pass
         
-        # Schedule initial image loading for visible items after data is populated
+        if current_selection_iid and self.tree.exists(current_selection_iid):
+            self.tree.selection_set(current_selection_iid)
+            self.tree.focus(current_selection_iid)
+
         self.after_idle(self._schedule_update_visible_images)
 
-    def _sort_by_column(self, column_id_clicked):
-        self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Sorting by column '{column_id_clicked}'")
+    def _sort_by_column(self, column_command_key):
+        # column_command_key is like "#0", "st_index", "uses_on_map_count" (keys from self.header_details)
+        self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Sorting by command_key '{column_command_key}'")
         
-        # Determine the actual data key for sorting
-        # If user clicks "#0" (Supertile preview column), we sort by 'st_index'
-        sort_key_for_data = column_id_clicked
-        if column_id_clicked == "#0":
-            sort_key_for_data = "st_index" # Data key for sorting when "#0" header is clicked
-            # Keep column_id_clicked as "#0" for header update logic
+        new_data_sort_key = self.header_details.get(column_command_key, {}).get("data_key")
+        if not new_data_sort_key:
+            self.app_ref.debug(f"  [DEBUG] Could not find data_key for command_key '{column_command_key}'. Aborting sort.")
+            return
 
-        if self.current_sort_column_id == column_id_clicked: # User clicked same header
+        if self.current_sort_column_id == new_data_sort_key: 
             self.current_sort_direction_is_asc = not self.current_sort_direction_is_asc
-        else: # User clicked a new header
-            self.current_sort_column_id = column_id_clicked
+        else: 
+            self.current_sort_column_id = new_data_sort_key
+            self.current_sort_command_key = column_command_key # Update the command key being sorted by
             self.current_sort_direction_is_asc = True
         
         self._update_header_sort_indicators()
         self.refresh_data()
 
     def _update_header_sort_indicators(self):
-        # Updates the Treeview column header texts with sort indicators (UP/DOWN)
-        for col_id_key, heading_widget_details in self.header_labels.items():
-            # For Treeview internal headers, heading_widget_details is already the result of tree.heading(col_name)
-            # We need to reconstruct the base text if it's not stored separately, or assume a convention
-            # The 'text' option from tree.heading() gives current full text.
+        if not hasattr(self, 'tree') or not self.tree.winfo_exists(): return
+        for cmd_key, details in self.header_details.items():
+            tree_col_id = details["id"]      # e.g., "#0", "st_index_val"
+            data_key = details["data_key"] # e.g., "st_index"
             
-            current_heading_options = self.tree.heading(heading_widget_details["id"]) # Get all options
-            current_text = current_heading_options.get("text", "")
+            current_heading_options = {}
+            try:
+                current_heading_options = self.tree.heading(tree_col_id)
+            except tk.TclError: continue
 
             text_to_set = current_text.replace(UP, "").replace(DOWN, "")
-            
-            # Check if this column is the one currently being sorted
-            # Note: self.current_sort_column_id could be "#0" or a data key like "st_index".
-            # col_id_key is the key from self.header_labels, which should match how we identify columns.
-            # Let's ensure self.current_sort_column_id matches the ID used for heading lookup
-            
-            is_this_the_sort_column = False
-            if self.current_sort_column_id == "#0" and heading_widget_details["id"] == "#0":
-                is_this_the_sort_column = True
-            elif self.current_sort_column_id == "st_index" and heading_widget_details["id"] == self.data_column_ids_for_values[0]: # "st_index_val"
-                is_this_the_sort_column = True
-            elif self.current_sort_column_id == "uses_on_map_count" and heading_widget_details["id"] == self.data_column_ids_for_values[1]: # "uses_on_map_val"
-                is_this_the_sort_column = True
 
-
-            if is_this_the_sort_column:
+            if data_key == self.current_sort_column_id: # Compare with the data key
                 text_to_set += UP if self.current_sort_direction_is_asc else DOWN
             
             try:
-                self.tree.heading(heading_widget_details["id"], text=text_to_set)
-            except tk.TclError:
-                pass # Widget might be gone
+                self.tree.heading(tree_col_id, text=text_to_set)
+            except tk.TclError: pass
 
     def _on_item_selected(self, event):
-        global num_supertiles # MODIFIED: Declare access to global
+        global num_supertiles 
         if not self.tree.winfo_exists(): return
         selected_items = self.tree.selection()
         if not selected_items: return
@@ -1062,11 +1201,8 @@ class SupertileUsageWindow(tk.Toplevel):
         except (ValueError, IndexError) as e:
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error parsing st_index from iid '{item_iid_str}': {e}")
             return
-
-        # MODIFIED: Use the global num_supertiles directly for the check
-        self.app_ref.debug(f"[STU_SELECT_DEBUG] Parsed actual_st_idx: {actual_st_idx}. Current global num_supertiles: {num_supertiles}")
         
-        if 0 <= actual_st_idx < num_supertiles: # MODIFIED: Check against global
+        if 0 <= actual_st_idx < num_supertiles: 
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Item selected, st_index: {actual_st_idx}")
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
                 self.app_ref.synchronize_selection_from_usage_window("supertile", actual_st_idx)
@@ -1074,21 +1210,35 @@ class SupertileUsageWindow(tk.Toplevel):
             self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Parsed invalid st_index {actual_st_idx} (global num_supertiles: {num_supertiles}) for selection sync.")
 
     def request_refresh(self, delay_ms=300):
-        self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}")
+        # self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}")
         if not self.winfo_exists():
             return
         if self.refresh_timer_id is not None:
-            self.after_cancel(self.refresh_timer_id)
+            try: self.after_cancel(self.refresh_timer_id)
+            except tk.TclError: pass
         self.refresh_timer_id = self.after(delay_ms, self._perform_debounced_refresh)
-        self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: new refresh_timer_id set to: {self.refresh_timer_id}")
+        # self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: new refresh_timer_id set to: {self.refresh_timer_id}")
 
     def _perform_debounced_refresh(self):
-        self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: _perform_debounced_refresh executing for timer {self.refresh_timer_id}.")
+        # self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: _perform_debounced_refresh executing for timer {self.refresh_timer_id}.")
         self.refresh_timer_id = None
-        if self.winfo_exists() and self.winfo_ismapped(): # Also check if mapped
+        if self.winfo_exists() and self.winfo_ismapped(): 
             self.refresh_data()
 
     def _on_close(self):
+        # Update in-memory config before destroying
+        if hasattr(self.app_ref, 'update_specific_window_config') and self.winfo_exists():
+            current_geo = ""
+            try:
+                current_geo = self.winfo_geometry()
+            except tk.TclError: pass
+            self.app_ref.update_specific_window_config(
+                self.window_class_name,
+                geometry=current_geo,
+                tree_config=self._get_current_tree_config(),
+                is_open=False
+            )
+
         if self.refresh_timer_id is not None:
             try: self.after_cancel(self.refresh_timer_id) 
             except tk.TclError: pass
@@ -1099,93 +1249,96 @@ class SupertileUsageWindow(tk.Toplevel):
             except tk.TclError: pass
             self._treeview_refresh_timer_id = None
 
-        # Cancel lazy image loading timer
         if hasattr(self, '_update_images_timer_id') and self._update_images_timer_id is not None:
             try: self.after_cancel(self._update_images_timer_id)
             except tk.TclError: pass
             self._update_images_timer_id = None
 
-        # self.grab_release() # Not needed if window is not modal
         self.app_ref.debug("[DEBUG] SupertileUsageWindow closed.")
         if self.app_ref: 
             self.app_ref.supertile_usage_window = None 
         try: 
             if self.winfo_exists(): self.destroy()
         except tk.TclError: pass
-
-    # --- Column Resize Event Handlers (adapted from test script v7.2) ---
+        
     def _on_tree_configure_debounced(self, event=None):
-        """Debounced refresh when the Treeview widget itself is resized/configured."""
-        if not self.winfo_exists(): return # Window might be closing
+        if not self.winfo_exists(): return
+        if event and event.widget != self.tree: return
+
         if self._treeview_refresh_timer_id:
             self.after_cancel(self._treeview_refresh_timer_id)
-        self._treeview_refresh_timer_id = self.after(100, self._do_populate_if_tree_valid_from_configure)
+        # Refresh data if tree is configured, as column widths might affect image rendering for col #0
+        self._treeview_refresh_timer_id = self.after(150, self._do_populate_if_tree_valid_from_configure)
 
     def _do_populate_if_tree_valid_from_configure(self):
-        """Actual refresh logic for _on_tree_configure_debounced."""
-        self._treeview_refresh_timer_id = None # Clear timer
+        self._treeview_refresh_timer_id = None 
         if self.winfo_exists() and self.winfo_ismapped():
-            # Check if column #0 width actually changed significantly enough to warrant image regeneration
-            # This avoids refreshing just for vertical tree resize if col #0 width is stable.
-            # Note: This check wasn't in the test script's configure, but might be good here.
-            # For now, let's keep it simple and refresh if Configure is called,
-            # as populate_treeview itself is relatively quick if only a few items.
-            self.app_ref.debug("[DEBUG] SupertileUsageWindow: Tree <Configure> -> Refreshing data.")
-            self.refresh_data()
+            self.app_ref.debug("[DEBUG] SupertileUsageWindow: Tree <Configure> -> Refreshing data (due to potential col width change).")
+            self.refresh_data() # This will trigger lazy image loading
         else:
             self.app_ref.debug("[DEBUG] SupertileUsageWindow: Tree <Configure> -> Skipped refresh (window not valid/mapped).")
 
-
     def _on_tree_button_press(self, event):
-        """Handles ButtonPress-1 on the Treeview to detect start of column drag."""
         if not self.winfo_exists(): return
         region = self.tree.identify_region(event.x, event.y)
         if region == "separator":
             self._is_dragging_col_separator = True
-            # Store the width of column #0 at the start of the drag
+            column_id_pressed = self.tree.identify_column(event.x) # Get which separator line
             try:
-                self._col0_width_at_drag_start = self.tree.column("#0", "width")
-            except tk.TclError: # Widget might be gone
-                self._is_dragging_col_separator = False # Abort drag detection
+                # Store width of the column to the LEFT of the separator
+                # For tree.column("#0"), it's simple. For others, it's column_id_pressed.
+                # However, identify_column often gives the column to the RIGHT of separator.
+                # The important part is knowing a drag started. We'll get all widths on release.
+                if column_id_pressed == "#0": # Dragging separator for the first column
+                    self._col0_width_at_drag_start = self.tree.column("#0", "width")
+                # For other columns, the Treeview handles resize, we just save on release.
+            except tk.TclError: 
+                self._is_dragging_col_separator = False 
                 return
-            self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Drag started on separator. Col #0 initial width: {self._col0_width_at_drag_start}")
+            self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Drag started on separator. Col ID: {column_id_pressed}")
         else:
             self._is_dragging_col_separator = False
 
     def _on_window_button_release(self, event):
-        """
-        Handles ButtonRelease-1 on this Toplevel window to finalize column drag,
-        as the release might happen outside the Treeview widget itself.
-        """
         if not self.winfo_exists(): return
         if self._is_dragging_col_separator:
-            self._is_dragging_col_separator = False # Reset flag
-            self.app_ref.debug("[DEBUG] SupertileUsageWindow: Column drag ended (release detected on window). Scheduling width check.")
-            # Use after_idle to give Tkinter time to update the column width
-            self.after_idle(self._check_col0_width_and_refresh_after_drag)
+            self._is_dragging_col_separator = False 
+            self.app_ref.debug("[DEBUG] SupertileUsageWindow: Column drag ended. Scheduling width check/config save.")
+            self.after_idle(self._check_col_widths_and_update_config_after_drag)
 
-    def _check_col0_width_and_refresh_after_drag(self):
-        """Called after_idle post-drag to check column #0 width and refresh if it changed."""
+    def _check_col_widths_and_update_config_after_drag(self):
         if not self.winfo_exists() or not self.tree.winfo_exists(): return
-
+        
+        config_changed_by_drag = False
         try:
             current_col0_width = self.tree.column("#0", "width")
-            if current_col0_width != self._col0_width_at_drag_start:
-                self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Col #0 width changed by drag: {self._col0_width_at_drag_start} -> {current_col0_width}. Refreshing.")
-                if self.winfo_ismapped(): # Only refresh if visible
-                    self.refresh_data() # This will re-crop images
-            # else:
-            #     self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Col #0 width ({current_col0_width}) unchanged after drag.")
-        except tk.TclError:
-            self.app_ref.debug("[DEBUG] SupertileUsageWindow: TclError during _check_col0_width_and_refresh_after_drag (widget likely gone).")
+            if hasattr(self, '_col0_width_at_drag_start') and current_col0_width != self._col0_width_at_drag_start:
+                self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Col #0 width changed by drag: {self._col0_width_at_drag_start} -> {current_col0_width}. Refreshing for new image crops.")
+                if self.winfo_ismapped():
+                    self.refresh_data() # This will re-crop images for col #0
+                config_changed_by_drag = True
+            
+            # Even if col #0 didn't change, other columns might have. Update config.
+            if hasattr(self.app_ref, 'update_specific_window_config'):
+                 self.app_ref.update_specific_window_config(
+                    self.window_class_name,
+                    tree_config=self._get_current_tree_config() # This gets all current widths
+                )
+                 if not config_changed_by_drag: # If only other columns changed, mark config as changed
+                     self.app_ref.debug("[DEBUG] SupertileUsageWindow: Data column widths may have changed. Config updated.")
 
+
+        except tk.TclError:
+            self.app_ref.debug("[DEBUG] SupertileUsageWindow: TclError during _check_col_widths_after_drag.")
+    
+    # --- Lazy Loading Methods (Copied from previous successful implementation) ---
     def _schedule_update_visible_images(self, delay_ms=50):
         if not self.winfo_exists():
             return
-        if self._update_images_timer_id is not None:
+        if hasattr(self, '_update_images_timer_id') and self._update_images_timer_id is not None:
             try:
                 self.after_cancel(self._update_images_timer_id)
-            except tk.TclError: # Timer might have already fired or window is being destroyed
+            except tk.TclError: 
                 pass
         self._update_images_timer_id = self.after(delay_ms, self._update_visible_item_images)
 
@@ -1206,37 +1359,25 @@ class SupertileUsageWindow(tk.Toplevel):
             return
 
         row_h = self.styled_row_height 
-
         if row_h <= 0 or tree_height_px <= 0 : return
-
-        # Calculate visible item indices
-        first_visible_model_idx = int(yview[0] * num_items)
         
-        # Estimate how many items fit based on tree height and row height
-        # Add a small buffer (e.g., 2-3 items) above and below to preload slightly.
         buffer_items = 3 
         num_items_on_screen_estimate = math.ceil(tree_height_px / row_h) if row_h > 0 else num_items
-        
+        first_visible_model_idx = int(yview[0] * num_items)
         start_load_idx = max(0, first_visible_model_idx - buffer_items)
         end_load_idx = min(num_items, first_visible_model_idx + num_items_on_screen_estimate + buffer_items)
-
-        # self.app_ref.debug(f"[STU LazyLoad] Updating visible items: Model indices {start_load_idx} to {end_load_idx-1} (Total: {num_items})")
-        # self.app_ref.debug(f"  yview: {yview}, tree_h_px: {tree_height_px}, row_h: {row_h}, items_on_screen_est: {num_items_on_screen_estimate}")
 
         total_col0_width = 0
         try:
             total_col0_width = self.tree.column("#0", "width")
-        except tk.TclError:
-            return # Column info not available
+        except tk.TclError: return 
 
         effective_total_col0_width = max(total_col0_width, self.min_col0_total_width)
         image_content_area_width = max(1, effective_total_col0_width - SUPERTILE_USAGE_COL0_OFFSET_GUESS)
-
         newly_added_images = []
 
         for i in range(start_load_idx, end_load_idx):
             item_iid = children[i]
-            
             current_img_name_in_tree_list = self.tree.item(item_iid, "image")
             current_img_name_in_tree = ""
             if isinstance(current_img_name_in_tree_list, (list, tuple)) and current_img_name_in_tree_list:
@@ -1244,29 +1385,22 @@ class SupertileUsageWindow(tk.Toplevel):
             elif isinstance(current_img_name_in_tree_list, str):
                 current_img_name_in_tree = current_img_name_in_tree_list
             
-            if not current_img_name_in_tree: # If image name is empty string, it needs an image
+            if not current_img_name_in_tree: 
                 try:
-                    if item_iid.startswith("st_"):
-                        st_idx = int(item_iid.split("_")[1])
-                    else:
-                        continue
-                except (ValueError, IndexError):
-                    continue
-
+                    if item_iid.startswith("st_"): st_idx = int(item_iid.split("_")[1])
+                    else: continue
+                except (ValueError, IndexError): continue
                 photo = None
                 try:
                     if hasattr(self.app_ref, 'create_cropped_supertile_preview_for_usage_window'):
                         photo = self.app_ref.create_cropped_supertile_preview_for_usage_window(
-                            st_idx,
-                            image_content_area_width,
-                            self.preview_target_content_h 
+                            st_idx, image_content_area_width, self.preview_target_content_h 
                         )
                         if photo:
                             newly_added_images.append(photo)
                             self.tree.item(item_iid, image=photo)
-                            # self.app_ref.debug(f"  Lazy loaded image for {item_iid}")
                 except Exception as e_photo:
-                    self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error creating lazy-load preview for ST {st_idx}: {e_photo}")
+                    self.app_ref.debug(f"[DEBUG] SupertileUsageWindow: Error lazy-load preview ST {st_idx}: {e_photo}")
         
         if newly_added_images:
             self._image_references.extend(newly_added_images)
@@ -1288,6 +1422,13 @@ class TileEditorApp:
         self.scroll_speed_units = 3 
         self.is_currently_painting_tile = False # For drag-paint refresh fix
 
+        # --- Configuration for Usage Windows (NEW/MODIFIED) ---
+        self.config_app_name = "MSXTileForge" 
+        self.config_file_name = "usage_windows_settings.json" # Changed name slightly
+        self.window_configs = {} # Holds loaded/current configs for usage windows
+        self._load_window_configs() # Load configs at startup
+        # --- End Configuration ---
+
         # Initialize active palette (needed early if default colors are used by UI elements immediately)
         self.active_msx_palette = []
         for r_pal, g_pal, b_pal in MSX2_RGB7_VALUES:
@@ -1300,11 +1441,6 @@ class TileEditorApp:
         self._palette_pane_resize_timer = None 
 
         # --- 2. Core Data Structures Initialization ---
-        # (Assuming global definitions for tileset_patterns, tileset_colors, etc. are handled correctly
-        # at the module level and this __init__ potentially re-initializes them for a new app instance
-        # or on new_project. For now, aligning with your existing structure where these are manipulated.)
-        
-        # Default supertile dimensions for the project
         self.supertile_grid_width = SUPERTILE_GRID_DIM 
         self.supertile_grid_height = SUPERTILE_GRID_DIM 
 
@@ -1334,13 +1470,13 @@ class TileEditorApp:
         self.window_view_tile_w = tk.IntVar(value=DEFAULT_WIN_VIEW_WIDTH_TILES)
         self.window_view_tile_h = tk.IntVar(value=DEFAULT_WIN_VIEW_HEIGHT_TILES)
         self.window_view_resize_handle = None
-        self.drag_start_x = 0 # For map window drag/resize
+        self.drag_start_x = 0 
         self.drag_start_y = 0
         self.drag_start_win_tx = 0
         self.drag_start_win_ty = 0
         self.drag_start_win_tw = 0
         self.drag_start_win_th = 0
-        self.map_controls_min_width = 0 # Calculated later
+        self.map_controls_min_width = 0 
 
         # Minimap State
         self.minimap_window = None
@@ -1355,10 +1491,10 @@ class TileEditorApp:
 
         # Interaction State
         self.is_ctrl_pressed = False
-        self.current_mouse_action = None # For map interactions
+        self.current_mouse_action = None 
         self.pan_start_x = 0
         self.pan_start_y = 0
-        self.last_placed_supertile_cell = None # For ST definition editor
+        self.last_placed_supertile_cell = None 
         self.is_shift_pressed = False
 
         # Map Selection & Clipboard
@@ -1368,10 +1504,9 @@ class TileEditorApp:
         self.map_selection_end_st = None
         self.map_clipboard_data = None
         self.map_paste_preview_rect_id = None
-        # Note: tile_clipboard_pattern etc. are module globals in your original code
-
+        
         # Menu item state
-        self.edit_menu = None # Will be assigned in create_menu
+        self.edit_menu = None 
         self.copy_menu_item_index = -1
         self.paste_menu_item_index = -1
 
@@ -1383,7 +1518,7 @@ class TileEditorApp:
         self.rom_import_dialog = None
         self.color_usage_window = None
         self.tile_usage_window = None
-        self.supertile_usage_window = None # ADD THIS LINE
+        self.supertile_usage_window = None 
 
         # --- 3. Menu Creation ---
         self.create_menu()
@@ -1406,31 +1541,28 @@ class TileEditorApp:
         self.notebook.add(self.tab_map_editor, text="Map Editor")
 
         # --- 6. Widget Creation for Each Tab ---
-        # These methods will also set up canvas-specific bindings (like scrollwheel)
         self.create_palette_editor_widgets(self.tab_palette_editor)
         self.create_tile_editor_widgets(self.tab_tile_editor)
         self.create_supertile_editor_widgets(self.tab_supertile_editor)
-        self.create_map_editor_widgets(self.tab_map_editor) # This calculates self.map_controls_min_width
+        self.create_map_editor_widgets(self.tab_map_editor) 
         
-        # --- 7. Global Application State Variables (Post-UI if they depend on UI elements) ---
-        # (self.map_controls_min_width is set inside create_map_editor_widgets)
-
-        # --- 8. Core Event Bindings ---
+        # --- 7. Core Event Bindings ---
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
-        self._setup_map_canvas_bindings() # Sets up bindings for self.map_canvas
+        self._setup_map_canvas_bindings() 
         
-        # Bind WM_DELETE_WINDOW and root Configure event now that main UI structure is up
         self.root.protocol("WM_DELETE_WINDOW", self.confirm_quit)
         self.root.bind("<Configure>", self._on_main_window_configure)
 
-        # --- 9. Initial UI State Updates & Refresh ---
-        # These should generally come after all UI elements are created and bindings are set.
+        # --- 8. Initial UI State Updates & Refresh ---
         self._update_window_title() 
-        self.update_all_displays(changed_level="all") # This populates visible tab
+        self.update_all_displays(changed_level="all") 
         self._update_edit_menu_state()
         self._update_editor_button_states()
         self._update_supertile_rotate_button_state()
         self._update_map_cursor()
+        
+        # --- 9. Restore Usage Window States (NEW) ---
+        self._apply_initial_usage_window_states() # Open windows based on loaded config
         
         # --- 10. Final Debug Message ---
         self.debug("[DEBUG] TileEditorApp __init__ finished.")
@@ -4517,7 +4649,6 @@ class TileEditorApp:
             )
 
         if confirm_new:
-            # Get new supertile dimensions from user (existing dialog logic)
             new_dim_w_str = simpledialog.askstring(
                 "New Supertile Width",
                 "Enter supertile grid width (number of tiles, 1-32):",
@@ -4548,9 +4679,14 @@ class TileEditorApp:
                 messagebox.showerror("Invalid Input", "Height must be a whole number.", parent=self.root)
                 return
 
-            # --- MODIFICATION: Destroy existing usage windows BEFORE resetting project data ---
+            # --- Gather states of currently open usage windows BEFORE destroying them ---
+            self.debug("[DEBUG] New Project: Gathering current usage window states before reset.")
+            self._gather_current_open_window_states()
+            # --- End Gather ---
+
+            # --- Destroy existing usage windows ---
             if self.color_usage_window and tk.Toplevel.winfo_exists(self.color_usage_window):
-                self.color_usage_window.destroy()
+                self.color_usage_window.destroy() # This will call its _on_close, updating its 'is_open' to False
             self.color_usage_window = None
             
             if self.tile_usage_window and tk.Toplevel.winfo_exists(self.tile_usage_window):
@@ -4560,13 +4696,12 @@ class TileEditorApp:
             if self.supertile_usage_window and tk.Toplevel.winfo_exists(self.supertile_usage_window):
                 self.supertile_usage_window.destroy()
             self.supertile_usage_window = None
-            # --- END MODIFICATION ---
+            # --- End Destroy ---
 
             self.supertile_grid_width = new_dim_w
             self.supertile_grid_height = new_dim_h
             self.debug(f"New project: Supertile dimensions set to {self.supertile_grid_width}W x {self.supertile_grid_height}H.")
 
-            # ... (rest of the new_project data reset logic remains the same) ...
             self._clear_marked_unused(trigger_redraw=False)
 
             tileset_patterns = [
@@ -4627,16 +4762,11 @@ class TileEditorApp:
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
             
-            self._reconfigure_supertile_definition_canvas() # Important after ST dim change
+            self._reconfigure_supertile_definition_canvas() 
             
             self.update_all_displays(changed_level="all")
             self._trigger_minimap_reconfigure() 
             
-            # These will now not try to refresh non-existent windows
-            self._request_color_usage_refresh()
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
-
             self._update_editor_button_states()
             self._update_edit_menu_state()
             self._update_supertile_rotate_button_state() 
@@ -4648,6 +4778,16 @@ class TileEditorApp:
                         if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
                             self.root.after_idle(self.map_canvas.focus_set)
             except tk.TclError: pass
+            
+            # --- Re-apply usage window states AFTER new project setup ---
+            self.debug("[DEBUG] New Project: Re-applying initial usage window states.")
+            self._apply_initial_usage_window_states()
+            # --- End Re-apply ---
+
+            # These refresh calls will now only act if the windows were reopened by _apply_initial_usage_window_states
+            self._request_color_usage_refresh()
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
 
     def save_palette(self, filepath=None):
         save_path = filepath
@@ -5819,6 +5959,12 @@ class TileEditorApp:
             if not confirm_discard:
                 return
         
+        # --- Gather states of currently open usage windows BEFORE destroying them ---
+        self.debug("[DEBUG] Open Project: Gathering current usage window states before load.")
+        self._gather_current_open_window_states()
+        # --- End Gather ---
+
+        # --- Destroy existing usage windows (as loading project will re-initialize data) ---
         if self.color_usage_window and tk.Toplevel.winfo_exists(self.color_usage_window):
             self.color_usage_window.destroy()
         self.color_usage_window = None
@@ -5828,7 +5974,8 @@ class TileEditorApp:
         if self.supertile_usage_window and tk.Toplevel.winfo_exists(self.supertile_usage_window):
             self.supertile_usage_window.destroy()
         self.supertile_usage_window = None
-
+        # --- End Destroy ---
+        
         self.is_ctrl_pressed = False
         self.is_shift_pressed = False
         self.current_mouse_action = None
@@ -5847,10 +5994,8 @@ class TileEditorApp:
         success = True
         self.debug(f"Loading project '{base_name}'...")
         
-        # MODIFIED: Removed is_part_of_project_load from palette, tileset, map calls
         if success: self.debug(f"  Loading palette: {actual_pal_path_to_load}"); success = self.open_palette(actual_pal_path_to_load)
         if success: self.debug(f"  Loading tileset: {til_path}"); success = self.open_tileset(til_path)
-        # Keep is_part_of_project_load for open_supertiles as it uses it internally
         if success: self.debug(f"  Loading supertiles: {sup_path}"); success = self.open_supertiles(sup_path, is_part_of_project_load=True) 
         if success: self.debug(f"  Loading map: {map_path}"); success = self.open_map(map_path)
         
@@ -5862,7 +6007,11 @@ class TileEditorApp:
             self._reconfigure_supertile_definition_canvas()
 
             def deferred_refresh_and_updates_after_project_load():
-                self._perform_project_load_ui_updates()
+                self._perform_project_load_ui_updates() # This updates displays, menus, etc.
+                # Re-apply usage window states AFTER project data is loaded and UI is stable
+                self.debug("[DEBUG] Open Project: Re-applying initial usage window states post-load.")
+                self._apply_initial_usage_window_states()
+                # Request refresh for any windows that were just re-opened
                 self._request_color_usage_refresh() 
                 self._request_tile_usage_refresh()
                 self._request_supertile_usage_refresh()
@@ -5883,6 +6032,9 @@ class TileEditorApp:
                 self._update_edit_menu_state()
                 self._update_editor_button_states()
                 self._update_supertile_rotate_button_state()
+                # Still try to apply window states even on partial load failure, using whatever config was loaded
+                self.debug("[DEBUG] Open Project (Failed): Applying usage window states.")
+                self._apply_initial_usage_window_states()
                 self._request_color_usage_refresh() 
                 self._request_tile_usage_refresh()
                 self._request_supertile_usage_refresh()
@@ -5893,16 +6045,17 @@ class TileEditorApp:
         """Helper method to perform UI updates after a project load and Tkinter idle cycle."""
         self.debug("[DEBUG] _perform_project_load_ui_updates: Starting deferred UI updates.")
         
-        # Ensure the correct tab is selected (e.g., map editor)
-        # This might trigger on_tab_change, which itself might have after_idle calls.
+        # Ensure the correct tab is selected (e.g., map editor - or a default)
+        # If loading a project, perhaps default to the map editor or the palette editor.
+        # For now, let's assume it might try to select the map editor.
+        target_tab_after_load = self.tab_map_editor # Or self.tab_palette_editor
         try:
-            if self.notebook and self.notebook.winfo_exists() and self.tab_map_editor.winfo_exists():
-                 self.notebook.select(self.tab_map_editor)
+            if self.notebook and self.notebook.winfo_exists() and target_tab_after_load.winfo_exists():
+                 self.notebook.select(target_tab_after_load)
+                 self.debug(f"  [DEBUG] Switched to {target_tab_after_load.winfo_class()} tab after project load.")
+            self.root.update_idletasks() # Allow tab switch to process
         except tk.TclError:
-            self.debug("[DEBUG] _perform_project_load_ui_updates: TclError selecting map editor tab.")
-
-        # Force Tkinter to process pending events, especially layout changes from tab selection
-        self.root.update_idletasks() 
+            self.debug("[DEBUG] _perform_project_load_ui_updates: TclError selecting default tab after load.")
 
         # Now update all displays; widgets should have their correct sizes.
         self.update_all_displays(changed_level="all")
@@ -5925,11 +6078,22 @@ class TileEditorApp:
         if is_map_tab_active:
             if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
                 self.map_canvas.focus_set()
-            self.draw_minimap() # draw_minimap should be robust to being called now
+            self.draw_minimap() 
             if hasattr(self, 'map_paned_window') and self.map_paned_window.winfo_exists() and self.map_paned_window.winfo_ismapped():
                 self._do_check_and_enforce_palette_min_width()
         
-        self._update_map_cursor() # General cursor update
+        self._update_map_cursor() 
+        
+        # --- Re-apply usage window states AFTER project data is loaded and UI is stable ---
+        self.debug("[DEBUG] Project Load/New: Re-applying initial usage window states.")
+        self._apply_initial_usage_window_states() # This will open windows as per config
+        # --- End Re-apply ---
+        
+        # Request refresh for any windows that were just re-opened by the call above
+        self._request_color_usage_refresh()
+        self._request_tile_usage_refresh()
+        self._request_supertile_usage_refresh()
+        
         self.debug("[DEBUG] _perform_project_load_ui_updates: Deferred UI updates complete.")
 
     # --- Edit Menu Commands ---
@@ -11615,9 +11779,9 @@ class TileEditorApp:
                 self._draw_rom_importer_canvas()
 
     def confirm_quit(self):
-        """Checks for unsaved changes and prompts user before quitting."""
+        """Checks for unsaved changes and prompts user before quitting. Saves window configs on exit."""
+        perform_quit = False
         if self.project_modified:
-            # Ask: "Save changes to [Project Name / Untitled] before quitting?"
             project_name_display = "Untitled"
             if self.current_project_base_path:
                 project_name_display = os.path.basename(self.current_project_base_path)
@@ -11625,23 +11789,30 @@ class TileEditorApp:
             response = messagebox.askyesnocancel(
                 "Quit MSX Tile Forge",
                 f"Save changes to '{project_name_display}' before quitting?",
-                parent=self.root # Ensure dialog is on top of main window
+                parent=self.root
             )
 
             if response is True:  # Yes, Save
-                save_successful = self.save_project() # save_project handles "Save As" if needed
-                if save_successful: # If save_project itself wasn't cancelled by user
-                    self.root.destroy()
-                # If save_successful is False, it means user cancelled the save dialog
-                # or an error occurred. In this case, we DON'T quit, allowing them
-                # to try saving again or to cancel quitting.
+                save_successful = self.save_project()
+                if save_successful:
+                    perform_quit = True
             elif response is False:  # No, Don't Save
-                self.root.destroy()
-            elif response is None:  # Cancel
-                return # Do nothing, don't quit
+                perform_quit = True
+            # If response is None (Cancel), perform_quit remains False
         else:
-            # No unsaved changes, quit directly
-            self.root.destroy()
+            # No unsaved changes, can quit directly
+            perform_quit = True
+
+        if perform_quit:
+            self.debug("[DEBUG] confirm_quit: Proceeding with application quit.")
+            self._save_window_configs() # Save usage window configurations
+            if hasattr(self.root, 'destroy'): # Check if root still exists
+                try:
+                    self.root.destroy()
+                except tk.TclError:
+                    self.debug("[DEBUG] TclError during root.destroy() in confirm_quit.")
+        else:
+            self.debug("[DEBUG] confirm_quit: Quit cancelled by user or save process.")
 
     def _on_palette_pane_configure_for_redraw_only(self, event=None):
         # Called when the palette pane in the map editor is resized.
@@ -12727,29 +12898,6 @@ class TileEditorApp:
         if self.color_usage_window is None or not tk.Toplevel.winfo_exists(self.color_usage_window):
             self.debug("[DEBUG] Creating new Color Usage window.")
             self.color_usage_window = ColorUsageWindow(self) # Pass self (the app instance)
-            # Optional: Position the window relative to the main app
-            self.root.update_idletasks()
-            self.color_usage_window.update_idletasks()
-            main_x = self.root.winfo_rootx()
-            main_y = self.root.winfo_rooty()
-            main_w = self.root.winfo_width()
-            # main_h = self.root.winfo_height() # Not used here
-
-            cuw_w = self.color_usage_window.winfo_reqwidth()
-            # cuw_h = self.color_usage_window.winfo_reqheight() # Not used here
-            
-            # Position to the right of the main window, aligned with top
-            pos_x = main_x + main_w + 10 
-            pos_y = main_y
-            
-            # Basic screen boundary check (adjust if needed for multi-monitor or complex setups)
-            screen_w = self.root.winfo_screenwidth()
-            if pos_x + cuw_w > screen_w:
-                pos_x = screen_w - cuw_w - 10 # Try to fit on the right
-            if pos_x < 0 : pos_x = 10 # Fallback if still off screen
-
-            self.color_usage_window.geometry(f"+{pos_x}+{pos_y}")
-
         else:
             self.debug("[DEBUG] Lifting existing Color Usage window.")
             self.color_usage_window.lift()
@@ -12986,40 +13134,11 @@ class TileEditorApp:
         if self.tile_usage_window is None or not tk.Toplevel.winfo_exists(self.tile_usage_window):
             self.debug("[DEBUG] Creating new Tile Usage window.")
             self.tile_usage_window = TileUsageWindow(self) # Pass self (the app instance)
-            
-            # Position the window (modal, so relative positioning might be less critical, but good for consistency)
-            self.root.update_idletasks() 
-            self.tile_usage_window.update_idletasks()
-            
-            main_x = self.root.winfo_rootx()
-            main_y = self.root.winfo_rooty()
-            main_w = self.root.winfo_width()
-            main_h = self.root.winfo_height()
-
-            tuw_w = self.tile_usage_window.winfo_reqwidth()
-            tuw_h = self.tile_usage_window.winfo_reqheight()
-            
-            # Center on main window
-            pos_x = main_x + (main_w // 2) - (tuw_w // 2)
-            pos_y = main_y + (main_h // 2) - (tuw_h // 2)
-            
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-            pos_x = max(0, min(pos_x, screen_w - tuw_w)) # Ensure on screen
-            pos_y = max(0, min(pos_y, screen_h - tuw_h)) # Ensure on screen
-
-            self.tile_usage_window.geometry(f"+{pos_x}+{pos_y}")
-            self.tile_usage_window.grab_set() # Make it modal
-            self.tile_usage_window.focus_set()
-            self.tile_usage_window.wait_window() # Wait for it to be closed
         else:
-            # This case should ideally not be reached if it's truly modal and a singleton
-            # If it *can* somehow be reached (e.g., if grab_set was missing), then lift and focus.
-            self.debug("[DEBUG] Tile Usage window already exists (unexpected for modal). Lifting.")
+            # Window exists, lift and focus it.
+            self.debug("[DEBUG] Lifting existing Tile Usage window.")
             self.tile_usage_window.lift()
             self.tile_usage_window.focus_set()
-            if hasattr(self.tile_usage_window, 'refresh_data'):
-                self.tile_usage_window.refresh_data()
 
     def _request_tile_usage_refresh(self):
         # Helper to request a refresh of the tile usage window if it's open.
@@ -13030,46 +13149,6 @@ class TileEditorApp:
                 self.tile_usage_window.request_refresh()
             else:
                 self.debug("[DEBUG] TileUsageWindow does not have request_refresh method.")
-
-    def toggle_tile_usage_window(self):
-        # Toggles the visibility of the Tile Usage window.
-        if self.tile_usage_window is None or not tk.Toplevel.winfo_exists(self.tile_usage_window):
-            self.debug("[DEBUG] Creating new Tile Usage window.")
-            self.tile_usage_window = TileUsageWindow(self) # Pass self (the app instance)
-            
-            # Position the window
-            self.root.update_idletasks() 
-            self.tile_usage_window.update_idletasks()
-            
-            main_x = self.root.winfo_rootx()
-            main_y = self.root.winfo_rooty()
-            main_w = self.root.winfo_width()
-            main_h = self.root.winfo_height()
-
-            tuw_w = self.tile_usage_window.winfo_reqwidth()
-            tuw_h = self.tile_usage_window.winfo_reqheight()
-            
-            pos_x = main_x + (main_w // 2) - (tuw_w // 2)
-            pos_y = main_y + (main_h // 2) - (tuw_h // 2)
-            
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-            pos_x = max(0, min(pos_x, screen_w - tuw_w)) 
-            pos_y = max(0, min(pos_y, screen_h - tuw_h)) 
-
-            self.tile_usage_window.geometry(f"+{pos_x}+{pos_y}")
-            # Modal behavior handled by grab_set and wait_window in the TileUsageWindow class __init__
-            # based on our decision for it to be modal initially, then changed to non-modal.
-            # For non-modal, we don't call grab_set or wait_window here.
-            # If it should behave like ColorUsageWindow (non-modal, lift/focus):
-            # self.tile_usage_window.focus_set() # For non-modal, just focus
-        else:
-            # Window exists, lift and focus it.
-            # As per user decision (Question 4, option b), no automatic refresh on lift.
-            self.debug("[DEBUG] Lifting existing Tile Usage window.")
-            self.tile_usage_window.lift()
-            self.tile_usage_window.focus_set()
-            # No self.tile_usage_window.request_refresh() here based on Q4 decision.
 
     def _request_tile_usage_refresh(self):
         # Helper to request a refresh of the tile usage window if it's open and visible.
@@ -13086,38 +13165,6 @@ class TileEditorApp:
         if self.supertile_usage_window is None or not tk.Toplevel.winfo_exists(self.supertile_usage_window):
             self.debug("[DEBUG] Creating new Supertile Usage window.")
             self.supertile_usage_window = SupertileUsageWindow(self)
-            
-            self.root.update_idletasks() 
-            if not tk.Toplevel.winfo_exists(self.supertile_usage_window): # Check again if creation failed
-                self.supertile_usage_window = None # Reset if failed
-                return
-            self.supertile_usage_window.update_idletasks()
-            
-            main_x = self.root.winfo_rootx()
-            main_y = self.root.winfo_rooty()
-            main_w = self.root.winfo_width()
-            main_h = self.root.winfo_height()
-
-            try: # Add try-except for reqwidth/reqheight in case window closed during this
-                suw_w = self.supertile_usage_window.winfo_reqwidth()
-                suw_h = self.supertile_usage_window.winfo_reqheight()
-            except tk.TclError:
-                self.supertile_usage_window = None # Window likely destroyed
-                return
-
-            pos_x = main_x + (main_w // 2) - (suw_w // 2)
-            pos_y = main_y + (main_h // 2) - (suw_h // 2)
-            
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-            pos_x = max(0, min(pos_x, screen_w - suw_w)) 
-            pos_y = max(0, min(pos_y, screen_h - suw_h)) 
-
-            if tk.Toplevel.winfo_exists(self.supertile_usage_window): # Final check before geometry
-                self.supertile_usage_window.geometry(f"+{pos_x}+{pos_y}")
-                self.supertile_usage_window.focus_set() 
-            else:
-                self.supertile_usage_window = None # Window destroyed
         else:
             self.debug("[DEBUG] Lifting existing Supertile Usage window.")
             self.supertile_usage_window.lift()
@@ -13290,6 +13337,225 @@ class TileEditorApp:
         
         return final_photo
 
+    # --- Usage Window Config Management Helpers (NEW) ---
+    def _get_config_filepath(self):
+        """Constructs the path to the usage windows configuration file."""
+        try:
+            # Use appauthor=False to avoid creating an extra subdirectory for the author.
+            # The directory structure will be like: .../AppConfigDir/MSXTileForge/
+            config_dir = platformdirs.user_config_dir(self.config_app_name, appauthor=False,ensure_exists=True)
+            return os.path.join(config_dir, self.config_file_name)
+        except Exception as e:
+            self.debug(f"[ERROR] Could not determine or create config directory using platformdirs: {e}")
+            # Fallback to alongside the executable/script if platformdirs fails or is unavailable
+            # This requires msxtileforge.py to be in a writable location if packaged.
+            try:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+                return os.path.join(base_path, self.config_file_name)
+            except NameError: # __file__ is not defined (e.g. interactive, or frozen app without proper setup)
+                 self.debug(f"[ERROR] __file__ not defined, falling back to CWD for config: {self.config_file_name}")
+                 return self.config_file_name
+
+
+    def _load_window_configs(self):
+        """Loads usage window configurations from the JSON file into self.window_configs."""
+        filepath = self._get_config_filepath()
+        try:
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 0: # Check size too
+                with open(filepath, 'r') as f:
+                    loaded_data = json.load(f)
+                    if isinstance(loaded_data, dict): # Basic type check
+                        self.window_configs = loaded_data
+                        self.debug(f"[DEBUG] Loaded window configurations from: {filepath}")
+                    else:
+                        self.debug(f"[ERROR] Config file {filepath} did not contain a valid JSON object. Using defaults.")
+                        self.window_configs = {}
+            else:
+                self.debug(f"[DEBUG] Window configuration file not found or empty at: {filepath}. Using defaults.")
+                self.window_configs = {}
+        except (json.JSONDecodeError, IOError, OSError) as e:
+            self.debug(f"[ERROR] Failed to load window configurations from {filepath}: {e}")
+            self.window_configs = {} # Reset to default on error
+        except Exception as e_generic: # Catch any other unexpected error during load
+            self.debug(f"[ERROR] Unexpected error loading window configurations: {e_generic}")
+            self.window_configs = {}
+
+
+    def _save_window_configs(self):
+        """
+        Gathers current states of all open usage windows into self.window_configs,
+        ensures closed windows are marked as such, and saves the entire dictionary to disk.
+        Called on application quit.
+        """
+        filepath = self._get_config_filepath()
+        try:
+            self.debug(f"[DEBUG] Preparing to save window configurations to: {filepath}")
+            self._gather_current_open_window_states(final_save=True) # Pass flag for final save logic
+
+            # Ensure all known window types have an entry, marking non-gathered ones as closed
+            all_known_window_types = ["ColorUsageWindow", "TileUsageWindow", "SupertileUsageWindow"]
+            for window_name in all_known_window_types:
+                if window_name not in self.window_configs:
+                    self.window_configs[window_name] = {'is_open': False}
+                elif 'is_open' not in self.window_configs[window_name]: # Ensure is_open key exists
+                    # This case means it was gathered (so it was open) but somehow 'is_open' wasn't set by gather.
+                    # Should not happen if _gather_current_open_window_states is correct.
+                    # For safety, assume it was open if an entry exists but no 'is_open' flag.
+                    # However, _gather_current_open_window_states *should* set it to True if it's gathering.
+                    # More robustly: if it wasn't set to True by gather, and not False by an _on_close,
+                    # then it's an undefined state. Defaulting to False is safer.
+                    instance_was_found_open = False
+                    if window_name == "ColorUsageWindow" and getattr(self, 'color_usage_window', None) and tk.Toplevel.winfo_exists(self.color_usage_window):
+                        instance_was_found_open = True
+                    elif window_name == "TileUsageWindow" and getattr(self, 'tile_usage_window', None) and tk.Toplevel.winfo_exists(self.tile_usage_window):
+                        instance_was_found_open = True
+                    elif window_name == "SupertileUsageWindow" and getattr(self, 'supertile_usage_window', None) and tk.Toplevel.winfo_exists(self.supertile_usage_window):
+                        instance_was_found_open = True
+                    
+                    if not instance_was_found_open:
+                         self.window_configs[window_name]['is_open'] = False
+
+
+            with open(filepath, 'w') as f:
+                json.dump(self.window_configs, f, indent=4, sort_keys=True) # sort_keys for consistent output
+            self.debug(f"[DEBUG] Successfully saved all window configurations.")
+
+        except (IOError, OSError, tk.TclError) as e:
+            self.debug(f"[ERROR] Failed to save window configurations to {filepath}: {e}")
+        except Exception as e_generic:
+            self.debug(f"[ERROR] Unexpected error saving window configurations: {e_generic}")
+
+
+    def load_specific_window_config(self, window_class_name):
+        """
+        Returns the saved configuration dictionary for a specific window class name.
+        Returns an empty dictionary if no configuration is found.
+        """
+        # Ensure self.window_configs is initialized if called before full app init
+        if not hasattr(self, 'window_configs'):
+            self.window_configs = {}
+            self._load_window_configs() # Attempt to load if not already loaded
+
+        return self.window_configs.get(window_class_name, {}).copy() # Return a copy
+
+
+    def update_specific_window_config(self, window_class_name, geometry=None, tree_config=None, is_open=None):
+        """
+        Updates the in-memory configuration (self.window_configs) for a specific window.
+        This does NOT write to disk.
+        tree_config should be a dict: {'sort_column_id': '...', 'sort_asc': True/False, 'column_widths': {'col_id': width, ...}}
+        """
+        if not hasattr(self, 'window_configs'): # Should have been initialized
+            self.window_configs = {}
+        
+        if window_class_name not in self.window_configs:
+            self.window_configs[window_class_name] = {}
+
+        config_entry = self.window_configs[window_class_name]
+
+        if geometry is not None:
+            config_entry['geometry'] = geometry
+        if tree_config is not None:
+            if 'sort_column_id' in tree_config:
+                config_entry['sort_column_id'] = tree_config['sort_column_id']
+            if 'sort_asc' in tree_config:
+                config_entry['sort_asc'] = tree_config['sort_asc']
+            if 'column_widths' in tree_config:
+                # Ensure column_widths is a dict before trying to update it
+                if 'column_widths' not in config_entry or not isinstance(config_entry.get('column_widths'), dict):
+                    config_entry['column_widths'] = {}
+                config_entry['column_widths'].update(tree_config['column_widths']) # Merge/update widths
+        if is_open is not None:
+            config_entry['is_open'] = is_open
+        
+        self.debug(f"[DEBUG] In-memory config updated for {window_class_name}. IsOpen: {config_entry.get('is_open')}, Geo: {config_entry.get('geometry')}")
+
+
+    def _gather_current_open_window_states(self, final_save=False):
+        """
+        Updates self.window_configs with the current state of any instantiated and
+        visible usage windows. If final_save is True, it implies this is for app quit.
+        """
+        self.debug(f"[DEBUG] Gathering current open usage window states (final_save={final_save})...")
+
+        window_details = [
+            ("ColorUsageWindow", getattr(self, 'color_usage_window', None)),
+            ("TileUsageWindow", getattr(self, 'tile_usage_window', None)),
+            ("SupertileUsageWindow", getattr(self, 'supertile_usage_window', None))
+        ]
+
+        for name, instance in window_details:
+            if instance and tk.Toplevel.winfo_exists(instance): # Check if instance exists and window is valid
+                current_geometry = ""
+                tree_config_data = {}
+                try:
+                    current_geometry = instance.winfo_geometry() # Get current geometry string
+                    if hasattr(instance, '_get_current_tree_config'):
+                        tree_config_data = instance._get_current_tree_config()
+                    
+                    self.update_specific_window_config(
+                        name,
+                        geometry=current_geometry,
+                        tree_config=tree_config_data,
+                        is_open=True # Explicitly mark as open because we found it
+                    )
+                except tk.TclError as e:
+                    self.debug(f"[DEBUG] TclError gathering state for {name} (likely during shutdown): {e}")
+                    # If error (e.g., window closing), try to preserve last known 'is_open' state if not final_save
+                    if not final_save and name in self.window_configs:
+                        self.window_configs[name]['is_open'] = self.window_configs[name].get('is_open', False)
+                    elif final_save: # On final save, if error, assume it's closed
+                         self.update_specific_window_config(name, is_open=False)
+
+            elif final_save: # If it's the final save and instance is None or destroyed, ensure is_open is False
+                self.update_specific_window_config(name, is_open=False)
+            # If not final_save and instance is None, its state (likely is_open=False)
+            # would have been set by its _on_close method.
+
+
+    def _apply_initial_usage_window_states(self):
+        """
+        Opens usage windows after application start or project load,
+        based on their saved 'is_open' state from self.window_configs.
+        """
+        self.debug("[DEBUG] Applying initial usage window states from loaded config...")
+        
+        # Use a list to manage order or dependencies if any, though not strictly needed here
+        window_toggle_map = {
+            "ColorUsageWindow": self.toggle_color_usage_window,
+            "TileUsageWindow": self.toggle_tile_usage_window,
+            "SupertileUsageWindow": self.toggle_supertile_usage_window
+        }
+
+        for window_name, toggle_function in window_toggle_map.items():
+            config = self.window_configs.get(window_name, {})
+            should_be_open = config.get('is_open', False) # Default to False if no 'is_open' key
+
+            # Get current instance (if any)
+            current_instance = None
+            if window_name == "ColorUsageWindow": current_instance = self.color_usage_window
+            elif window_name == "TileUsageWindow": current_instance = self.tile_usage_window
+            elif window_name == "SupertileUsageWindow": current_instance = self.supertile_usage_window
+
+            is_currently_open = current_instance is not None and tk.Toplevel.winfo_exists(current_instance)
+
+            self.debug(f"  [DEBUG] For {window_name}: ShouldBeOpen={should_be_open}, IsCurrentlyOpen={is_currently_open}")
+
+            if should_be_open and not is_currently_open:
+                self.debug(f"    [DEBUG] Config says {window_name} should be open, and it's not. Calling toggle.")
+                toggle_function() # This will create and show it, and __init__ will apply geometry/settings
+            elif not should_be_open and is_currently_open:
+                self.debug(f"    [DEBUG] Config says {window_name} should be closed, but it's open. Closing it.")
+                # The toggle function might just lift it. We need to explicitly close.
+                if current_instance: # Should be true if is_currently_open
+                    try:
+                        current_instance._on_close() # Call its proper close method
+                    except tk.TclError: pass # Might already be destroying
+            elif should_be_open and is_currently_open:
+                self.debug(f"    [DEBUG] {window_name} is correctly open. Ensuring it's lifted.")
+                if current_instance: current_instance.lift() # Ensure visible
+    # --- End Usage Window Config Management Helpers ---
+
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
 
@@ -13385,4 +13651,3 @@ if __name__ == "__main__":
         if tk.Toplevel.winfo_exists(splash_win): splash_win.destroy()
 
     root.mainloop()
-    
