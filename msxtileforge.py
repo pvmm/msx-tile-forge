@@ -1176,6 +1176,7 @@ class SupertileUsageWindow(tk.Toplevel):
                 current_heading_options = self.tree.heading(tree_col_id)
             except tk.TclError: continue
 
+            current_text = current_heading_options.get("text", "")
             text_to_set = current_text.replace(UP, "").replace(DOWN, "")
 
             if data_key == self.current_sort_column_id: # Compare with the data key
