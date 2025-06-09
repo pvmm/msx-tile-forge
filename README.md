@@ -1,20 +1,3 @@
-Skip to main content
-
-key
-Get API key
-Studio
-Dashboard
-Documentation
-open_in_new
-Danilo Angelo
-Python Code Constants
-ThinkingThoughts
-(experimental)
-Auto
-Expand to view model thoughts
-
-chevron_right
-Of course. Here is the updated README.md markdown source based on the provided code listing and your existing file. I've updated the version, features, and technical file descriptions to reflect the new capabilities and file formats.
 # MSX Tile Forge
 v0.0.54
 
