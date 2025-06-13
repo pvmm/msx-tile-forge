@@ -2647,18 +2647,13 @@ class TileEditorApp:
         right_frame.grid(row=0, column=1, sticky=(tk.N, tk.S, tk.W, tk.E))
         main_frame.grid_columnconfigure(1, weight=1)
         main_frame.grid_rowconfigure(0, weight=1)
-
-        # --- BEGIN MODIFICATION ---
-        # The widgets inside right_frame will now be laid out with .pack() instead of .grid()
-        # This decouples their widths and allows the PanedWindow to fill all available space.
-
+        
+        # Use .pack() for vertical stacking and independent horizontal filling.
         tileset_viewer_frame = ttk.LabelFrame(
             right_frame, text="Tileset (Click to select tile to draw supertile)"
         )
-        # The tileset viewer fills the horizontal space but does NOT expand vertically.
         tileset_viewer_frame.pack(side=tk.TOP, fill=tk.X, expand=False, pady=(0, 10))
 
-        # The rest of the tileset_viewer_frame's internal .grid() layout is unchanged.
         viewer_canvas_width_tiles = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + 1) + 1
         num_rows_in_tile_viewer = math.ceil(MAX_TILES / NUM_TILES_ACROSS) 
         viewer_canvas_height_tiles = num_rows_in_tile_viewer * (VIEWER_TILE_SIZE + 1) + 1
@@ -2685,25 +2680,24 @@ class TileEditorApp:
         self.st_tileset_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.st_tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
-        # The bottom controls are packed last, filling horizontally but not expanding vertically.
         bottom_controls_frame = ttk.Frame(right_frame)
         bottom_controls_frame.pack(side=tk.BOTTOM, fill=tk.X, expand=False, pady=(5, 0))
 
-        # The PanedWindow is packed in the middle. It fills ALL remaining space,
-        # both horizontally and vertically. This is the key change.
         st_editor_paned_window = ttk.PanedWindow(right_frame, orient=tk.HORIZONTAL)
         st_editor_paned_window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # The children of the PanedWindow are created and .add()ed as before.
         st_selector_frame = ttk.LabelFrame(
-            st_editor_paned_window, text="Supertile Selector (Click to select for edition)"
+            st_editor_paned_window, text="Supertile Selector (Click to select for edition)",
+            name="st_editor_selector_frame" # Unique name for identification.
         )
         st_editor_paned_window.add(st_selector_frame, weight=1)
-
+        
+        # Bind the resizable frame to the generalized configure handler.
+        st_selector_frame.bind("<Configure>", self._on_resizable_selector_pane_configure)
+        
         inert_panel = ttk.Frame(st_editor_paned_window)
         st_editor_paned_window.add(inert_panel, weight=1)
 
-        # The internal layout of st_selector_frame and bottom_controls_frame is unchanged.
         target_selector_width = 256 
         self.supertile_selector_canvas = tk.Canvas(
             st_selector_frame,
@@ -2739,7 +2733,6 @@ class TileEditorApp:
         self.supertile_selector_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.supertile_selector_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
-        # The internal layout of bottom_controls_frame is unchanged.
         self.add_supertile_button = ttk.Button(
             bottom_controls_frame, text="Add New", command=self.handle_add_supertile
         )
@@ -2760,7 +2753,6 @@ class TileEditorApp:
             bottom_controls_frame, text=f"Supertiles: {num_supertiles}" 
         )
         self.supertile_sel_info_label.pack(side=tk.LEFT, anchor=tk.W, padx=(10, 0))
-        # --- END MODIFICATION ---
 
     def create_map_editor_widgets(self, parent_frame):
         main_frame = ttk.Frame(parent_frame)
@@ -2856,11 +2848,9 @@ class TileEditorApp:
         map_st_sel_hbar = ttk.Scrollbar(st_selector_frame, orient=tk.HORIZONTAL)
         map_st_sel_vbar = ttk.Scrollbar(st_selector_frame, orient=tk.VERTICAL)
 
-        # --- Modified scrollbar commands for map_supertile_selector_canvas ---
         def map_st_sel_canvas_xview_wrapper(*args):
             self.debug(f"[DEBUG] Map Editor - Supertile Palette XScrollbar: args={args}")
             self.map_supertile_selector_canvas.xview(*args)
-            # Potentially trigger redraw if lazy loading images horizontally
             self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
 
         def map_st_sel_canvas_yview_wrapper(*args):
@@ -2869,9 +2859,8 @@ class TileEditorApp:
             self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
 
         self.map_supertile_selector_canvas.config(xscrollcommand=map_st_sel_hbar.set, yscrollcommand=map_st_sel_vbar.set)
-        map_st_sel_hbar.config(command=map_st_sel_canvas_xview_wrapper) # Use wrapper
-        map_st_sel_vbar.config(command=map_st_sel_canvas_yview_wrapper) # Use wrapper
-        # --- End of modification ---
+        map_st_sel_hbar.config(command=map_st_sel_canvas_xview_wrapper)
+        map_st_sel_vbar.config(command=map_st_sel_canvas_yview_wrapper)
 
         self.map_supertile_selector_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         map_st_sel_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
@@ -2885,7 +2874,9 @@ class TileEditorApp:
         self.map_supertile_selector_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.map_supertile_selector_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
         
-        self.map_editor_palette_pane_container.bind("<Configure>", self._on_palette_pane_configure_for_redraw_only)
+        # Bind the entire pane container to the generalized configure handler.
+        self.map_editor_palette_pane_container.bind("<Configure>", self._on_resizable_selector_pane_configure)
+        
         self.map_paned_window.bind("<ButtonRelease-1>", self._enforce_palette_min_width_on_release)
 
     # --- Use this as the SINGLE definition for setting up bindings ---
@@ -11563,33 +11554,42 @@ class TileEditorApp:
         else:
             self.debug("[DEBUG] confirm_quit: Quit cancelled by user or save process.")
 
-    def _on_palette_pane_configure_for_redraw_only(self, event=None):
-        # Called when the palette pane in the map editor is resized.
-        # Solely responsible for debouncing the redraw of its content (map_supertile_selector_canvas).
+    def _on_resizable_selector_pane_configure(self, event=None):
+        # Debounced callback for when ANY resizable selector pane is configured.
+        widget_that_was_configured = event.widget
         
-        current_pane_event_width = getattr(event, 'width', 'N/A') # Get width if event is provided
-        self.debug(f"[DEBUG] _on_palette_pane_configure_for_redraw_only: Event (width={current_pane_event_width}). Scheduling selector redraw.")
-
-        if hasattr(self, '_palette_pane_resize_timer') and self._palette_pane_resize_timer is not None:
+        # Store the timer ID on the widget itself to handle multiple instances.
+        if hasattr(widget_that_was_configured, '_resize_timer_id') and widget_that_was_configured._resize_timer_id is not None:
             try:
-                self.root.after_cancel(self._palette_pane_resize_timer)
-            except tk.TclError: pass 
+                self.root.after_cancel(widget_that_was_configured._resize_timer_id)
+            except tk.TclError:
+                pass
         
-        if not hasattr(self, '_palette_pane_resize_timer'): 
-            self._palette_pane_resize_timer = None
-            
-        self._palette_pane_resize_timer = self.root.after(100, self._redraw_map_supertile_selector_debounced)
-        self.debug(f"[DEBUG] === _on_palette_pane_configure_for_redraw_only END ===") # Optional: reduce log noise
+        # Pass the specific widget to the debounced function.
+        widget_that_was_configured._resize_timer_id = self.root.after(
+            100, lambda w=widget_that_was_configured: self._redraw_selector_debounced(w)
+        )
 
-    def _redraw_map_supertile_selector_debounced(self):
-        # Actual redraw function called by the debouncer.
-        self._palette_pane_resize_timer = None # Clear timer ID
-        if hasattr(self, 'map_supertile_selector_canvas') and \
-           self.map_supertile_selector_canvas.winfo_exists():
-            self.debug("[DEBUG] Palette pane configured, redrawing map_supertile_selector_canvas.")
-            self.draw_supertile_selector(self.map_supertile_selector_canvas, selected_supertile_for_map)
-        else:
-            self.debug("[DEBUG] Palette pane configured, but map_supertile_selector_canvas not ready/exists.")
+    def _redraw_selector_debounced(self, selector_container):
+        # Redraws the appropriate selector canvas based on the container widget.
+        if not selector_container or not selector_container.winfo_exists():
+            return
+
+        selector_container._resize_timer_id = None
+        
+        canvas_to_redraw = None
+        highlight_index = -1
+
+        # Identify which canvas to redraw.
+        if selector_container == getattr(self, 'map_editor_palette_pane_container', None):
+            canvas_to_redraw = getattr(self, 'map_supertile_selector_canvas', None)
+            highlight_index = selected_supertile_for_map
+        elif selector_container.winfo_name() == "st_editor_selector_frame":
+            canvas_to_redraw = getattr(self, 'supertile_selector_canvas', None)
+            highlight_index = current_supertile_index
+
+        if canvas_to_redraw and canvas_to_redraw.winfo_exists():
+            self.draw_supertile_selector(canvas_to_redraw, highlight_index)
 
     def _enforce_palette_min_width_on_release(self, event=None):
         # Called on ButtonRelease-1 on the PanedWindow.
