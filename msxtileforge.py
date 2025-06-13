@@ -7397,9 +7397,15 @@ class TileEditorApp:
             # Only update state and cursor if Ctrl wasn't already considered pressed
             if not self.is_ctrl_pressed:
                 self.is_ctrl_pressed = True
-                # Update cursor only if no mouse action is currently happening
-                # If a mouse button is down, let the existing action determine cursor
-                if self.current_mouse_action is None:
+                # If a tile/supertile drag is active, change the cursor
+                if self.drag_active and self.drag_item_type in ["tile", "supertile"]:
+                    if self.drag_canvas and self.drag_canvas.winfo_exists():
+                        try:
+                            self.drag_canvas.config(cursor="exchange")
+                        except tk.TclError:
+                            pass
+                # Otherwise, update the map cursor normally
+                elif self.current_mouse_action is None:
                     self._update_map_cursor()
 
     def handle_ctrl_release(self, event):
@@ -7409,10 +7415,19 @@ class TileEditorApp:
             # Only update state if Ctrl was actually considered pressed
             if self.is_ctrl_pressed:
                 self.is_ctrl_pressed = False
-                # If panning was the current action, stop it.
-                # Window dragging/resizing continues until mouse release even if Ctrl comes up.
-                if self.current_mouse_action == "panning":
+                
+                # If a tile/supertile drag is active, change the cursor back
+                if self.drag_active and self.drag_item_type in ["tile", "supertile"]:
+                    if self.drag_canvas and self.drag_canvas.winfo_exists():
+                        try:
+                            self.drag_canvas.config(cursor="target")
+                        except tk.TclError:
+                            pass
+                # Handle map-related actions
+                elif self.current_mouse_action == "panning":
                     self.current_mouse_action = None
+                
+                # Update the map cursor for other cases (e.g., hinting)
                 self._update_map_cursor()
 
     def handle_pan_start(self, event):
@@ -9192,8 +9207,10 @@ class TileEditorApp:
                             other_highlight_idx_st = current_supertile_index
                         self.draw_supertile_selector(self.drag_canvas, other_highlight_idx_st) # Pass original selection
                 try:
+                    # Set initial cursor based on whether CTRL is already pressed
                     if canvas_motion.winfo_exists():
-                        canvas_motion.config(cursor="target")
+                        initial_cursor = "exchange" if self.is_ctrl_pressed else "target"
+                        canvas_motion.config(cursor=initial_cursor)
                 except tk.TclError: pass
             else:
                 return # Threshold not met
@@ -9264,8 +9281,11 @@ class TileEditorApp:
                     fill="yellow", width=3, tags="drop_indicator"
                 )
         try:
-            if canvas_motion.winfo_exists() and canvas_motion.cget("cursor") != "target":
-                 canvas_motion.config(cursor="target")
+            # Update cursor based on CTRL state during motion
+            if canvas_motion.winfo_exists():
+                new_cursor = "exchange" if self.is_ctrl_pressed else "target"
+                if canvas_motion.cget("cursor") != new_cursor:
+                     canvas_motion.config(cursor=new_cursor)
         except tk.TclError: pass
 
     def handle_viewer_drag_release(self, event):
