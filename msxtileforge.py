@@ -2562,11 +2562,9 @@ class TileEditorApp:
         self.st_tab_selected_tile_info_label = ttk.Label(st_tab_tile_info_frame, text="Tile: 0")
         self.st_tab_selected_tile_info_label.grid(row=0, column=1, padx=5, sticky="nw")
 
-        # --- MODIFICATION START ---
         self.st_tab_global_usage_label = tk.Label(st_tab_tile_info_frame, text="Used: N/A", anchor="w", justify=tk.LEFT)
         self.st_tab_global_usage_label.grid(row=1, column=1, padx=5, sticky="nw")
         self.st_tab_global_usage_label.bind("<Button-1>", self._handle_st_tab_global_usage_click)
-        # --- MODIFICATION END ---
 
         self.st_tab_local_usage_label = ttk.Label(st_tab_tile_info_frame, text="Used in this ST: N/A")
         self.st_tab_local_usage_label.grid(row=2, column=1, padx=5, sticky="nw")
@@ -2650,18 +2648,20 @@ class TileEditorApp:
         main_frame.grid_columnconfigure(1, weight=1)
         main_frame.grid_rowconfigure(0, weight=1)
 
+        # --- BEGIN MODIFICATION ---
+        # The widgets inside right_frame will now be laid out with .pack() instead of .grid()
+        # This decouples their widths and allows the PanedWindow to fill all available space.
+
         tileset_viewer_frame = ttk.LabelFrame(
             right_frame, text="Tileset (Click to select tile to draw supertile)"
         )
-        tileset_viewer_frame.grid(
-            row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E), pady=(0, 10)
-        )
-        right_frame.grid_rowconfigure(0, weight=1) 
+        # The tileset viewer fills the horizontal space but does NOT expand vertically.
+        tileset_viewer_frame.pack(side=tk.TOP, fill=tk.X, expand=False, pady=(0, 10))
 
+        # The rest of the tileset_viewer_frame's internal .grid() layout is unchanged.
         viewer_canvas_width_tiles = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + 1) + 1
         num_rows_in_tile_viewer = math.ceil(MAX_TILES / NUM_TILES_ACROSS) 
         viewer_canvas_height_tiles = num_rows_in_tile_viewer * (VIEWER_TILE_SIZE + 1) + 1
-
         st_viewer_hbar = ttk.Scrollbar(tileset_viewer_frame, orient=tk.HORIZONTAL)
         st_viewer_vbar = ttk.Scrollbar(tileset_viewer_frame, orient=tk.VERTICAL)
         self.st_tileset_canvas = tk.Canvas(
@@ -2671,7 +2671,6 @@ class TileEditorApp:
             xscrollcommand=st_viewer_hbar.set,
             yscrollcommand=st_viewer_vbar.set,
         )
-
         st_viewer_hbar.config(command=self.st_tileset_canvas.xview)
         st_viewer_vbar.config(command=self.st_tileset_canvas.yview)
         self.st_tileset_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
@@ -2679,22 +2678,32 @@ class TileEditorApp:
         st_viewer_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
         tileset_viewer_frame.grid_rowconfigure(0, weight=1)
         tileset_viewer_frame.grid_columnconfigure(0, weight=1)
-
         self.st_tileset_canvas.bind("<Button-1>", self.handle_st_tileset_click)
         self.st_tileset_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
-        self.st_tileset_canvas.bind(
-            "<ButtonRelease-1>", self.handle_viewer_drag_release
-        )
+        self.st_tileset_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
         self.st_tileset_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+")
         self.st_tileset_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.st_tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
-        st_selector_frame = ttk.LabelFrame(
-            right_frame, text="Supertile Selector (Click to select for edition)"
-        )
-        st_selector_frame.grid(row=1, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
-        right_frame.grid_rowconfigure(1, weight=1) 
+        # The bottom controls are packed last, filling horizontally but not expanding vertically.
+        bottom_controls_frame = ttk.Frame(right_frame)
+        bottom_controls_frame.pack(side=tk.BOTTOM, fill=tk.X, expand=False, pady=(5, 0))
 
+        # The PanedWindow is packed in the middle. It fills ALL remaining space,
+        # both horizontally and vertically. This is the key change.
+        st_editor_paned_window = ttk.PanedWindow(right_frame, orient=tk.HORIZONTAL)
+        st_editor_paned_window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # The children of the PanedWindow are created and .add()ed as before.
+        st_selector_frame = ttk.LabelFrame(
+            st_editor_paned_window, text="Supertile Selector (Click to select for edition)"
+        )
+        st_editor_paned_window.add(st_selector_frame, weight=1)
+
+        inert_panel = ttk.Frame(st_editor_paned_window)
+        st_editor_paned_window.add(inert_panel, weight=1)
+
+        # The internal layout of st_selector_frame and bottom_controls_frame is unchanged.
         target_selector_width = 256 
         self.supertile_selector_canvas = tk.Canvas(
             st_selector_frame,
@@ -2704,76 +2713,54 @@ class TileEditorApp:
         )
         st_sel_hbar = ttk.Scrollbar(st_selector_frame, orient=tk.HORIZONTAL)
         st_sel_vbar = ttk.Scrollbar(st_selector_frame, orient=tk.VERTICAL)
-        
         def st_sel_canvas_xview_wrapper(*args):
             self.debug(f"[DEBUG] ST Editor - Supertile Selector XScrollbar: args={args}")
             self.supertile_selector_canvas.xview(*args)
             self.draw_supertile_selector(self.supertile_selector_canvas, current_supertile_index)
-
-
         def st_sel_canvas_yview_wrapper(*args):
             self.debug(f"[DEBUG] ST Editor - Supertile Selector YScrollbar: args={args}")
             self.supertile_selector_canvas.yview(*args)
             self.draw_supertile_selector(self.supertile_selector_canvas, current_supertile_index)
-
         self.supertile_selector_canvas.config(
             xscrollcommand=st_sel_hbar.set,
             yscrollcommand=st_sel_vbar.set
         )
         st_sel_hbar.config(command=st_sel_canvas_xview_wrapper)
         st_sel_vbar.config(command=st_sel_canvas_yview_wrapper)
-
-        self.supertile_selector_canvas.grid(
-            row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E)
-        )
+        self.supertile_selector_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         st_sel_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         st_sel_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
         st_selector_frame.grid_rowconfigure(0, weight=1)
         st_selector_frame.grid_columnconfigure(0, weight=1)
-
-        self.supertile_selector_canvas.bind(
-            "<Button-1>", self.handle_supertile_selector_click
-        )
-        self.supertile_selector_canvas.bind(
-            "<B1-Motion>", self.handle_viewer_drag_motion
-        )
-        self.supertile_selector_canvas.bind(
-            "<ButtonRelease-1>", self.handle_viewer_drag_release
-        )
+        self.supertile_selector_canvas.bind("<Button-1>", self.handle_supertile_selector_click)
+        self.supertile_selector_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
+        self.supertile_selector_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
         self.supertile_selector_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+")
         self.supertile_selector_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.supertile_selector_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
-        bottom_controls_frame = ttk.Frame(right_frame)
-        bottom_controls_frame.grid(
-            row=2, column=0, sticky="ew", pady=(5, 0)
-        )
-        right_frame.grid_rowconfigure(2, weight=0)
-
+        # The internal layout of bottom_controls_frame is unchanged.
         self.add_supertile_button = ttk.Button(
             bottom_controls_frame, text="Add New", command=self.handle_add_supertile
         )
         self.add_supertile_button.pack(side=tk.LEFT, padx=(0, 3))
-
         self.add_many_supertiles_button = ttk.Button(
             bottom_controls_frame, text="Add Many...", command=self.handle_add_many_supertiles
         )
         self.add_many_supertiles_button.pack(side=tk.LEFT, padx=3)
-
         self.insert_supertile_button = ttk.Button(
             bottom_controls_frame, text="Insert", command=self.handle_insert_supertile
         )
         self.insert_supertile_button.pack(side=tk.LEFT, padx=3)
-
         self.delete_supertile_button = ttk.Button(
             bottom_controls_frame, text="Delete", command=self.handle_delete_supertile
         )
         self.delete_supertile_button.pack(side=tk.LEFT, padx=3)
-
         self.supertile_sel_info_label = ttk.Label(
             bottom_controls_frame, text=f"Supertiles: {num_supertiles}" 
         )
         self.supertile_sel_info_label.pack(side=tk.LEFT, anchor=tk.W, padx=(10, 0))
+        # --- END MODIFICATION ---
 
     def create_map_editor_widgets(self, parent_frame):
         main_frame = ttk.Frame(parent_frame)
