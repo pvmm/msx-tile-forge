@@ -2320,7 +2320,7 @@ class TileEditorApp:
         self.editor_canvas.bind("<Leave>", self._reset_cursor)
 
         self.editor_canvas.bind("<ButtonRelease-1>", self._handle_editor_paint_release, add="+")
-        self.editor_canvas.bind("<ButtonRelease-3>", self._handle_editor_paint_release, add="+") # Also for right-button drag painting
+        self.editor_canvas.bind("<ButtonRelease-3>", self._handle_editor_paint_release, add="+")
 
         fg_bg_buttons_container = ttk.Frame(editor_frame)
         fg_bg_buttons_container.grid(row=0, column=1, sticky=(tk.N, tk.S), padx=(10, 0))
@@ -2358,7 +2358,6 @@ class TileEditorApp:
             
             self.attr_row_frames.append(row_control_frame)
 
-        # --- Selected Tile Info Frame ---
         selected_tile_info_frame = ttk.LabelFrame(left_frame, text="Selected Tile Info")
         selected_tile_info_frame.grid(row=1, column=0, pady=(10, 5), sticky="ew")
         
@@ -2377,12 +2376,9 @@ class TileEditorApp:
         self.selected_tile_info_label = ttk.Label(selected_tile_info_frame, text="Tile: 0")
         self.selected_tile_info_label.grid(row=0, column=1, padx=5, sticky="sw")
         
-        # This label now exists but we are removing its local font creation logic.
         self.selected_tile_usage_label = tk.Label(selected_tile_info_frame, text="Used: N/A", anchor="w", justify=tk.LEFT)
         self.selected_tile_usage_label.grid(row=1, column=1, padx=5, sticky="nw")
         self.selected_tile_usage_label.bind("<Button-1>", self._handle_tile_usage_label_click)
-        # The font objects 'self.tile_usage_label_normal_font' and 'self.tile_usage_label_link_font'
-        # will now be removed from this method.
         
         selected_tile_info_frame.grid_rowconfigure(0, weight=1)
         selected_tile_info_frame.grid_rowconfigure(1, weight=1)
@@ -2433,10 +2429,14 @@ class TileEditorApp:
         main_frame.grid_columnconfigure(0, weight=0) 
         main_frame.grid_columnconfigure(1, weight=1) 
 
+        # Change columnconfigure for right_frame to prevent horizontal expansion.
+        right_frame.grid_columnconfigure(0, weight=0) # Changed from 1 to 0
+        right_frame.grid_rowconfigure(3, weight=1) # Let empty space go to the bottom
+
         palette_frame = ttk.LabelFrame(
             right_frame, text="Color Selector (Click to select color for FG/BG)"
         )
-        palette_frame.grid(row=0, column=0, pady=(0, 10), sticky=(tk.N, tk.W, tk.E))
+        palette_frame.grid(row=0, column=0, pady=(0, 10), sticky="nw") # Use "nw" anchor
         self.tile_editor_palette_canvas = tk.Canvas(
             palette_frame,
             width=4 * (PALETTE_SQUARE_SIZE + 2) + 2,
@@ -2450,22 +2450,24 @@ class TileEditorApp:
         )
 
         viewer_frame = ttk.LabelFrame(right_frame, text="Tileset (Click to select for edition)")
-        viewer_frame.grid(row=1, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
+        viewer_frame.grid(row=1, column=0, pady=(0,10), sticky="nw") # Use "nw" anchor
+        
         right_frame.grid_rowconfigure(0, weight=0) 
-        right_frame.grid_rowconfigure(1, weight=1) 
-        right_frame.grid_rowconfigure(2, weight=0) 
-        right_frame.grid_rowconfigure(3, weight=0)
-        right_frame.grid_columnconfigure(0, weight=1) 
+        right_frame.grid_rowconfigure(1, weight=0) 
+        right_frame.grid_rowconfigure(2, weight=0)
 
-        viewer_canvas_width = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + 1) + 1
-        num_rows_in_viewer = math.ceil(MAX_TILES / NUM_TILES_ACROSS)
-        viewer_canvas_height = num_rows_in_viewer * (VIEWER_TILE_SIZE + 1) + 1
+        padding = 1
+        num_rows_fixed = 16
+        fixed_viewer_width = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + padding) + padding
+        fixed_viewer_height = num_rows_fixed * (VIEWER_TILE_SIZE + padding) + padding
+        
         viewer_hbar = ttk.Scrollbar(viewer_frame, orient=tk.HORIZONTAL)
         viewer_vbar = ttk.Scrollbar(viewer_frame, orient=tk.VERTICAL)
         self.tileset_canvas = tk.Canvas(
             viewer_frame,
             bg="lightgrey",
-            scrollregion=(0, 0, viewer_canvas_width, viewer_canvas_height),
+            width=fixed_viewer_width,
+            height=fixed_viewer_height,
             xscrollcommand=viewer_hbar.set,
             yscrollcommand=viewer_vbar.set,
         )
@@ -2485,7 +2487,7 @@ class TileEditorApp:
         self.tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")   
 
         tile_button_frame = ttk.Frame(right_frame)
-        tile_button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        tile_button_frame.grid(row=2, column=0, sticky="nw", pady=(5, 0)) # Use "nw" anchor
 
         self.add_tile_button = ttk.Button(
             tile_button_frame, text="Add New", command=self.handle_add_tile
@@ -2648,24 +2650,28 @@ class TileEditorApp:
         main_frame.grid_columnconfigure(1, weight=1)
         main_frame.grid_rowconfigure(0, weight=1)
         
-        # Use .pack() for vertical stacking and independent horizontal filling.
         tileset_viewer_frame = ttk.LabelFrame(
             right_frame, text="Tileset (Click to select tile to draw supertile)"
         )
-        tileset_viewer_frame.pack(side=tk.TOP, fill=tk.X, expand=False, pady=(0, 10))
+        # Use pack with anchor="nw" to align left and prevent horizontal/vertical expansion.
+        tileset_viewer_frame.pack(side=tk.TOP, expand=False, pady=(0, 10), anchor="nw")
 
-        viewer_canvas_width_tiles = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + 1) + 1
-        num_rows_in_tile_viewer = math.ceil(MAX_TILES / NUM_TILES_ACROSS) 
-        viewer_canvas_height_tiles = num_rows_in_tile_viewer * (VIEWER_TILE_SIZE + 1) + 1
+        padding = 1
+        num_rows_fixed = 16
+        fixed_viewer_width = NUM_TILES_ACROSS * (VIEWER_TILE_SIZE + padding) + padding
+        fixed_viewer_height = num_rows_fixed * (VIEWER_TILE_SIZE + padding) + padding
+        
         st_viewer_hbar = ttk.Scrollbar(tileset_viewer_frame, orient=tk.HORIZONTAL)
         st_viewer_vbar = ttk.Scrollbar(tileset_viewer_frame, orient=tk.VERTICAL)
         self.st_tileset_canvas = tk.Canvas(
             tileset_viewer_frame,
             bg="lightgrey",
-            scrollregion=(0, 0, viewer_canvas_width_tiles, viewer_canvas_height_tiles),
+            width=fixed_viewer_width,
+            height=fixed_viewer_height,
             xscrollcommand=st_viewer_hbar.set,
             yscrollcommand=st_viewer_vbar.set,
         )
+
         st_viewer_hbar.config(command=self.st_tileset_canvas.xview)
         st_viewer_vbar.config(command=self.st_tileset_canvas.yview)
         self.st_tileset_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
@@ -2673,9 +2679,12 @@ class TileEditorApp:
         st_viewer_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
         tileset_viewer_frame.grid_rowconfigure(0, weight=1)
         tileset_viewer_frame.grid_columnconfigure(0, weight=1)
+
         self.st_tileset_canvas.bind("<Button-1>", self.handle_st_tileset_click)
         self.st_tileset_canvas.bind("<B1-Motion>", self.handle_viewer_drag_motion)
-        self.st_tileset_canvas.bind("<ButtonRelease-1>", self.handle_viewer_drag_release)
+        self.st_tileset_canvas.bind(
+            "<ButtonRelease-1>", self.handle_viewer_drag_release
+        )
         self.st_tileset_canvas.bind("<MouseWheel>", self._on_mousewheel_scroll, add="+")
         self.st_tileset_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.st_tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
@@ -2688,11 +2697,10 @@ class TileEditorApp:
 
         st_selector_frame = ttk.LabelFrame(
             st_editor_paned_window, text="Supertile Selector (Click to select for edition)",
-            name="st_editor_selector_frame" # Unique name for identification.
+            name="st_editor_selector_frame"
         )
         st_editor_paned_window.add(st_selector_frame, weight=1)
         
-        # Bind the resizable frame to the generalized configure handler.
         st_selector_frame.bind("<Configure>", self._on_resizable_selector_pane_configure)
         
         inert_panel = ttk.Frame(st_editor_paned_window)
