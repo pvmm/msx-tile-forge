@@ -8897,8 +8897,6 @@ class TileEditorApp:
             self.debug(f"[DEBUG]Error: Invalid source index {source_index_tile} for tile move.")
             return False
         
-        # Clamp target_index_tile to be within valid bounds for insertion [0, num_tiles_in_set]
-        # If target_index_tile == num_tiles_in_set, it means move to the very end.
         clamped_target_index_tile = max(0, min(target_index_tile, num_tiles_in_set))
 
         if source_index_tile == clamped_target_index_tile or \
@@ -8908,17 +8906,15 @@ class TileEditorApp:
              elif source_index_tile == clamped_target_index_tile :
                   return False # No move needed if source is already at target (and not the special end case)
 
-
         self.debug(f"[DEBUG]Repositioning Tile: From {source_index_tile} to {clamped_target_index_tile}")
 
         moved_pattern_data = tileset_patterns.pop(source_index_tile)
         moved_colors_data = tileset_colors.pop(source_index_tile)
 
-        # Actual insertion index if target was after source (due to pop)
-        actual_insert_idx = clamped_target_index_tile
-        if clamped_target_index_tile > source_index_tile:
-            actual_insert_idx -= 1
-        actual_insert_idx = max(0, actual_insert_idx) # Ensure not negative after adjustment
+        # The actual insertion index must be clamped to the new list length.
+        # After pop, the length is num_tiles_in_set - 1. The max valid insert index is this length.
+        new_list_len = len(tileset_patterns)
+        actual_insert_idx = min(clamped_target_index_tile, new_list_len)
 
         tileset_patterns.insert(actual_insert_idx, moved_pattern_data)
         tileset_colors.insert(actual_insert_idx, moved_colors_data)
@@ -9002,10 +8998,8 @@ class TileEditorApp:
 
         moved_st_definition = supertiles_data.pop(source_index_st) # Global
 
-        actual_insert_idx_st = clamped_target_index_st
-        if clamped_target_index_st > source_index_st:
-            actual_insert_idx_st -= 1
-        actual_insert_idx_st = max(0, actual_insert_idx_st)
+        new_list_len = len(supertiles_data)
+        actual_insert_idx_st = min(clamped_target_index_st, new_list_len)
 
         supertiles_data.insert(actual_insert_idx_st, moved_st_definition) # Global
 
