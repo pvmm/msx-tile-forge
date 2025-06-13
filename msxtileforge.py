@@ -9199,7 +9199,7 @@ class TileEditorApp:
                         self.draw_supertile_selector(self.drag_canvas, other_highlight_idx_st) # Pass original selection
                 try:
                     if canvas_motion.winfo_exists():
-                        canvas_motion.config(cursor="hand2")
+                        canvas_motion.config(cursor="target")
                 except tk.TclError: pass
             else:
                 return # Threshold not met
@@ -9270,8 +9270,8 @@ class TileEditorApp:
                     fill="yellow", width=3, tags="drop_indicator"
                 )
         try:
-            if canvas_motion.winfo_exists() and canvas_motion.cget("cursor") != "hand2":
-                 canvas_motion.config(cursor="hand2")
+            if canvas_motion.winfo_exists() and canvas_motion.cget("cursor") != "target":
+                 canvas_motion.config(cursor="target")
         except tk.TclError: pass
 
     def handle_viewer_drag_release(self, event):
