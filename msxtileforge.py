@@ -2129,7 +2129,6 @@ class TileEditorApp:
             state=tk.DISABLED,
             accelerator="Ctrl+V",
         )
-        self.paste_menu_item_index = 1
         self.edit_menu.add_separator()
         self.edit_menu.add_command(
             label="Clear Current Tile", command=self.clear_current_tile
@@ -2167,6 +2166,10 @@ class TileEditorApp:
         import_menu.add_command(
             label="Import Tiles from ROM...", 
             command=self.open_rom_importer
+        )
+        import_menu.add_command(
+            label="Import Tiles from Image...",
+            command=self.import_tiles_from_image
         )
 
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -14178,6 +14181,441 @@ class TileEditorApp:
                     map_data[r][c] = index_b
                 elif row[c] == index_b:
                     map_data[r][c] = index_a
+
+    def _display_import_from_image_dialog(self):
+        """
+        Displays a modal dialog for the user to choose image import options.
+        Returns a tuple: (choice_string, ignore_duplicates_bool) or (None, None) if cancelled.
+        """
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Image Import Options")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        result = {"choice": None, "ignore_dupes": False}
+
+        main_frame = ttk.Frame(dialog, padding="15")
+        main_frame.pack(expand=True, fill="both")
+
+        warning_text = (
+            "This will replace the current tileset and palette with content derived "
+            "from the image.\n\nThis action cannot be undone."
+        )
+        ttk.Label(main_frame, text=warning_text, justify=tk.LEFT, wraplength=400).pack(pady=(0, 15))
+
+        # --- Palette Options ---
+        options_frame = ttk.LabelFrame(main_frame, text="Palette Generation Method")
+        options_frame.pack(pady=5, fill="x")
+        choice_var = tk.StringVar(value="use_current")
+        
+        ttk.Radiobutton(
+            options_frame, 
+            text="Use Current Active Palette",
+            value="use_current", 
+            variable=choice_var
+        ).pack(anchor="w", padx=10, pady=3)
+
+        ttk.Radiobutton(
+            options_frame, 
+            text="Generate New 16-Color Palette (from image)",
+            value="generate_new", 
+            variable=choice_var
+        ).pack(anchor="w", padx=10, pady=3)
+        
+        ttk.Radiobutton(
+            options_frame, 
+            text="Generate New 16-Color Palette with Dithering",
+            value="generate_dither", 
+            variable=choice_var
+        ).pack(anchor="w", padx=10, pady=3)
+
+        # --- Other Options ---
+        other_options_frame = ttk.LabelFrame(main_frame, text="Import Options")
+        other_options_frame.pack(pady=(10, 5), fill="x")
+        ignore_dupes_var = tk.BooleanVar(value=True)
+        
+        ttk.Checkbutton(
+            other_options_frame,
+            text="Ignore duplicate tiles",
+            variable=ignore_dupes_var
+        ).pack(anchor="w", padx=10, pady=3)
+
+        # --- Buttons ---
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(15, 0))
+
+        def on_ok():
+            result["choice"] = choice_var.get()
+            result["ignore_dupes"] = ignore_dupes_var.get()
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy() # result values remain None/False
+
+        ok_button = ttk.Button(button_frame, text="Import", command=on_ok)
+        ok_button.pack(side=tk.LEFT, padx=10)
+        cancel_button = ttk.Button(button_frame, text="Cancel", command=on_cancel)
+        cancel_button.pack(side=tk.LEFT, padx=10)
+
+        dialog.bind("<Return>", lambda e: on_ok())
+        dialog.bind("<Escape>", lambda e: on_cancel())
+
+        # Center dialog
+        self.root.update_idletasks()
+        dialog.update_idletasks()
+        root_x, root_y = self.root.winfo_rootx(), self.root.winfo_rooty()
+        root_w, root_h = self.root.winfo_width(), self.root.winfo_height()
+        dialog_w, dialog_h = dialog.winfo_reqwidth(), dialog.winfo_reqheight()
+        x_pos = root_x + (root_w - dialog_w) // 2
+        y_pos = root_y + (root_h - dialog_h) // 2
+        dialog.geometry(f"+{x_pos}+{y_pos}")
+
+        dialog.wait_window()
+        return result["choice"], result["ignore_dupes"]
+
+    def _quantize_image_to_palette(self, source_image, target_palette_pil, dither):
+        """
+        Quantizes an image to a given Pillow palette.
+
+        Args:
+            source_image (PIL.Image): The source image to quantize.
+            target_palette_pil (PIL.Image): A 1x256 'P' mode palette image.
+            dither (bool): Whether to apply Floyd-Steinberg dithering.
+
+        Returns:
+            PIL.Image: The quantized 'P' mode image.
+        """
+        # Ensure the source image is in RGB mode for quantization
+        if source_image.mode != "RGB":
+            source_image = source_image.convert("RGB")
+        
+        dither_method = Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE
+
+        # Perform the quantization. This maps every pixel in the source image
+        # to the closest color in the provided palette image.
+        quantized_image = source_image.quantize(
+            palette=target_palette_pil,
+            dither=dither_method
+        )
+        
+        return quantized_image
+
+    def _generate_palette_from_image(self, source_image):
+        """
+        Generates an optimized 16-color palette from a source image.
+
+        Args:
+            source_image (PIL.Image): The image to analyze.
+
+        Returns:
+            list: A list of 16 (r, g, b) tuples representing the new palette.
+        """
+        # Use Pillow's built-in functionality to create an optimized 16-color palette
+        # This returns a new image in 'P' (palette) mode.
+        palette_image = source_image.quantize(colors=16, dither=Image.Dither.NONE)
+        
+        # The palette data is stored as a flat list [r1,g1,b1, r2,g2,b2, ...]
+        palette_flat = palette_image.getpalette()
+        
+        # Convert the flat list into a list of (r, g, b) tuples
+        new_palette = []
+        for i in range(0, 16 * 3, 3):
+            new_palette.append(tuple(palette_flat[i:i+3]))
+            
+        return new_palette
+
+    def _convert_row_to_msx_format(self, pixel_row_indices, full_palette_rgb, dither):
+        """
+        Converts a list of 8 palette indices into a valid MSX row format.
+        This involves reducing colors to 2 per row, with optional dithering.
+
+        Args:
+            pixel_row_indices (list): A list of 8 integers (palette indices).
+            full_palette_rgb (list): The full list of 16 (r,g,b) tuples for the target palette.
+            dither (bool): Whether to apply 1D dithering for color reduction.
+
+        Returns:
+            tuple: (pattern_byte, fg_index, bg_index)
+        """
+        from collections import Counter
+
+        unique_colors_in_row = Counter(pixel_row_indices)
+        num_unique_colors = len(unique_colors_in_row)
+
+        if num_unique_colors <= 1:
+            # Simple case: 0 or 1 color in the row
+            fg_idx = pixel_row_indices[0] if num_unique_colors == 1 else WHITE_IDX
+            bg_idx = BLACK_IDX
+            pattern = 0xFF if num_unique_colors == 1 else 0x00
+            return (pattern, fg_idx, bg_idx)
+
+        elif num_unique_colors == 2:
+            # Simple case: Exactly 2 colors, they become FG and BG
+            color1, color2 = unique_colors_in_row.keys()
+            # Assign FG/BG based on palette index (higher index is typically brighter)
+            fg_idx = max(color1, color2)
+            bg_idx = min(color1, color2)
+            pattern = 0
+            for i, px_idx in enumerate(pixel_row_indices):
+                if px_idx == fg_idx:
+                    pattern |= (1 << (7 - i))
+            return (pattern, fg_idx, bg_idx)
+
+        else: # Complex case: > 2 colors, must reduce
+            # Find the two most frequent colors to be the new FG/BG
+            most_common = unique_colors_in_row.most_common(2)
+            color1_idx = most_common[0][0]
+            color2_idx = most_common[1][0]
+
+            final_fg_idx = max(color1_idx, color2_idx)
+            final_bg_idx = min(color1_idx, color2_idx)
+
+            final_fg_rgb = full_palette_rgb[final_fg_idx]
+            final_bg_rgb = full_palette_rgb[final_bg_idx]
+
+            output_pattern = 0
+            
+            if not dither:
+                # No dithering: just map each original pixel to the closest of the two final colors
+                for i, original_px_idx in enumerate(pixel_row_indices):
+                    original_rgb = full_palette_rgb[original_px_idx]
+                    
+                    # Simple distance calculation (sum of squared differences)
+                    dist_to_fg = sum((a - b)**2 for a, b in zip(original_rgb, final_fg_rgb))
+                    dist_to_bg = sum((a - b)**2 for a, b in zip(original_rgb, final_bg_rgb))
+                    
+                    if dist_to_fg <= dist_to_bg:
+                        output_pattern |= (1 << (7 - i)) # Set bit for FG
+            
+            else:
+                # 1D Dithering: Propagate error to the right
+                error_rgb = [0.0, 0.0, 0.0] # [r, g, b] error
+                
+                for i, original_px_idx in enumerate(pixel_row_indices):
+                    original_rgb = full_palette_rgb[original_px_idx]
+                    
+                    # Apply propagated error to the current pixel's color
+                    modified_rgb = [
+                        original_rgb[0] + error_rgb[0],
+                        original_rgb[1] + error_rgb[1],
+                        original_rgb[2] + error_rgb[2]
+                    ]
+
+                    # Find the closest of the two final colors to the modified color
+                    dist_to_fg = sum((a - b)**2 for a, b in zip(modified_rgb, final_fg_rgb))
+                    dist_to_bg = sum((a - b)**2 for a, b in zip(modified_rgb, final_bg_rgb))
+
+                    chosen_rgb = final_fg_rgb
+                    if dist_to_fg <= dist_to_bg:
+                        output_pattern |= (1 << (7 - i)) # Set bit for FG
+                    else:
+                        chosen_rgb = final_bg_rgb
+                        
+                    # Calculate the new error and propagate it
+                    error_rgb = [
+                        modified_rgb[0] - chosen_rgb[0],
+                        modified_rgb[1] - chosen_rgb[1],
+                        modified_rgb[2] - chosen_rgb[2]
+                    ]
+
+            return (output_pattern, final_fg_idx, final_bg_idx)
+
+    def import_tiles_from_image(self):
+        """
+        Main controller for the 'Import from Image' feature.
+        """
+        # 1. Ask user to select an image file
+        image_filepath = filedialog.askopenfilename(
+            title="Select Image to Import",
+            filetypes=[
+                ("All Supported Images", "*.png *.bmp *.gif *.jpg *.jpeg"),
+                ("PNG files", "*.png"),
+                ("BMP files", "*.bmp"),
+                ("All files", "*.*")
+            ]
+        )
+        if not image_filepath:
+            return
+
+        try:
+            source_image = Image.open(image_filepath)
+        except Exception as e:
+            messagebox.showerror("Image Error", f"Could not open or read image file:\n{e}", parent=self.root)
+            return
+
+        # 2. Validate and crop image dimensions
+        original_w, original_h = source_image.size
+        crop_w = (original_w // TILE_WIDTH) * TILE_WIDTH
+        crop_h = (original_h // TILE_HEIGHT) * TILE_HEIGHT
+
+        if crop_w == 0 or crop_h == 0:
+            messagebox.showerror("Image Error", "Image is too small to extract any 8x8 tiles.", parent=self.root)
+            return
+
+        if crop_w != original_w or crop_h != original_h:
+            messagebox.showinfo(
+                "Image Cropped",
+                f"Image dimensions ({original_w}x{original_h}) are not a multiple of 8.\n"
+                f"It will be cropped to the largest valid area: {crop_w}x{crop_h}.",
+                parent=self.root
+            )
+        
+        # Crop the image in memory to the valid area
+        cropped_image = source_image.crop((0, 0, crop_w, crop_h))
+
+        # 3. Get user's choice for palette and dithering
+        user_choice, ignore_duplicates = self._display_import_from_image_dialog()
+        if user_choice is None:
+            self.debug("Image import cancelled by user at options dialog.")
+            return
+
+        # 4. Prepare the target palette
+        dither_enabled = (user_choice == "generate_dither")
+        target_palette_rgb = []
+        
+        if user_choice == "use_current":
+            # Convert current hex palette to a list of (r,g,b) tuples
+            for hex_color in self.active_msx_palette:
+                r = int(hex_color[1:3], 16)
+                g = int(hex_color[3:5], 16)
+                b = int(hex_color[5:7], 16)
+                target_palette_rgb.append((r, g, b))
+        else: # "generate_new" or "generate_dither"
+            target_palette_rgb = self._generate_palette_from_image(cropped_image)
+            
+        # Create a "P" mode palette image needed for Pillow's quantize function
+        palette_pil = Image.new("P", (1, 1))
+        palette_flat_for_pil = [c for rgb in target_palette_rgb for c in rgb]
+        # Pad palette if it's smaller than 256 colors (Pillow requires this)
+        palette_flat_for_pil.extend([0, 0, 0] * (256 - len(target_palette_rgb)))
+        palette_pil.putpalette(palette_flat_for_pil)
+
+        # 5. Quantize the source image to the target 16-color palette
+        self.debug(f"Quantizing image with dither={dither_enabled}")
+        quantized_image = self._quantize_image_to_palette(cropped_image, palette_pil, dither_enabled)
+
+        # 6. Process the 16-color image into MSX tiles
+        new_tileset_patterns = []
+        new_tileset_colors = []
+        existing_tiles_set = set()
+        duplicates_skipped = 0
+        
+        num_tiles_horiz = crop_w // TILE_WIDTH
+        num_tiles_vert = crop_h // TILE_HEIGHT
+        
+        for ty in range(num_tiles_vert):
+            for tx in range(num_tiles_horiz):
+                if len(new_tileset_patterns) >= MAX_TILES:
+                    break
+
+                tile_box = (tx * TILE_WIDTH, ty * TILE_HEIGHT, (tx + 1) * TILE_WIDTH, (ty + 1) * TILE_HEIGHT)
+                tile_image_8x8 = quantized_image.crop(tile_box)
+                
+                tile_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+                tile_colors_per_row = []
+
+                for r in range(TILE_HEIGHT):
+                    row_pixels = [tile_image_8x8.getpixel((c, r)) for c in range(TILE_WIDTH)]
+                    
+                    pattern_byte, fg_idx, bg_idx = self._convert_row_to_msx_format(row_pixels, target_palette_rgb, dither_enabled)
+                    
+                    tile_colors_per_row.append((fg_idx, bg_idx))
+                    for c in range(TILE_WIDTH):
+                        if (pattern_byte >> (7 - c)) & 1:
+                            tile_pattern[r][c] = 1
+                
+                if ignore_duplicates:
+                    pattern_tuple = tuple(tuple(row) for row in tile_pattern)
+                    colors_tuple = tuple(tile_colors_per_row)
+                    tile_representation = (pattern_tuple, colors_tuple)
+                    
+                    if tile_representation in existing_tiles_set:
+                        duplicates_skipped += 1
+                        continue # Skip this tile, do not append
+                    
+                    existing_tiles_set.add(tile_representation)
+
+                new_tileset_patterns.append(tile_pattern)
+                new_tileset_colors.append(tile_colors_per_row)
+            if len(new_tileset_patterns) >= MAX_TILES:
+                break
+        
+        # 7. Finalize: Replace the application's data
+        self.debug(f"Import process complete. Generated {len(new_tileset_patterns)} unique tiles.")
+        self._clear_marked_unused(trigger_redraw=False)
+        self._mark_project_modified()
+
+        # Update palette
+        self.active_msx_palette = []
+        for r, g, b in target_palette_rgb:
+            self.active_msx_palette.append(f"#{r:02x}{g:02x}{b:02x}")
+        # Pad if less than 16 colors were generated
+        while len(self.active_msx_palette) < 16:
+            self.active_msx_palette.append("#000000")
+
+        # Replace tileset data
+        global num_tiles_in_set, current_tile_index, selected_tile_for_supertile, tileset_patterns, tileset_colors
+        
+        num_tiles_in_set = len(new_tileset_patterns)
+        
+        # Reset selections
+        current_tile_index = 0
+        selected_tile_for_supertile = 0
+        
+        # Clear all supertile definitions since the old tiles are gone
+        self.clear_all_supertiles_non_interactive()
+
+        # Overwrite the global lists
+        tileset_patterns = new_tileset_patterns
+        tileset_colors = new_tileset_colors
+        
+        # Pad the lists up to MAX_TILES to prevent index errors
+        while len(tileset_patterns) < MAX_TILES:
+            tileset_patterns.append([[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)])
+            tileset_colors.append([(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)])
+            
+        self.clear_all_caches()
+        self.invalidate_minimap_background_cache()
+        self.update_all_displays(changed_level="all")
+        self._update_editor_button_states()
+        self._request_color_usage_refresh()
+        self._request_tile_usage_refresh()
+        self._request_supertile_usage_refresh()
+
+        final_message = f"Successfully imported {num_tiles_in_set} tiles from the image."
+        if ignore_duplicates and duplicates_skipped > 0:
+            final_message += f"\n\n({duplicates_skipped} duplicate tiles were ignored.)"
+        messagebox.showinfo("Import Complete", final_message, parent=self.root)
+
+    def clear_all_supertiles_non_interactive(self):
+        """
+        Clears all supertile definitions to point to Tile 0 without user confirmation.
+        Used internally after an image import invalidates the entire tileset.
+        """
+        global supertiles_data, num_supertiles
+
+        self.debug("Performing non-interactive clear of all supertile definitions.")
+        
+        for i in range(num_supertiles):
+            # Recreate the definition based on current project dimensions
+            supertiles_data[i] = [
+                [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
+            ]
+            self.invalidate_supertile_cache(i)
+        
+        # Also clear map data as it references old supertiles that now have different content
+        self.clear_map_non_interactive()
+
+    def clear_map_non_interactive(self):
+        """
+        Clears the map data to all zeros without user confirmation.
+        Used internally after an image import invalidates the entire tileset/supertile set.
+        """
+        global map_data, map_width, map_height
+        self.debug("Performing non-interactive clear of map data.")
+        map_data = [[0 for _ in range(map_width)] for _ in range(map_height)]
+        self.invalidate_minimap_background_cache()
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
