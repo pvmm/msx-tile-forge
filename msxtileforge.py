@@ -9125,7 +9125,6 @@ class TileEditorApp:
                 else:
                     items_across_ind = 1
 
-
             if item_w_ind > 0 and item_h_ind > 0 and items_across_ind > 0:
                 indicator_pos_idx = min(target_idx_motion, max_items_ind) 
                 
@@ -9152,99 +9151,63 @@ class TileEditorApp:
 
         canvas = event.widget
         was_dragging = self.drag_active
-
-        if self.drag_indicator_id:
-            try:
-                if self.drag_canvas and self.drag_canvas.winfo_exists():
-                    self.drag_canvas.delete(self.drag_indicator_id)
-                elif canvas.winfo_exists():
-                    canvas.delete(self.drag_indicator_id)
-            except tk.TclError:
-                pass
-            self.drag_indicator_id = None
-        try:
-            if canvas.winfo_exists():
-                canvas.config(cursor="")
-        except tk.TclError:
-            pass
-
-        item_type = self.drag_item_type
-        max_items = 0
-        if item_type == "tile": max_items = num_tiles_in_set
-        elif item_type == "supertile": max_items = num_supertiles
         
-        source_canvas_type = None
-        if canvas == self.tileset_canvas: source_canvas_type = "tile_editor_main"
-        elif canvas == self.st_tileset_canvas: source_canvas_type = "supertile_editor_tile"
-        elif canvas == self.supertile_selector_canvas: source_canvas_type = "supertile_editor_main"
-        elif canvas == self.map_supertile_selector_canvas: source_canvas_type = "map_editor_palette"
+        try:
+            if not was_dragging:
+                item_type_for_click = self.drag_item_type
+                if item_type_for_click is None: return
 
-        index_at_release = self._get_index_from_canvas_coords(
-            canvas, event.x, event.y, item_type
-        )
+                max_items = 0
+                if item_type_for_click == "tile": max_items = num_tiles_in_set
+                elif item_type_for_click == "supertile": max_items = num_supertiles
 
-        if not was_dragging:
-            if 0 <= index_at_release < max_items:
-                if item_type == "tile":
-                    if source_canvas_type == "tile_editor_main":
-                        if current_tile_index != index_at_release:
-                            current_tile_index = index_at_release
-                            self.update_all_displays(changed_level="tile_select")
-                            self.scroll_viewers_to_tile(current_tile_index)
-                    elif source_canvas_type == "supertile_editor_tile":
-                        if selected_tile_for_supertile != index_at_release:
-                            selected_tile_for_supertile = index_at_release
-                            self.draw_tileset_viewer(canvas, selected_tile_for_supertile)
-                            self._update_st_tab_selected_tile_info_panel()
-                            self.scroll_viewers_to_tile(selected_tile_for_supertile)
-                elif item_type == "supertile":
-                    if source_canvas_type == "supertile_editor_main":
-                        if current_supertile_index != index_at_release:
-                            current_supertile_index = index_at_release
-                            self.update_all_displays(changed_level="supertile")
-                            self.scroll_selectors_to_supertile(current_supertile_index)
-                    elif source_canvas_type == "map_editor_palette":
-                        if selected_supertile_for_map != index_at_release:
-                            selected_supertile_for_map = index_at_release
-                            self.update_all_displays(changed_level="map")
-                            self.scroll_selectors_to_supertile(selected_supertile_for_map)
+                index_at_release = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type_for_click)
+                if 0 <= index_at_release < max_items:
+                    source_canvas_type = None
+                    if canvas == self.tileset_canvas: source_canvas_type = "tile_editor_main"
+                    elif canvas == self.st_tileset_canvas: source_canvas_type = "supertile_editor_tile"
+                    elif canvas == self.supertile_selector_canvas: source_canvas_type = "supertile_editor_main"
+                    elif canvas == self.map_supertile_selector_canvas: source_canvas_type = "map_editor_palette"
 
-        else: # Drag was active
-            is_alt_down = (event.state & 0x20000) != 0 or self.is_alt_pressed
-            is_ctrl_down = (event.state & 0x0004) != 0
-            source_index = self.drag_start_index
-            target_index = index_at_release
-
-            if is_alt_down and 0 <= target_index < max_items:
-                self._execute_replace_all_references(item_type, source_index, target_index)
+                    if item_type_for_click == "tile":
+                        if source_canvas_type == "tile_editor_main":
+                            if current_tile_index != index_at_release:
+                                current_tile_index = index_at_release
+                                self.update_all_displays(changed_level="tile_select")
+                                self.scroll_viewers_to_tile(current_tile_index)
+                        elif source_canvas_type == "supertile_editor_tile":
+                            if selected_tile_for_supertile != index_at_release:
+                                selected_tile_for_supertile = index_at_release
+                                self.draw_tileset_viewer(canvas, selected_tile_for_supertile)
+                                self._update_st_tab_selected_tile_info_panel()
+                                self.scroll_viewers_to_tile(selected_tile_for_supertile)
+                    elif item_type_for_click == "supertile":
+                        if source_canvas_type == "supertile_editor_main":
+                            if current_supertile_index != index_at_release:
+                                current_supertile_index = index_at_release
+                                self.update_all_displays(changed_level="supertile")
+                                self.scroll_selectors_to_supertile(current_supertile_index)
+                        elif source_canvas_type == "map_editor_palette":
+                            if selected_supertile_for_map != index_at_release:
+                                selected_supertile_for_map = index_at_release
+                                self.update_all_displays(changed_level="map")
+                                self.scroll_selectors_to_supertile(selected_supertile_for_map)
             
-            elif is_ctrl_down and 0 <= target_index < max_items and target_index != source_index:
-                success = self._swap_items(item_type, source_index, target_index)
-                if success:
-                    self.clear_all_caches()
-                    self.invalidate_minimap_background_cache()
-                    self.update_all_displays(changed_level="all")
-                    if item_type == "tile": self.scroll_viewers_to_tile(current_tile_index)
-                    elif item_type == "supertile": self.scroll_selectors_to_supertile(current_supertile_index)
-                else:
-                    messagebox.showerror("Swap Error", f"Failed to swap {item_type} from {source_index} to {target_index}.")
-                    self.update_all_displays(changed_level="all")
+            elif self.drag_item_type is not None: # Drag was active
+                item_type = self.drag_item_type
+                max_items = 0
+                if item_type == "tile": max_items = num_tiles_in_set
+                elif item_type == "supertile": max_items = num_supertiles
+                
+                is_alt_down = (event.state & 0x20000) != 0
+                is_ctrl_down = (event.state & 0x0004) != 0
+                source_index = self.drag_start_index
+                target_index = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type)
 
-            elif not is_ctrl_down and not is_alt_down: # MOVE LOGIC
-                valid_drop_target = False
-                final_target_index = -1
-                if target_index == max_items:
-                    final_target_index = max_items
-                    valid_drop_target = True
-                elif 0 <= target_index < max_items:
-                    final_target_index = target_index
-                    valid_drop_target = True
-
-                if valid_drop_target and final_target_index != source_index:
-                    success = False
-                    if item_type == "tile": success = self._reposition_tile(source_index, final_target_index)
-                    elif item_type == "supertile": success = self._reposition_supertile(source_index, final_target_index)
-
+                if is_alt_down and 0 <= target_index < max_items:
+                    self._execute_replace_all_references(item_type, source_index, target_index)
+                elif is_ctrl_down and 0 <= target_index < max_items and target_index != source_index:
+                    success = self._swap_items(item_type, source_index, target_index)
                     if success:
                         self.clear_all_caches()
                         self.invalidate_minimap_background_cache()
@@ -9252,15 +9215,44 @@ class TileEditorApp:
                         if item_type == "tile": self.scroll_viewers_to_tile(current_tile_index)
                         elif item_type == "supertile": self.scroll_selectors_to_supertile(current_supertile_index)
                     else:
-                        messagebox.showerror("Reposition Error", f"Failed to move {item_type} from {source_index} to {final_target_index}.")
+                        messagebox.showerror("Swap Error", f"Failed to swap {item_type} from {source_index} to {target_index}.")
                         self.update_all_displays(changed_level="all")
-                else:
-                    self.update_all_displays(changed_level="all")
-
-        self.drag_active = False
-        self.drag_item_type = None
-        self.drag_start_index = -1
-        self.drag_canvas = None
+                elif not is_ctrl_down and not is_alt_down: # MOVE LOGIC
+                    valid_drop_target = (0 <= target_index <= max_items)
+                    if valid_drop_target and target_index != source_index:
+                        success = False
+                        if item_type == "tile": success = self._reposition_tile(source_index, target_index)
+                        elif item_type == "supertile": success = self._reposition_supertile(source_index, target_index)
+                        if success:
+                            self.clear_all_caches()
+                            self.invalidate_minimap_background_cache()
+                            self.update_all_displays(changed_level="all")
+                            if item_type == "tile": self.scroll_viewers_to_tile(current_tile_index)
+                            elif item_type == "supertile": self.scroll_selectors_to_supertile(current_supertile_index)
+                        else:
+                            messagebox.showerror("Reposition Error", f"Failed to move {item_type} from {source_index} to {target_index}.")
+                            self.update_all_displays(changed_level="all")
+                    else:
+                        self.update_all_displays(changed_level="all")
+        finally:
+            # This block ensures all state is reset, regardless of what happened in the try block.
+            if self.drag_indicator_id:
+                try:
+                    if self.drag_canvas and self.drag_canvas.winfo_exists():
+                        self.drag_canvas.delete(self.drag_indicator_id)
+                except (tk.TclError, AttributeError): pass
+                self.drag_indicator_id = None
+            
+            if hasattr(self, 'drag_canvas') and self.drag_canvas and self.drag_canvas.winfo_exists():
+                try:
+                    self.drag_canvas.config(cursor="")
+                except tk.TclError: pass
+            
+            self.drag_active = False
+            self.drag_item_type = None
+            self.drag_start_index = -1
+            self.drag_canvas = None
+            self.is_alt_pressed = False
 
     def _set_pencil_cursor(self, event):
         """Sets the cursor to 'pencil' for the widget that received the event."""
@@ -14486,12 +14478,17 @@ class TileEditorApp:
             dy = event.y - self.drag_press_y
             if (dx*dx + dy*dy) >= (DRAG_THRESHOLD_PIXELS * DRAG_THRESHOLD_PIXELS):
                 self.drag_active = True
+                
+                self.debug(f"[DEBUG] DRAG INITIATED: is_alt_pressed={self.is_alt_pressed}, is_ctrl_pressed={self.is_ctrl_pressed}")
+                
                 cursor_type = "spraycan" if self.is_alt_pressed else "exchange"
                 self.drag_canvas.config(cursor=cursor_type)
         
         if self.drag_active and self.drag_item_type == "palette_color":
             if self.drag_indicator_id:
-                self.drag_canvas.delete(self.drag_indicator_id)
+                try:
+                    self.drag_canvas.delete(self.drag_indicator_id)
+                except (tk.TclError, AttributeError): pass
 
             size = CURRENT_PALETTE_SLOT_SIZE
             padding = 2
@@ -14499,7 +14496,7 @@ class TileEditorApp:
             row = event.y // (size + padding)
             target_index = row * 4 + col
             
-            if 0 <= target_index < 16 and target_index != self.drag_start_index:
+            if 0 <= target_index < 16 and target_index != self.drag_start_index and not self.is_alt_pressed:
                 x1 = col * (size + padding) + (padding / 2)
                 y1 = row * (size + padding) + (padding / 2)
                 x2 = x1 + size + padding
@@ -14509,37 +14506,54 @@ class TileEditorApp:
                 )
 
     def handle_palette_drag_release(self, event):
-        if self.drag_active and self.drag_item_type == "palette_color":
-            size = CURRENT_PALETTE_SLOT_SIZE
-            padding = 2
-            col = event.x // (size + padding)
-            row = event.y // (size + padding)
-            target_index = row * 4 + col
+        try:
+            if self.drag_active and self.drag_item_type == "palette_color":
+                size = CURRENT_PALETTE_SLOT_SIZE
+                padding = 2
+                col = event.x // (size + padding)
+                row = event.y // (size + padding)
+                target_index = row * 4 + col
+                
+                if 0 <= target_index < 16 and target_index != self.drag_start_index:
+                    source_index = self.drag_start_index
+                    is_alt_down_at_release = (event.state & 0x20000) != 0
+
+                    if is_alt_down_at_release:
+                        self._execute_replace_all_references("palette_color", source_index, target_index)
+                    else:
+                        success = self._swap_palette_indices(source_index, target_index)
+                        if success:
+                            self.selected_palette_slot = target_index
+                            self.clear_all_caches()
+                            self.invalidate_minimap_background_cache()
+                            self.update_all_displays(changed_level="all")
+                            self._request_color_usage_refresh()
+        finally:
+            self.debug("[DEBUG] --- PALETTE DRAG RELEASE: FINALLY BLOCK ---")
             
-            if 0 <= target_index < 16 and target_index != self.drag_start_index:
-                source_index = self.drag_start_index
-                is_alt_down = (event.state & 0x20000) != 0
-                if is_alt_down:
-                    self._execute_replace_all_references("palette_color", source_index, target_index)
-                else: # Default behavior is swap
-                    success = self._swap_palette_indices(source_index, target_index)
-                    if success:
-                        self.selected_palette_slot = target_index
-                        self.clear_all_caches()
-                        self.invalidate_minimap_background_cache()
-                        self.update_all_displays(changed_level="all")
-                        self._request_color_usage_refresh()
-        
-        if self.drag_indicator_id:
-            self.drag_canvas.delete(self.drag_indicator_id)
-            self.drag_indicator_id = None
-        
-        if hasattr(self, 'drag_canvas') and self.drag_canvas and self.drag_canvas.winfo_exists():
-            self.drag_canvas.config(cursor="")
-        
-        self.drag_active = False
-        self.drag_item_type = None
-        self.drag_start_index = -1
+            if self.drag_indicator_id:
+                try:
+                    self.drag_canvas.delete(self.drag_indicator_id)
+                except (tk.TclError, AttributeError):
+                    pass
+                self.drag_indicator_id = None
+            
+            if hasattr(self, 'drag_canvas') and self.drag_canvas and self.drag_canvas.winfo_exists():
+                try:
+                    self.drag_canvas.config(cursor="")
+                except tk.TclError:
+                    pass
+            
+            self.debug(f"[DEBUG] State BEFORE reset: drag_active={self.drag_active}, is_alt_pressed={self.is_alt_pressed}")
+            
+            # Forcefully reset all drag-related state
+            self.drag_active = False
+            self.drag_item_type = None
+            self.drag_start_index = -1
+            self.drag_canvas = None
+            self.is_alt_pressed = False
+            
+            self.debug(f"[DEBUG] State AFTER reset: drag_active={self.drag_active}, is_alt_pressed={self.is_alt_pressed}")
 
     def handle_alt_press(self, event):
         """Handles Alt key press."""
