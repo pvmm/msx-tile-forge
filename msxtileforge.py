@@ -1810,6 +1810,41 @@ class TileEditorApp:
         
         self._restore_window_states()
         
+        # --- Restore Geometry and Sash Positions ---
+        if 'main_window_geometry' in self.app_settings and self.app_settings['main_window_geometry']:
+            try:
+                self.root.state('normal')
+                self.root.geometry(self.app_settings['main_window_geometry'])
+            except tk.TclError as e:
+                self.debug(f"[ERROR] Could not apply main window geometry: {e}")
+        
+        # This update allows the geometry manager to process the main window size
+        self.root.update_idletasks()
+
+        # Restore ST sash by temporarily setting the paned window's width
+        st_sash_pos = self.app_settings.get('st_editor_sash_pos')
+        st_pane_width = self.app_settings.get('st_editor_pane_width')
+        if st_sash_pos is not None and st_pane_width is not None:
+            try:
+                if hasattr(self, 'st_editor_paned_window') and self.st_editor_paned_window.winfo_exists():
+                    # Temporarily give the widget its saved size
+                    self.st_editor_paned_window.config(width=st_pane_width)
+                    # Force an update so the width is recognized
+                    self.st_editor_paned_window.update_idletasks()
+                    # Now set the sash position, which will work correctly
+                    self.st_editor_paned_window.sashpos(0, st_sash_pos)
+                    self.debug(f"[DEBUG] Applied ST sash: pos={st_sash_pos} with temp width={st_pane_width}")
+            except (tk.TclError, KeyError) as e:
+                self.debug(f"[ERROR] Could not apply supertile editor sash position: {e}")
+
+        # Restore Map sash (this one is simpler and should still work directly)
+        if 'map_editor_sash_pos' in self.app_settings and self.app_settings['map_editor_sash_pos']:
+            try:
+                if hasattr(self, 'map_paned_window') and self.map_paned_window.winfo_exists():
+                    self.map_paned_window.sashpos(0, self.app_settings['map_editor_sash_pos'])
+            except (tk.TclError, KeyError) as e:
+                self.debug(f"[ERROR] Could not apply map editor sash position: {e}")
+
         self.debug("[DEBUG] TileEditorApp __init__ finished.")
 
     def debug(self, message):
@@ -2700,17 +2735,19 @@ class TileEditorApp:
 
         st_editor_paned_window = ttk.PanedWindow(right_frame, orient=tk.HORIZONTAL)
         st_editor_paned_window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.st_editor_paned_window = st_editor_paned_window
+        st_editor_paned_window.bind("<ButtonRelease-1>", self._capture_sash_position)
 
         st_selector_frame = ttk.LabelFrame(
             st_editor_paned_window, text="Supertile Selector (Click to select for edition)",
             name="st_editor_selector_frame"
         )
-        st_editor_paned_window.add(st_selector_frame, weight=1)
+        st_editor_paned_window.add(st_selector_frame, weight=0)
         
         st_selector_frame.bind("<Configure>", self._on_resizable_selector_pane_configure)
         
         inert_panel = ttk.Frame(st_editor_paned_window)
-        st_editor_paned_window.add(inert_panel, weight=1)
+        st_editor_paned_window.add(inert_panel, weight=0)
 
         target_selector_width = 256 
         self.supertile_selector_canvas = tk.Canvas(
@@ -2891,7 +2928,7 @@ class TileEditorApp:
         # Bind the entire pane container to the generalized configure handler.
         self.map_editor_palette_pane_container.bind("<Configure>", self._on_resizable_selector_pane_configure)
         
-        self.map_paned_window.bind("<ButtonRelease-1>", self._enforce_palette_min_width_on_release)
+        self.map_paned_window.bind("<ButtonRelease-1>", self._capture_sash_position)
 
     # --- Use this as the SINGLE definition for setting up bindings ---
     def _setup_map_canvas_bindings(self):
@@ -11450,30 +11487,6 @@ class TileEditorApp:
         if canvas_to_redraw and canvas_to_redraw.winfo_exists():
             self.draw_supertile_selector(canvas_to_redraw, highlight_index)
 
-    def _enforce_palette_min_width_on_release(self, event=None):
-        # Called on ButtonRelease-1 on the PanedWindow.
-        # Checks if the palette pane is too small and corrects sash if needed.
-        self.debug(f"\n[DEBUG] === _enforce_palette_min_width_on_release START ===")
-        
-        palette_pane_widget = getattr(self, 'map_editor_palette_pane_container', None)
-        paned_window_widget = getattr(self, 'map_paned_window', None)
-
-        if not paned_window_widget or not paned_window_widget.winfo_exists() or \
-           not palette_pane_widget or not palette_pane_widget.winfo_exists():
-            self.debug("[DEBUG] EnforceMinOnRelease: Required widgets missing. Aborting.")
-            self.debug("[DEBUG] === _enforce_palette_min_width_on_release END (widgets missing) ===")
-            return
-
-        try:
-            # Give Tkinter a moment to settle sizes after drag release, then check
-            # This 'after' helps ensure winfo_width() is up-to-date.
-            self.root.after(10, self._do_check_and_enforce_palette_min_width) 
-            
-        except Exception as e: 
-            self.debug(f"[DEBUG] Unexpected error scheduling enforcement check: {e}")
-        
-        self.debug(f"[DEBUG] === _enforce_palette_min_width_on_release END (check scheduled) ===")
-
     def _do_check_and_enforce_palette_min_width(self):
         self.debug(f"\n[DEBUG] --- _do_check_and_enforce_palette_min_width ---")
 
@@ -12884,7 +12897,18 @@ class TileEditorApp:
         filepath = self._get_config_filepath()
         try:
             self.debug(f"[DEBUG] Preparing to save application settings to: {filepath}")
-            # This function NO LONGER gathers state. It only saves what's in self.app_settings.
+
+            # Capture final main window geometry and sash positions just before saving
+            if self.root.winfo_exists():
+                self.app_settings['main_window_geometry'] = self.root.winfo_geometry()
+            if hasattr(self, 'map_paned_window') and self.map_paned_window.winfo_exists():
+                try:
+                    self.app_settings['map_editor_sash_pos'] = self.map_paned_window.sashpos(0)
+                except tk.TclError:
+                    pass # Ignore if sash doesn't exist
+            
+            # Note: The supertile editor paned window doesn't have a direct reference.
+            # We will handle its saving via its configure/release bindings.
 
             self.app_settings['last_opened_project'] = self.current_project_base_path
             
@@ -14729,6 +14753,41 @@ class TileEditorApp:
         self._request_color_usage_refresh()
         self._request_tile_usage_refresh()
         self._request_supertile_usage_refresh()
+
+    def _capture_sash_position(self, event):
+        """
+        A unified handler called on sash release. It enforces minimum width for the
+        map editor's sash and then captures the final position and widget width.
+        """
+        widget = event.widget
+        if not widget.winfo_exists():
+            return
+
+        if widget == getattr(self, 'map_paned_window', None):
+            self.debug("[DEBUG] Map sash released. Enforcing min width before capture.")
+            self._do_check_and_enforce_palette_min_width()
+
+        def do_capture():
+            try:
+                if not widget.winfo_exists(): return
+                
+                pos = widget.sashpos(0)
+                width = widget.winfo_width()
+                
+                if widget == getattr(self, 'st_editor_paned_window', None):
+                    self.app_settings['st_editor_sash_pos'] = pos
+                    self.app_settings['st_editor_pane_width'] = width # NEW
+                    self.debug(f"[DEBUG] Captured ST Editor sash: pos={pos}, width={width}")
+                elif widget == getattr(self, 'map_paned_window', None):
+                    self.app_settings['map_editor_sash_pos'] = pos
+                    # We don't need to save the map's pane width because its layout is simple
+                    # and tied directly to the main window, which we already save.
+                    self.debug(f"[DEBUG] Captured Map Editor sash position: {pos}")
+
+            except tk.TclError as e:
+                self.debug(f"[ERROR] Could not capture sash position: {e}")
+
+        self.root.after(20, do_capture)
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
