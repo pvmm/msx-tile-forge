@@ -3734,10 +3734,6 @@ class TileEditorApp:
         # Zoom label updated in draw_map_canvas
 
     def on_tab_change(self, event):
-        # Do not clear marks if a highlight is being programmatically set.
-        if not self.is_setting_programmatic_highlight:
-            self._clear_marked_unused(trigger_redraw=False)
-
         current_tab_index = -1
         new_tab_index = -1
         selected_tab_widget = None
@@ -3962,19 +3958,13 @@ class TileEditorApp:
             pixel_value_to_set = 1 if event.num == 1 else 0
             
             if tileset_patterns[current_tile_index][r][c] != pixel_value_to_set:
-                # Clear marks first and check if a redraw is needed for them.
-                marks_were_cleared = self._clear_marked_unused(trigger_redraw=False)
-                
                 self._mark_project_modified()
                 tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
                 self.invalidate_tile_cache(current_tile_index)
 
-                # If marks were cleared, we must do a full redraw to remove their highlights.
-                # Otherwise, we can do a more efficient, targeted live update.
-                if marks_were_cleared:
-                    self.update_all_displays(changed_level="all")
-                else:
-                    self.update_all_displays(changed_level="tile_edit")
+                # A tile edit can affect the entire display if that tile is used anywhere.
+                # "tile_edit" is a specific level for this, but "all" is safer if any doubts.
+                self.update_all_displays(changed_level="all")
                 
                 self._request_color_usage_refresh() 
                 self._request_tile_usage_refresh()
@@ -4007,8 +3997,6 @@ class TileEditorApp:
                 if (pixel_value_to_set != -1 and
                     tileset_patterns[current_tile_index][r][c] != pixel_value_to_set):
                     
-                    marks_were_cleared = self._clear_marked_unused(trigger_redraw=False)
-
                     self._mark_project_modified()
                     tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
                     self.invalidate_tile_cache(current_tile_index)
@@ -4054,13 +4042,9 @@ class TileEditorApp:
             changed = False
             
             if fg_or_bg == "fg" and current_fg_idx != selected_color_index:
-                if self._clear_marked_unused(trigger_redraw=False): 
-                    pass 
                 tileset_colors[current_tile_index][row] = (selected_color_index, current_bg_idx)
                 changed = True
             elif fg_or_bg == "bg" and current_bg_idx != selected_color_index:
-                if self._clear_marked_unused(trigger_redraw=False): 
-                    pass 
                 tileset_colors[current_tile_index][row] = (current_fg_idx, selected_color_index)
                 changed = True
             
