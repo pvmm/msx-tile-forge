@@ -1,5 +1,5 @@
 # MSX Tile Forge
-v1.0.0RC4
+v1.0.0RC5
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and Tkinter.
 
@@ -34,6 +34,7 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Copy/Paste functionality for tile patterns and row colors.
     *   "Mark Unused" feature to highlight tiles not referenced in any supertile.
     *   **Interactive Info Panel:** The "Used...in...supertiles" label is a clickable link that highlights all supertiles using the selected tile and switches to the Supertile Editor tab.
+    *   **Deep Dive Editing (Double-Click):** Double-clicking a color in the "Color Selector Palette" will jump to the main Palette Editor tab with that color selected.
     *   Save/Load tilesets as `.SC4Tiles` binary files.
 
 *   **Supertile Editor (Project-Configurable Dimensions, e.g., 2x2, 4x4, 8x2 tiles):**
@@ -46,9 +47,12 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
         *   **Replace All (Alt+LMB Drop):** Hold `ALT` while dropping a source supertile onto a target supertile to replace all uses of the target supertile with the source supertile across the entire map.
     *   Operations: Add New, Add Many..., Insert, Delete supertiles.
     *   Transformations: Flip Horizontal/Vertical, Rotate 90° CW (**enabled only for square supertiles**), Shift Up/Down/Left/Right for the supertile definition.
-    *   Copy/Paste functionality for supertile definitions
+    *   Copy/Paste functionality for supertile definitions.
     *   "Mark Unused" feature: Highlights unused supertiles (not used on the map) and also re-highlights unused base tiles (not used in any supertile definition) within this tab's context.
     *   **Interactive Info Panels:** The "Used on Map" label is a clickable link that highlights all map locations using the selected supertile and switches to the Map Editor tab. The global tile usage label is also clickable.
+    *   **Deep Dive Editing (Double-Click):**
+        *   Double-clicking a tile in the **Definition Canvas** will jump to the main Tile Editor tab with that tile selected for editing.
+        *   Double-clicking a tile in the **Tileset Viewer** will also jump to the Tile Editor tab with that tile selected.
     *   Save/Load supertile definitions as `.SC4Super` binary files (these files store the supertile dimensions).
 
 *   **Map Editor:**
@@ -71,6 +75,9 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
     *   Eyedropper functionality (Right-Click on map) to select the supertile under the cursor and make it active in the Supertile Palette.
     *   "ST Coords" display the supertile coordinates under the mouse.
     *   Paste Preview: When map data is on the clipboard, a semi-transparent preview of the paste area follows the mouse cursor.
+    *   **Deep Dive Editing (Double-Click):**
+        *   Double-clicking a supertile on the **Map Canvas** will jump to the Supertile Editor tab with that supertile selected for editing.
+        *   Double-clicking a supertile in the **Supertile Palette** will also jump to the Supertile Editor tab with that supertile selected.
     *   Save/Load maps as `.SC4Map` binary files.
 
 *   **Usage Analysis Windows (View Menu):**
@@ -224,6 +231,7 @@ The main menu bar provides access to project-wide operations and settings.
 
 *   **General User Experience:**
     *   **Unsaved Changes:** The window title is marked with an asterisk (*) if the project has unsaved modifications. Prompts to save are given before closing, opening, or creating new projects if changes are pending.
+    *   **Deep Dive Editing (Double-Click):** Double-clicking an item (like a tile on a supertile canvas, or a supertile on the map) will automatically switch to that item's editor tab and select it. This allows for rapid, intuitive navigation between asset levels.
     *   **Drag-and-Drop Operations:**
         *   **Move (LMB Drag):** Reorder items by dragging and dropping.
         *   **Swap (Ctrl+Drop):** Hold `CTRL` while dropping an item onto another to swap their positions and update all data references.
@@ -256,7 +264,7 @@ Used for creating and editing individual 8x8 pixel base tiles.
     *   **Mark Unused:** Highlights tiles in the viewer not used in any supertile.
 
 *   **Tileset Management (Right):**
-    *   **Color Selector Palette:** A 4x4 grid of the 16 active palette colors. Click to choose the active color for drawing.
+    *   **Color Selector Palette:** A 4x4 grid of the 16 active palette colors. Click to choose the active color for drawing. Double-click a color to jump to the Palette Editor tab.
     *   **Tileset Viewer:** Displays all tiles in the project (up to 256). Click to select a tile; drag-and-drop for advanced operations (Move/Swap/Replace).
     *   **Tile Operations:** Buttons for "Add New", "Add Many...", "Insert", "Delete" tiles.
     *   **Info Label:** Shows total number of tiles in the set.
@@ -268,13 +276,14 @@ For creating composite "supertiles" from base tiles. Supertile grid dimensions (
 *   **Supertile Definition Area (Left):**
     *   **Definition Canvas:** A grid matching the project's supertile dimensions.
         *   Left-Click a cell: Places the currently selected tile.
+        *   **Double-Click a cell: Jumps to the Tile Editor to edit that specific tile.**
         *   Right-Click a cell (Eyedropper): Selects the tile within that cell, making it active.
     *   **Information Panels:** Show detailed info for the selected tile and the selected supertile. The usage count labels are **clickable links**.
     *   **Transformations:** Buttons for the current supertile definition: Flip Horizontal/Vertical, Rotate 90° Clockwise (enabled for square supertiles), Shift (Up, Down, Left, Right).
     *   **Mark Unused:** Highlights unused supertiles (not on map) and unused base tiles.
 
 *   **Asset Selection (Right):**
-    *   **Tileset Viewer:** Displays all base tiles. Click to select a tile for placing.
+    *   **Tileset Viewer:** Displays all base tiles. Click to select a tile for placing. Double-click a tile to jump to the Tile Editor.
     *   **Supertile Selector:** A resizable panel displaying all supertiles in the project (up to 65535). Click to select a supertile for editing; drag-and-drop for advanced operations (Move/Swap/Replace).
     *   **Supertile Operations:** Buttons for "Add New", "Add Many...", "Insert", "Delete" supertiles.
 
@@ -286,6 +295,7 @@ For arranging supertiles to construct game maps.
     *   **Controls Bar:** Displays map dimensions, zoom level, and provides controls for the grid and "Window View" overlay.
     *   **Map Canvas:** The main drawing area for the map.
         *   **Painting (LMB):** Places the selected supertile.
+        *   **Deep Dive (Double-Click): Jumps to the Supertile Editor to edit the supertile under the cursor.**
         *   **Eyedropper (RMB):** Selects the supertile under the cursor.
         *   **Navigation:** Pan with Ctrl+LMB Drag; Zoom with Ctrl+MouseWheel.
         *   **Region Selection (Shift+LMB Drag):** Selects a rectangular area for copy/paste.
@@ -294,7 +304,7 @@ For arranging supertiles to construct game maps.
     *   **Window View Overlay (if active):** A draggable and resizable rectangle representing a screen area.
 
 *   **Supertile Selection (Right):**
-    *   **Supertile Palette:** A resizable panel displaying all supertiles in the project. Click to select a supertile for painting; drag-and-drop for advanced operations (Move/Swap/Replace).
+    *   **Supertile Palette:** A resizable panel displaying all supertiles in the project. Click to select a supertile for painting; drag-and-drop for advanced operations (Move/Swap/Replace). Double-click a supertile to jump to the Supertile Editor.
 
 *   **Minimap Window (View Menu or Ctrl+M):**
     *   A separate, resizable window providing an overview of the entire map.
