@@ -4038,16 +4038,11 @@ class TileEditorApp:
                 
                 if (pixel_value_to_set != -1 and
                     tileset_patterns[current_tile_index][r][c] != pixel_value_to_set):
-                    
+                  
                     self._mark_project_modified()
                     tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
                     self.invalidate_tile_cache(current_tile_index)
-
-                    if marks_were_cleared:
-                        self.update_all_displays(changed_level="all")
-                    else:
-                        self.update_all_displays(changed_level="tile_edit")
-                        
+                    self.update_all_displays(changed_level="tile_edit")
                     self._request_color_usage_refresh()
                     self._request_tile_usage_refresh()
                     self._request_supertile_usage_refresh()
