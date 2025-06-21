@@ -1687,7 +1687,8 @@ class TileEditorApp:
 
         self._main_window_configure_timer = None 
         self._map_canvas_configure_timer = None 
-        self._palette_pane_resize_timer = None 
+        self._palette_pane_resize_timer = None
+        self.single_click_timer = None
 
         self.supertile_grid_width = DEFAULT_SUPERTILE_GRID_WIDTH
         self.supertile_grid_height = DEFAULT_SUPERTILE_GRID_HEIGHT
@@ -2577,6 +2578,7 @@ class TileEditorApp:
         def_frame.grid_columnconfigure(0, weight=0)
 
         self.supertile_def_canvas.bind("<Button-1>", self.handle_supertile_def_click)
+        self.supertile_def_canvas.bind("<Double-Button-1>", self._on_canvas_double_click)
         self.supertile_def_canvas.bind("<B1-Motion>", self.handle_supertile_def_drag)
         self.supertile_def_canvas.bind(
             "<ButtonRelease-1>", self.handle_supertile_def_release
@@ -2884,6 +2886,7 @@ class TileEditorApp:
         self.map_vbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.map_hbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
 
+        self.map_canvas.bind("<Double-Button-1>", self._on_canvas_double_click)
         self.map_canvas.bind("<Configure>", self._on_map_canvas_configure)
 
         palette_area_frame.grid_rowconfigure(0, weight=1)
@@ -4364,28 +4367,25 @@ class TileEditorApp:
             # self.drag_active is NOT set to True here
 
     def handle_supertile_def_click(self, event):
+        # Cancel any pending single-click action from a previous click ANYWHERE
+        if self.single_click_timer is not None:
+            self.root.after_cancel(self.single_click_timer)
+            self.single_click_timer = None
+
+        # (The rest of the logic remains identical)
         if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
             messagebox.showwarning("Place Tile", "Please select a valid tile first.")
             return
-
         canvas = self.supertile_def_canvas
-        # SUPERTILE_DEF_TILE_SIZE is the display size of one mini-tile in the editor
-        mini_tile_display_size = SUPERTILE_DEF_TILE_SIZE 
-        if mini_tile_display_size <= 0 or not canvas.winfo_exists():
-            return
-
-        # Calculate col and row in the definition grid based on pixel size of mini-tiles
+        mini_tile_display_size = SUPERTILE_DEF_TILE_SIZE
+        if mini_tile_display_size <= 0: return
         col = event.x // mini_tile_display_size
         row = event.y // mini_tile_display_size
-
-        # Reset drag state
         self.last_placed_supertile_cell = None
-
-        # _place_tile_in_supertile will use self.supertile_grid_width/height for its internal bounds check
-        placed = self._place_tile_in_supertile(row, col)
-
-        if placed:
-            self.last_placed_supertile_cell = (row, col)
+        place_action = lambda r=row, c=col: self._place_tile_in_supertile_and_set_drag_state(r, c)
+        
+        # Use the single, unified timer
+        self.single_click_timer = self.root.after(250, place_action)
 
     def handle_supertile_selector_click(self, event):
         canvas = event.widget
@@ -6833,69 +6833,56 @@ class TileEditorApp:
         )
 
     def handle_map_click_or_drag_start(self, event):
-        """Handles initial NON-CTRL click: determines action (paint/window drag/resize).
-        Sets up state AND performs the initial paint action if applicable.
-        Also clears map selection if starting a paint/window action.
         """
-        global last_painted_map_cell
+        Handles initial NON-CTRL click. On single-click, it now schedules a paint
+        action, allowing a double-click to cancel it and trigger a deep dive.
+        Also handles starting a drag for the window view.
+        """
+        # --- Cancel any pending single-click paint from a previous click ---
+        if self.single_click_timer is not None:
+            self.root.after_cancel(self.single_click_timer)
+            self.single_click_timer = None
 
-        # --- Check for active modifiers that override this handler ---
-        if self.is_shift_pressed:
-            self.debug("[DEBUG]Shift pressed, ignoring Button-1 for paint/window ops.")
+        # --- Standard modifier and action checks (same as before) ---
+        if self.is_shift_pressed or (event.state & 0x0004) or self.current_mouse_action is not None:
             return "break"
-        ctrl_pressed_at_click = event.state & 0x0004  # Check state at event time
-        if ctrl_pressed_at_click:
-            self.debug("[DEBUG]Ctrl pressed, ignoring Button-1 for paint/window ops.")
-            return "break"
-        if self.current_mouse_action is not None:
-            self.debug(f"[DEBUG]Warning: Button-1 pressed while action '{self.current_mouse_action}' active.")
-            return "break"
-        # --- End Modifier Check ---
 
-        # --- Clear previous selection when starting a new action ---
-        self._clear_map_selection()  # Clear selection visual and state
-        # --- End Clear Selection ---
-
+        self._clear_map_selection()
         canvas = self.map_canvas
         canvas.focus_set()
         canvas_x = canvas.canvasx(event.x)
         canvas_y = canvas.canvasy(event.y)
 
-        action_determined = None
+        # --- Window view drag/resize logic (same as before) ---
         handle = self._get_handle_at(canvas_x, canvas_y)
-
-        # Determine action based on click location
         if handle and self.show_window_view.get():
-            action_determined = "window_resizing"
-            self.current_mouse_action = action_determined
+            self.current_mouse_action = "window_resizing"
+            # (rest of window resize start logic is unchanged)
             self.window_view_resize_handle = handle
-            self.drag_start_x = canvas_x
-            self.drag_start_y = canvas_y
-            self.drag_start_win_tx = self.window_view_tile_x
-            self.drag_start_win_ty = self.window_view_tile_y
-            self.drag_start_win_tw = self.window_view_tile_w.get()
-            self.drag_start_win_th = self.window_view_tile_h.get()
+            self.drag_start_x, self.drag_start_y = canvas_x, canvas_y
+            self.drag_start_win_tx, self.drag_start_win_ty = self.window_view_tile_x, self.window_view_tile_y
+            self.drag_start_win_tw, self.drag_start_win_th = self.window_view_tile_w.get(), self.window_view_tile_h.get()
+            self._update_map_cursor()
+            return "break"
+        elif self._is_inside_window_view(canvas_x, canvas_y) and self.show_window_view.get():
+            self.current_mouse_action = "window_dragging"
+            # (rest of window drag start logic is unchanged)
+            self.drag_start_x, self.drag_start_y = canvas_x, canvas_y
+            self.drag_start_win_tx, self.drag_start_win_ty = self.window_view_tile_x, self.window_view_tile_y
+            self._update_map_cursor()
+            return "break"
+        
+        # --- NEW: Schedule the paint action instead of calling it directly ---
+        self.current_mouse_action = "painting" # Set state immediately for drag handling
+        
+        # This lambda captures the coordinates at the time of the click
+        paint_action = lambda cx=canvas_x, cy=canvas_y: self._paint_map_cell(cx, cy)
+        
+        # Schedule it to run after 250ms
+        self.single_click_timer = self.root.after(250, paint_action)
 
-        elif (
-            self._is_inside_window_view(canvas_x, canvas_y)
-            and self.show_window_view.get()
-        ):
-            action_determined = "window_dragging"
-            self.current_mouse_action = action_determined
-            self.drag_start_x = canvas_x
-            self.drag_start_y = canvas_y
-            self.drag_start_win_tx = self.window_view_tile_x
-            self.drag_start_win_ty = self.window_view_tile_y
-
-        else:  # Painting case
-            action_determined = "painting"
-            self.current_mouse_action = action_determined
-            last_painted_map_cell = None  # Reset for this paint sequence
-            self._paint_map_cell(canvas_x, canvas_y)  # Perform first paint
-
-        self._update_map_cursor()  # Update cursor based on the determined action
-
-        return "break"
+        # We don't return "break" here, allowing drag to still work.
+        # The logic in handle_map_drag will use self.current_mouse_action.
 
     def handle_map_drag(self, event):
         """Handles motion for non-panning actions (paint, window drag/resize)."""
@@ -7842,6 +7829,10 @@ class TileEditorApp:
             return False
 
     def handle_supertile_def_drag(self, event):
+        # Do nothing if the initial single-click action hasn't completed yet.
+        if self.last_placed_supertile_cell is None:
+            return
+
         if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
             return
 
@@ -14783,6 +14774,86 @@ class TileEditorApp:
                 self.debug(f"[ERROR] Could not capture sash position: {e}")
 
         self.root.after(20, do_capture)
+
+    def _on_canvas_double_click(self, event):
+        """
+        Handles a double-click on ANY supported canvas to cancel a pending
+        single-click action and trigger a deep dive edit.
+        """
+        self.debug(f"[DBL-CLICK] Double-click detected on widget: {event.widget._name}")
+        
+        # Cancel the pending single-click action
+        if self.single_click_timer is not None:
+            self.root.after_cancel(self.single_click_timer)
+            self.single_click_timer = None
+            self.debug("[DBL-CLICK] Cancelled pending single-click action.")
+        
+        # Reset any mouse action state that might have been set
+        self.current_mouse_action = None
+        
+        # Perform the deep dive edit
+        self._handle_deep_dive_edit(event)
+        
+        return "break"
+
+    def _handle_deep_dive_edit(self, event):
+        """
+        Handles a "deep dive" edit request. Switches to the appropriate editor
+        tab and selects the underlying component for editing.
+        """
+        global current_supertile_index, current_tile_index, supertiles_data, map_data
+
+        source_widget = event.widget
+
+        if source_widget == self.map_canvas:
+            # --- Dive from Map Editor to Supertile Editor ---
+            self.debug("[DEEP DIVE] Request from Map to Supertile Editor.")
+            canvas_x = self.map_canvas.canvasx(event.x)
+            canvas_y = self.map_canvas.canvasy(event.y)
+            coords = self._get_supertile_coords_from_canvas(canvas_x, canvas_y)
+
+            if coords:
+                c, r = coords
+                supertile_idx_to_edit = map_data[r][c]
+                self.debug(f"[DEEP DIVE] Diving to edit Supertile {supertile_idx_to_edit}.")
+                
+                # Update the selection state
+                current_supertile_index = supertile_idx_to_edit
+
+                # Switch to the Supertile Editor tab
+                self.notebook.select(self.tab_supertile_editor)
+                
+                # Update all displays to reflect the new selection and tab
+                self.update_all_displays(changed_level="all")
+                self.scroll_selectors_to_supertile(current_supertile_index)
+
+        elif source_widget == self.supertile_def_canvas:
+            # --- Dive from Supertile Editor to Tile Editor ---
+            self.debug("[DEEP DIVE] Request from Supertile to Tile Editor.")
+            mini_tile_dsize = SUPERTILE_DEF_TILE_SIZE
+            col = event.x // mini_tile_dsize
+            row = event.y // mini_tile_dsize
+
+            if (0 <= row < self.supertile_grid_height and 0 <= col < self.supertile_grid_width):
+                tile_idx_to_edit = supertiles_data[current_supertile_index][row][col]
+                self.debug(f"[DEEP DIVE] Diving to edit Tile {tile_idx_to_edit}.")
+                
+                # Update the selection state
+                current_tile_index = tile_idx_to_edit
+                
+                # Switch to the Tile Editor tab
+                self.notebook.select(self.tab_tile_editor)
+                
+                # Update all displays
+                self.update_all_displays(changed_level="all")
+                self.scroll_viewers_to_tile(current_tile_index)
+
+    def _place_tile_in_supertile_and_set_drag_state(self, r, c):
+        """Helper to call from 'after' to place a tile and set drag state."""
+        placed = self._place_tile_in_supertile(r, c)
+        if placed:
+            # This state is for handling drags, so it's fine to set it here.
+            self.last_placed_supertile_cell = (r, c)
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
