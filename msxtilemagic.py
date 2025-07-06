@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.1"
+SCRIPT_VERSION = "0.0.2"
 
 # --- Imports ---
 import argparse
@@ -85,7 +85,6 @@ def quantize_image_to_msx_colors(image: Image.Image, num_target_colors: int, dit
     for r07, g07, b07 in final_msx_palette_0_7:
         pil_palette_for_quantize_flat.extend(msx_rgb_to_0_255(r07, g07, b07))
     
-    # Pad Pillow palette to 256 colors
     if len(pil_palette_for_quantize_flat) < 256 * 3:
         pil_palette_for_quantize_flat.extend([0,0,0] * (256 - (len(pil_palette_for_quantize_flat) // 3)))
     
@@ -141,8 +140,9 @@ def process_tile_for_screen4(tile_indices_np, palette_0_255):
 def calculate_tile_difference(tile1_tuple, tile2_tuple):
     pattern1, color1 = tile1_tuple
     pattern2, color2 = tile2_tuple
-    pattern_diff = np.sum(pattern1 != pattern2)
-    color_diff = np.sum(color1 != color2)
+    # Use np.count_nonzero for potentially faster difference calculation
+    pattern_diff = np.count_nonzero(pattern1 != pattern2)
+    color_diff = np.count_nonzero(color1 != color2)
     return pattern_diff + color_diff
 
 def pad_image_to_tile_size(image: Image.Image, tile_size: int):
@@ -241,7 +241,6 @@ def write_sc4_map(filename, tile_map, num_supertiles):
         
         for r in range(map_height):
             for c in range(map_width):
-                # Corrected line: Convert NumPy int16 to a standard Python int first
                 supertile_idx = int(tile_map[r, c])
                 f.write(supertile_idx.to_bytes(bytes_per_index, 'little'))
 
@@ -255,7 +254,6 @@ def reconstruct_sc4_tile_pil(pattern_data, color_data, pil_palette_flat):
         color_byte = color_data[r]
         pattern_byte = pattern_data[r]
         
-        # Corrected: Explicitly cast the numpy types to Python int
         bg_idx = int(color_byte & 0x0F)
         fg_idx = int((color_byte >> 4) & 0x0F)
         
@@ -278,6 +276,8 @@ def main():
     parser.add_argument("--max_artifact_threshold", type=int, default=32, 
                         help="Maximum pixel difference (0-64) to try for pattern merging.")
     parser.add_argument("--no_dithering", action="store_true", help="Disable dithering during color quantization.")
+    parser.add_argument("--no_refinement", action="store_true", help="Disable the post-optimization refinement step.")
+
     args = parser.parse_args()
 
     if args.num_colors > 16:
@@ -346,7 +346,67 @@ def main():
     num_unique_patterns = len(final_unique_patterns)
     print(f"Optimization complete. Using threshold {best_threshold_found} resulting in {num_unique_patterns} unique patterns.")
 
-    print("4. Generating output files...")
+    # --- START OF NEW REFINEMENT STEP ---
+    if not args.no_refinement:
+        available_slots = args.max_patterns - num_unique_patterns
+        if available_slots > 0:
+            print(f"4. Refining results by reclaiming {available_slots} unused tile slots...")
+
+            # Count usage of each merged tile
+            tile_indices_flat = final_tile_map_indices.flatten()
+            usage_counts = Counter(tile_indices_flat)
+            sorted_tiles_by_usage = usage_counts.most_common()
+
+            # Create new lists/maps to hold the refined data
+            refined_unique_patterns = list(final_unique_patterns)
+            refined_tile_map = np.copy(final_tile_map_indices)
+            
+            # Use a set of tile pattern bytes to track which originals we've restored
+            promoted_originals = {p.tobytes() for p, c in refined_unique_patterns}
+            
+            pbar_refine = tqdm(total=available_slots, desc="Refining Tiles")
+            
+            for tile_idx_to_restore, _ in sorted_tiles_by_usage:
+                if available_slots <= 0: break
+
+                # Find all map locations using this high-frequency tile
+                locations = np.argwhere(refined_tile_map == tile_idx_to_restore)
+                
+                for r_map, c_map in locations:
+                    if available_slots <= 0: break
+
+                    original_tile_linear_index = r_map * tile_map_width + c_map
+                    original_tile_data = all_source_tiles_data[original_tile_linear_index]
+                    original_pattern_bytes = original_tile_data[0].tobytes()
+                    
+                    # Check if this original tile has already been restored
+                    if original_pattern_bytes in promoted_originals:
+                        continue
+                    
+                    # This is a new, unique original tile that was merged. Restore it.
+                    new_tile_index = len(refined_unique_patterns)
+                    refined_unique_patterns.append(original_tile_data)
+                    
+                    # Update the map to point to the newly restored tile
+                    refined_tile_map[r_map, c_map] = new_tile_index
+                    
+                    promoted_originals.add(original_pattern_bytes)
+                    available_slots -= 1
+                    pbar_refine.update(1)
+
+            pbar_refine.close()
+            # Replace the old optimized data with the new refined data
+            final_unique_patterns = refined_unique_patterns
+            final_tile_map_indices = refined_tile_map
+            num_unique_patterns = len(final_unique_patterns)
+            print(f"Refinement complete. Final unique pattern count: {num_unique_patterns}")
+        else:
+            print("4. Skipping refinement step (no available tile slots).")
+    else:
+        print("4. Skipping refinement step (disabled by user).")
+    # --- END OF NEW REFINEMENT STEP ---
+
+    print("5. Generating output files...")
     output_dir = os.path.dirname(args.output_basename)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
@@ -356,7 +416,7 @@ def main():
     write_sc4_supertiles(f"{args.output_basename}.SC4Super", num_unique_patterns)
     write_sc4_map(f"{args.output_basename}.SC4Map", final_tile_map_indices, num_unique_patterns)
 
-    print("5. Generating visual outputs...")
+    print("6. Generating visual outputs...")
     pil_final_palette_flat = []
     for r,g,b in palette_0_255: pil_final_palette_flat.extend([r,g,b])
     if len(pil_final_palette_flat) < 256 * 3:

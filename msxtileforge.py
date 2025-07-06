@@ -59,6 +59,9 @@ RESERVED_BYTES_COUNT = 4 # NEW constant for clarity
 
 MAX_RECENT_FILES = 10
 
+MIN_DIM = 1
+MAX_DIM = 2048
+
 # Unicode constant strings
 UP = " \N{BLACK UP-POINTING TRIANGLE}"
 DOWN = " \N{BLACK DOWN-POINTING TRIANGLE}"
@@ -5772,8 +5775,7 @@ class TileEditorApp:
                 if len(dim_bytes) < 4: raise ValueError("Invalid map header.")
                 loaded_w_map, loaded_h_map = struct.unpack("<HH", dim_bytes)
                 
-                min_dim, max_dim = 1, 1024
-                if not (min_dim <= loaded_w_map <= max_dim and min_dim <= loaded_h_map <= max_dim):
+                if not (MIN_DIM <= loaded_w_map <= MAX_DIM and MIN_DIM <= loaded_h_map <= MAX_DIM):
                     raise ValueError(f"Invalid map dimensions in file: {loaded_w_map}x{loaded_h_map}")
 
                 file_size = os.path.getsize(load_path)
@@ -6355,11 +6357,10 @@ class TileEditorApp:
                 new_w = int(new_w_str)
                 new_h = int(new_h_str)
 
-                min_dim, max_dim = 1, 1024 # Example limits for map dimensions
-                if not (min_dim <= new_w <= max_dim):
-                    raise ValueError(f"Width must be between {min_dim} and {max_dim}")
-                if not (min_dim <= new_h <= max_dim):
-                    raise ValueError(f"Height must be between {min_dim} and {max_dim}")
+                if not (MIN_DIM <= new_w <= MAX_DIM):
+                    raise ValueError(f"Width must be between {MIN_DIM} and {MAX_DIM}")
+                if not (MIN_DIM <= new_h <= MAX_DIM):
+                    raise ValueError(f"Height must be between {MIN_DIM} and {MAX_DIM}")
 
                 if new_w == map_width and new_h == map_height:
                     return  # No change
