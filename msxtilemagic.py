@@ -2,14 +2,14 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.5"
+SCRIPT_VERSION = "0.0.7"
 
 # --- Imports ---
 import argparse
 import os
 from collections import Counter, defaultdict
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 from tqdm import tqdm
 
 # --- MSX2 Palette Constants ---
@@ -159,32 +159,107 @@ def pad_image_to_tile_size(image: Image.Image, tile_size: int):
     padded_image.paste(image, (0, 0))
     return padded_image
 
-def optimize_for_threshold(current_threshold, source_tiles, tm_width, tm_height):
-    unique_patterns = []
-    tile_map = np.full((tm_height, tm_width), -1, dtype=np.int16)
-
-    for i, current_source_tile in enumerate(source_tiles):
-        ty, tx = i // tm_width, i % tm_width
+def optimize_by_iterative_best_merge(source_tiles, max_patterns, tm_width, tm_height):
+    """
+    Optimizes tileset by iteratively merging the pair of tiles with the lowest
+    "total damage cost". Cost = difference * count_of_losing_tile.
+    """
+    print("   Finding unique source tiles and their map counts...")
+    unique_tile_groups = defaultdict(list)
+    for i, tile_data in enumerate(source_tiles):
+        key = tile_data[0].tobytes()
+        unique_tile_groups[key].append(i)
+    
+    initial_unique_count = len(unique_tile_groups)
+    if initial_unique_count <= max_patterns:
+        print(f"   Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
+        final_patterns = [source_tiles[locs[0]] for locs in unique_tile_groups.values()]
         
-        found_match_idx = -1
-        min_diff_for_match = float('inf')
+        final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
+        for i, locs in enumerate(unique_tile_groups.values()):
+            for loc_idx in locs:
+                r, c = loc_idx // tm_width, loc_idx % tm_width
+                final_tile_map[r, c] = i
+        return final_patterns, final_tile_map
 
-        for idx, existing_unique_tile in enumerate(unique_patterns):
-            diff = calculate_tile_difference(current_source_tile, existing_unique_tile)
-            if diff <= current_threshold:
-                if diff < min_diff_for_match:
-                    min_diff_for_match = diff
-                    found_match_idx = idx
-                if diff == 0:
-                    break 
-        
-        if found_match_idx != -1:
-            tile_map[ty, tx] = found_match_idx
-        else:
-            unique_patterns.append(current_source_tile)
-            tile_map[ty, tx] = len(unique_patterns) - 1
+    active_tiles = {}
+    for i, (key, locs) in enumerate(unique_tile_groups.items()):
+        active_tiles[i] = {
+            "data": source_tiles[locs[0]],
+            "count": len(locs),
+            "original_indices": {i}
+        }
+
+    num_merges_to_perform = len(active_tiles) - max_patterns
+    print(f"   Performing {num_merges_to_perform} merges to reach target of {max_patterns} patterns...")
+    
+    with tqdm(total=num_merges_to_perform, desc="   Merging Tiles") as pbar:
+        for _ in range(num_merges_to_perform):
+            best_merge = { "cost": float('inf'), "winner_idx": -1, "loser_idx": -1 }
             
-    return unique_patterns, tile_map, len(unique_patterns)
+            tile_indices = list(active_tiles.keys())
+            
+            for i in range(len(tile_indices)):
+                for j in range(i + 1, len(tile_indices)):
+                    idx1 = tile_indices[i]
+                    idx2 = tile_indices[j]
+                    tile1, tile2 = active_tiles[idx1], active_tiles[idx2]
+                    
+                    diff = calculate_tile_difference(tile1["data"], tile2["data"])
+                    if diff == 0: continue
+
+                    # Determine winner and loser to calculate true damage cost
+                    if tile1["count"] > tile2["count"]:
+                        loser_count = tile2["count"]
+                    elif tile2["count"] > tile1["count"]:
+                        loser_count = tile1["count"]
+                    else: # Tie in count, use index as tie-breaker
+                        loser_count = tile1["count"] # counts are equal
+
+                    cost = diff * loser_count
+                    
+                    if cost < best_merge["cost"]:
+                        # Re-evaluate winner/loser for assignment, not just for cost
+                        if tile1["count"] > tile2["count"]:
+                            winner, loser = idx1, idx2
+                        elif tile2["count"] > tile1["count"]:
+                            winner, loser = idx2, idx1
+                        else: # Tie-breaker
+                            winner, loser = (idx1, idx2) if idx1 < idx2 else (idx2, idx1)
+                        
+                        best_merge["cost"] = cost
+                        best_merge["winner_idx"] = winner
+                        best_merge["loser_idx"] = loser
+
+            winner_idx, loser_idx = best_merge["winner_idx"], best_merge["loser_idx"]
+            
+            active_tiles[winner_idx]["count"] += active_tiles[loser_idx]["count"]
+            active_tiles[winner_idx]["original_indices"].update(active_tiles[loser_idx]["original_indices"])
+            
+            del active_tiles[loser_idx]
+            pbar.update(1)
+
+    print("   Building final tileset and map...")
+    final_patterns = []
+    final_merge_map = {}
+    
+    for final_idx, (key, tile_info) in enumerate(active_tiles.items()):
+        final_patterns.append(tile_info["data"])
+        for original_unique_idx in tile_info["original_indices"]:
+             final_merge_map[original_unique_idx] = final_idx
+    
+    final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
+    original_to_unique_idx = {key: i for i, key in enumerate(unique_tile_groups.keys())}
+
+    for i, tile_data in enumerate(source_tiles):
+        key = tile_data[0].tobytes()
+        original_unique_idx = original_to_unique_idx[key]
+        final_idx = final_merge_map[original_unique_idx]
+        
+        r, c = i // tm_width, i % tm_width
+        final_tile_map[r, c] = final_idx
+        
+    return final_patterns, final_tile_map
 
 # --- File Writing Functions ---
 def write_sc4_palette(filename, palette_0_7):
@@ -258,12 +333,7 @@ def main():
     parser.add_argument("--num_colors", type=int, default=16, help="Number of colors for the palette (max 16)")
     parser.add_argument("--tile_size", type=int, default=8, help="Tile size in pixels (must be 8 for this script)")
     parser.add_argument("--output_basename", default="output", help="Basename for output files (e.g., 'mymap')")
-    parser.add_argument("--max_artifact_threshold", type=int, default=32, 
-                        help="Maximum pixel difference (0-64) to try for pattern merging.")
     parser.add_argument("--no_dithering", action="store_true", help="Disable dithering during color quantization.")
-    parser.add_argument("--no-reclaiming", action="store_true", help="Disable the post-optimization step of reclaiming unused tile slots.")
-    parser.add_argument("--reclaiming-criterion", choices=['frequency', 'damage'], default='frequency',
-                        help="Criterion to use for prioritizing which tiles to restore. 'frequency' restores most used tiles first. 'damage' restores tiles that had the most pixel changes across the entire map.")
     args = parser.parse_args()
 
     if args.num_colors > 16:
@@ -298,136 +368,15 @@ def main():
             pattern, color = process_tile_for_screen4(tile_indices_np, palette_0_255)
             all_source_tiles_data.append((pattern, color))
     
-    print("3. Optimizing patterns...")
-    final_unique_patterns = []
-    final_tile_map_indices = np.full((tile_map_height, tile_map_width), -1, dtype=np.int16)
-    best_threshold_found = -1
-
-    unique_at_0, map_at_0, count_at_0 = optimize_for_threshold(0, all_source_tiles_data, tile_map_width, tile_map_height)
-    print(f"Threshold 0 results in {count_at_0} unique patterns.")
-
-    if count_at_0 <= args.max_patterns:
-        final_unique_patterns = unique_at_0
-        final_tile_map_indices = map_at_0
-        best_threshold_found = 0
-    else:
-        search_low = 1
-        search_high = args.max_artifact_threshold
-        best_solution = (unique_at_0, map_at_0, count_at_0, 0)
-
-        with tqdm(total=args.max_artifact_threshold, desc="Finding Optimal Threshold") as pbar:
-             for threshold in range(search_low, search_high + 1):
-                pbar.update(1)
-                unique, tile_map, count = optimize_for_threshold(threshold, all_source_tiles_data, tile_map_width, tile_map_height)
-                if count <= args.max_patterns:
-                    best_solution = (unique, tile_map, count, threshold)
-                    break
-                best_solution = (unique, tile_map, count, threshold)
-        
-        final_unique_patterns, final_tile_map_indices, final_count, best_threshold_found = best_solution
-        if final_count > args.max_patterns:
-             print(f"Warning: Could not meet target of {args.max_patterns}. Best result: {final_count} patterns at threshold {best_threshold_found}.")
-
+    print("3. Optimizing patterns using iterative best-merge strategy...")
+    final_unique_patterns, final_tile_map_indices = optimize_by_iterative_best_merge(
+        all_source_tiles_data, args.max_patterns, tile_map_width, tile_map_height
+    )
+    
     num_unique_patterns = len(final_unique_patterns)
-    print(f"Optimization complete. Using threshold {best_threshold_found} resulting in {num_unique_patterns} unique patterns.")
+    print(f"Optimization complete. Final unique pattern count: {num_unique_patterns}")
 
-    if not args.no_reclaiming:
-        available_slots = args.max_patterns - num_unique_patterns
-        if available_slots > 0:
-            print(f"4. Reclaiming {available_slots} unused tile slots to improve quality (criterion: {args.reclaiming_criterion})...")
-            
-            reclaimed_unique_patterns = list(final_unique_patterns)
-            reclaimed_tile_map = np.copy(final_tile_map_indices)
-            
-            if args.reclaiming_criterion == 'frequency':
-                tile_indices_flat = final_tile_map_indices.flatten()
-                usage_counts = Counter(tile_indices_flat)
-                priority_list = usage_counts.most_common()
-
-                pbar_reclaim = tqdm(total=available_slots, desc="Reclaiming Tiles")
-                promoted_originals = {p.tobytes() for p, c in reclaimed_unique_patterns}
-
-                for tile_idx_to_restore, _ in priority_list:
-                    if available_slots <= 0: break
-                    locations = np.argwhere(reclaimed_tile_map == tile_idx_to_restore)
-                    for r_map, c_map in locations:
-                        if available_slots <= 0: break
-                        original_tile_linear_index = r_map * tile_map_width + c_map
-                        original_tile_data = all_source_tiles_data[original_tile_linear_index]
-                        if original_tile_data[0].tobytes() in promoted_originals: continue
-                        
-                        new_tile_index = len(reclaimed_unique_patterns)
-                        reclaimed_unique_patterns.append(original_tile_data)
-                        reclaimed_tile_map[r_map, c_map] = new_tile_index
-                        promoted_originals.add(original_tile_data[0].tobytes())
-                        available_slots -= 1
-                        pbar_reclaim.update(1)
-                pbar_reclaim.close()
-
-            elif args.reclaiming_criterion == 'damage':
-                print("   Grouping original tiles and calculating potential recovery scores...")
-                # --- TILE-CENTRIC LOGIC ---
-                # 1. Group all original tiles and the locations they appear in
-                grouped_originals = defaultdict(list)
-                for i, (pattern, color) in enumerate(all_source_tiles_data):
-                    map_pos = (i // tile_map_width, i % tile_map_width)
-                    # Use pattern bytes as a hashable key
-                    grouped_originals[pattern.tobytes()].append(map_pos)
-
-                # 2. Calculate a total damage score for each unique original tile
-                original_tile_scores = []
-                for pattern_bytes, locations in tqdm(grouped_originals.items(), desc="   Scoring Originals"):
-                    # Get the tile data for this group (it's the same for all locations)
-                    first_pos_r, first_pos_c = locations[0]
-                    original_tile_data = all_source_tiles_data[first_pos_r * tile_map_width + first_pos_c]
-                    
-                    total_group_damage = 0
-                    is_merged = False
-                    for r_map, c_map in locations:
-                        merged_tile_idx = final_tile_map_indices[r_map, c_map]
-                        merged_tile_data = final_unique_patterns[merged_tile_idx]
-                        damage = calculate_tile_difference(original_tile_data, merged_tile_data)
-                        if damage > 0:
-                            is_merged = True
-                        total_group_damage += damage
-
-                    # Only consider tiles that were actually merged away
-                    if is_merged:
-                        original_tile_scores.append({
-                            'data': original_tile_data,
-                            'damage': total_group_damage,
-                            'locations': locations
-                        })
-                
-                # 3. Sort groups by highest damage score
-                priority_list = sorted(original_tile_scores, key=lambda x: x['damage'], reverse=True)
-
-                # 4. Reclaim based on this priority list
-                pbar_reclaim = tqdm(total=available_slots, desc="Reclaiming Tiles")
-                for tile_group in priority_list:
-                    if available_slots <= 0: break
-                    
-                    # Spend one slot to restore this entire group
-                    new_tile_index = len(reclaimed_unique_patterns)
-                    reclaimed_unique_patterns.append(tile_group['data'])
-                    available_slots -= 1
-                    pbar_reclaim.update(1)
-
-                    # Update the map at all locations for this restored tile
-                    for r_map, c_map in tile_group['locations']:
-                        reclaimed_tile_map[r_map, c_map] = new_tile_index
-                pbar_reclaim.close()
-
-            final_unique_patterns = reclaimed_unique_patterns
-            final_tile_map_indices = reclaimed_tile_map
-            num_unique_patterns = len(final_unique_patterns)
-            print(f"Reclaiming complete. Final unique pattern count: {num_unique_patterns}")
-        else:
-            print("4. Skipping reclaiming step (no available tile slots).")
-    else:
-        print("4. Skipping reclaiming step (disabled by user).")
-
-    print("5. Generating output files...")
+    print("4. Generating output files...")
     output_dir = os.path.dirname(args.output_basename)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
@@ -437,7 +386,7 @@ def main():
     write_sc4_supertiles(f"{args.output_basename}.SC4Super", num_unique_patterns)
     write_sc4_map(f"{args.output_basename}.SC4Map", final_tile_map_indices, num_unique_patterns)
 
-    print("6. Generating visual outputs...")
+    print("5. Generating visual outputs...")
     pil_final_palette_flat = []
     for r,g,b in palette_0_255: pil_final_palette_flat.extend([r,g,b])
     if len(pil_final_palette_flat) < 256 * 3:
