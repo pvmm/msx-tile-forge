@@ -2,12 +2,12 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.2"
+SCRIPT_VERSION = "0.0.5"
 
 # --- Imports ---
 import argparse
 import os
-from collections import Counter
+from collections import Counter, defaultdict
 import numpy as np
 from PIL import Image, ImageDraw
 from tqdm import tqdm
@@ -70,7 +70,6 @@ def quantize_image_to_msx_colors(image: Image.Image, num_target_colors: int, dit
             final_msx_palette_0_7_set.add(msx_color_0_7)
             final_msx_palette_0_7_list.append(msx_color_0_7)
     
-    # Ensure palette has num_target_colors entries
     idx_master = 0
     while len(final_msx_palette_0_7_list) < num_target_colors and idx_master < len(MSX2_MASTER_PALETTE_0_7):
         candidate_color = MSX2_MASTER_PALETTE_0_7[idx_master]
@@ -140,7 +139,6 @@ def process_tile_for_screen4(tile_indices_np, palette_0_255):
 def calculate_tile_difference(tile1_tuple, tile2_tuple):
     pattern1, color1 = tile1_tuple
     pattern2, color2 = tile2_tuple
-    # Use np.count_nonzero for potentially faster difference calculation
     pattern_diff = np.count_nonzero(pattern1 != pattern2)
     color_diff = np.count_nonzero(color1 != color2)
     return pattern_diff + color_diff
@@ -191,7 +189,7 @@ def optimize_for_threshold(current_threshold, source_tiles, tm_width, tm_height)
 # --- File Writing Functions ---
 def write_sc4_palette(filename, palette_0_7):
     with open(filename, "wb") as f:
-        f.write(b'\x00' * 4) # Reserved bytes
+        f.write(b'\x00' * 4)
         for i in range(16):
             if i < len(palette_0_7):
                 r, g, b = palette_0_7[i]
@@ -205,13 +203,9 @@ def write_sc4_tiles(filename, unique_patterns):
 
     with open(filename, "wb") as f:
         f.write(bytes([header_byte]))
-        f.write(b'\x00' * 4) # Reserved bytes
-        
-        # All pattern data block
+        f.write(b'\x00' * 4)
         for pattern_data, _ in unique_patterns:
             f.write(pattern_data.tobytes())
-            
-        # All color attribute data block
         for _, color_data in unique_patterns:
             f.write(color_data.tobytes())
 
@@ -222,11 +216,8 @@ def write_sc4_supertiles(filename, num_unique_patterns):
             f.write(num_unique_patterns.to_bytes(2, 'little'))
         else:
             f.write(bytes([num_unique_patterns]))
-        
-        f.write(bytes([1, 1])) # Supertile grid dimensions (width=1, height=1)
-        f.write(b'\x00' * 4) # Reserved bytes
-        
-        # Supertile definition blocks
+        f.write(bytes([1, 1]))
+        f.write(b'\x00' * 4)
         for i in range(num_unique_patterns):
             f.write(bytes([i]))
 
@@ -237,8 +228,7 @@ def write_sc4_map(filename, tile_map, num_supertiles):
     with open(filename, "wb") as f:
         f.write(map_width.to_bytes(2, 'little'))
         f.write(map_height.to_bytes(2, 'little'))
-        f.write(b'\x00' * 4) # Reserved bytes
-        
+        f.write(b'\x00' * 4)
         for r in range(map_height):
             for c in range(map_width):
                 supertile_idx = int(tile_map[r, c])
@@ -253,15 +243,10 @@ def reconstruct_sc4_tile_pil(pattern_data, color_data, pil_palette_flat):
     for r in range(8):
         color_byte = color_data[r]
         pattern_byte = pattern_data[r]
-        
         bg_idx = int(color_byte & 0x0F)
         fg_idx = int((color_byte >> 4) & 0x0F)
-        
         for c in range(8):
-            if (pattern_byte >> (7 - c)) & 1:
-                pixels[c, r] = fg_idx
-            else:
-                pixels[c, r] = bg_idx
+            pixels[c, r] = fg_idx if (pattern_byte >> (7 - c)) & 1 else bg_idx
     return tile_img
 
 def main():
@@ -276,8 +261,9 @@ def main():
     parser.add_argument("--max_artifact_threshold", type=int, default=32, 
                         help="Maximum pixel difference (0-64) to try for pattern merging.")
     parser.add_argument("--no_dithering", action="store_true", help="Disable dithering during color quantization.")
-    parser.add_argument("--no_refinement", action="store_true", help="Disable the post-optimization refinement step.")
-
+    parser.add_argument("--no-reclaiming", action="store_true", help="Disable the post-optimization step of reclaiming unused tile slots.")
+    parser.add_argument("--reclaiming-criterion", choices=['frequency', 'damage'], default='frequency',
+                        help="Criterion to use for prioritizing which tiles to restore. 'frequency' restores most used tiles first. 'damage' restores tiles that had the most pixel changes across the entire map.")
     args = parser.parse_args()
 
     if args.num_colors > 16:
@@ -336,7 +322,6 @@ def main():
                 if count <= args.max_patterns:
                     best_solution = (unique, tile_map, count, threshold)
                     break
-                # If loop finishes, best_solution remains the last one tried
                 best_solution = (unique, tile_map, count, threshold)
         
         final_unique_patterns, final_tile_map_indices, final_count, best_threshold_found = best_solution
@@ -346,65 +331,101 @@ def main():
     num_unique_patterns = len(final_unique_patterns)
     print(f"Optimization complete. Using threshold {best_threshold_found} resulting in {num_unique_patterns} unique patterns.")
 
-    # --- START OF NEW REFINEMENT STEP ---
-    if not args.no_refinement:
+    if not args.no_reclaiming:
         available_slots = args.max_patterns - num_unique_patterns
         if available_slots > 0:
-            print(f"4. Refining results by reclaiming {available_slots} unused tile slots...")
-
-            # Count usage of each merged tile
-            tile_indices_flat = final_tile_map_indices.flatten()
-            usage_counts = Counter(tile_indices_flat)
-            sorted_tiles_by_usage = usage_counts.most_common()
-
-            # Create new lists/maps to hold the refined data
-            refined_unique_patterns = list(final_unique_patterns)
-            refined_tile_map = np.copy(final_tile_map_indices)
+            print(f"4. Reclaiming {available_slots} unused tile slots to improve quality (criterion: {args.reclaiming_criterion})...")
             
-            # Use a set of tile pattern bytes to track which originals we've restored
-            promoted_originals = {p.tobytes() for p, c in refined_unique_patterns}
+            reclaimed_unique_patterns = list(final_unique_patterns)
+            reclaimed_tile_map = np.copy(final_tile_map_indices)
             
-            pbar_refine = tqdm(total=available_slots, desc="Refining Tiles")
-            
-            for tile_idx_to_restore, _ in sorted_tiles_by_usage:
-                if available_slots <= 0: break
+            if args.reclaiming_criterion == 'frequency':
+                tile_indices_flat = final_tile_map_indices.flatten()
+                usage_counts = Counter(tile_indices_flat)
+                priority_list = usage_counts.most_common()
 
-                # Find all map locations using this high-frequency tile
-                locations = np.argwhere(refined_tile_map == tile_idx_to_restore)
-                
-                for r_map, c_map in locations:
+                pbar_reclaim = tqdm(total=available_slots, desc="Reclaiming Tiles")
+                promoted_originals = {p.tobytes() for p, c in reclaimed_unique_patterns}
+
+                for tile_idx_to_restore, _ in priority_list:
                     if available_slots <= 0: break
+                    locations = np.argwhere(reclaimed_tile_map == tile_idx_to_restore)
+                    for r_map, c_map in locations:
+                        if available_slots <= 0: break
+                        original_tile_linear_index = r_map * tile_map_width + c_map
+                        original_tile_data = all_source_tiles_data[original_tile_linear_index]
+                        if original_tile_data[0].tobytes() in promoted_originals: continue
+                        
+                        new_tile_index = len(reclaimed_unique_patterns)
+                        reclaimed_unique_patterns.append(original_tile_data)
+                        reclaimed_tile_map[r_map, c_map] = new_tile_index
+                        promoted_originals.add(original_tile_data[0].tobytes())
+                        available_slots -= 1
+                        pbar_reclaim.update(1)
+                pbar_reclaim.close()
 
-                    original_tile_linear_index = r_map * tile_map_width + c_map
-                    original_tile_data = all_source_tiles_data[original_tile_linear_index]
-                    original_pattern_bytes = original_tile_data[0].tobytes()
+            elif args.reclaiming_criterion == 'damage':
+                print("   Grouping original tiles and calculating potential recovery scores...")
+                # --- TILE-CENTRIC LOGIC ---
+                # 1. Group all original tiles and the locations they appear in
+                grouped_originals = defaultdict(list)
+                for i, (pattern, color) in enumerate(all_source_tiles_data):
+                    map_pos = (i // tile_map_width, i % tile_map_width)
+                    # Use pattern bytes as a hashable key
+                    grouped_originals[pattern.tobytes()].append(map_pos)
+
+                # 2. Calculate a total damage score for each unique original tile
+                original_tile_scores = []
+                for pattern_bytes, locations in tqdm(grouped_originals.items(), desc="   Scoring Originals"):
+                    # Get the tile data for this group (it's the same for all locations)
+                    first_pos_r, first_pos_c = locations[0]
+                    original_tile_data = all_source_tiles_data[first_pos_r * tile_map_width + first_pos_c]
                     
-                    # Check if this original tile has already been restored
-                    if original_pattern_bytes in promoted_originals:
-                        continue
+                    total_group_damage = 0
+                    is_merged = False
+                    for r_map, c_map in locations:
+                        merged_tile_idx = final_tile_map_indices[r_map, c_map]
+                        merged_tile_data = final_unique_patterns[merged_tile_idx]
+                        damage = calculate_tile_difference(original_tile_data, merged_tile_data)
+                        if damage > 0:
+                            is_merged = True
+                        total_group_damage += damage
+
+                    # Only consider tiles that were actually merged away
+                    if is_merged:
+                        original_tile_scores.append({
+                            'data': original_tile_data,
+                            'damage': total_group_damage,
+                            'locations': locations
+                        })
+                
+                # 3. Sort groups by highest damage score
+                priority_list = sorted(original_tile_scores, key=lambda x: x['damage'], reverse=True)
+
+                # 4. Reclaim based on this priority list
+                pbar_reclaim = tqdm(total=available_slots, desc="Reclaiming Tiles")
+                for tile_group in priority_list:
+                    if available_slots <= 0: break
                     
-                    # This is a new, unique original tile that was merged. Restore it.
-                    new_tile_index = len(refined_unique_patterns)
-                    refined_unique_patterns.append(original_tile_data)
-                    
-                    # Update the map to point to the newly restored tile
-                    refined_tile_map[r_map, c_map] = new_tile_index
-                    
-                    promoted_originals.add(original_pattern_bytes)
+                    # Spend one slot to restore this entire group
+                    new_tile_index = len(reclaimed_unique_patterns)
+                    reclaimed_unique_patterns.append(tile_group['data'])
                     available_slots -= 1
-                    pbar_refine.update(1)
+                    pbar_reclaim.update(1)
 
-            pbar_refine.close()
-            # Replace the old optimized data with the new refined data
-            final_unique_patterns = refined_unique_patterns
-            final_tile_map_indices = refined_tile_map
+                    # Update the map at all locations for this restored tile
+                    for r_map, c_map in tile_group['locations']:
+                        reclaimed_tile_map[r_map, c_map] = new_tile_index
+                pbar_reclaim.close()
+
+            final_unique_patterns = reclaimed_unique_patterns
+            final_tile_map_indices = reclaimed_tile_map
             num_unique_patterns = len(final_unique_patterns)
-            print(f"Refinement complete. Final unique pattern count: {num_unique_patterns}")
+            print(f"Reclaiming complete. Final unique pattern count: {num_unique_patterns}")
         else:
-            print("4. Skipping refinement step (no available tile slots).")
+            print("4. Skipping reclaiming step (no available tile slots).")
     else:
-        print("4. Skipping refinement step (disabled by user).")
-    # --- END OF NEW REFINEMENT STEP ---
+        print("4. Skipping reclaiming step (disabled by user).")
 
     print("5. Generating output files...")
     output_dir = os.path.dirname(args.output_basename)
@@ -422,7 +443,6 @@ def main():
     if len(pil_final_palette_flat) < 256 * 3:
         pil_final_palette_flat.extend([0,0,0] * (256 - len(palette_0_255)))
 
-    # Reconstructed Image
     reconstructed_img = Image.new('P', (img_width, img_height), color=0)
     reconstructed_img.putpalette(pil_final_palette_flat)
     for r_map in range(tile_map_height):
@@ -434,7 +454,6 @@ def main():
                 reconstructed_img.paste(tile_pil_img, (c_map * args.tile_size, r_map * args.tile_size))
     reconstructed_img.save(f"{args.output_basename}_reconstructed_image.png")
 
-    # Tileset visual
     tiles_per_row_visual = 16
     num_rows_visual = (num_unique_patterns + tiles_per_row_visual - 1) // tiles_per_row_visual
     tileset_vis = Image.new('P', (tiles_per_row_visual * 8, num_rows_visual * 8), color=0)
