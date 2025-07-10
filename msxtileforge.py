@@ -3249,6 +3249,7 @@ class TileEditorApp:
                 )
                 self._update_selected_supertile_info_panel()
                 self._update_st_tab_selected_tile_info_panel()
+                self._update_supertile_info_label()
 
         elif current_tab_index == 3:
             if changed_level in ["all", "map", "supertile", "tile_select", "tile_edit"] or palette_changed:
@@ -3530,8 +3531,10 @@ class TileEditorApp:
             _error(f"Unexpected error during draw_tileset_viewer: {e}")
 
     def update_tile_info_label(self):
-        # This label now only shows the total count
         self.tile_info_label.config(text=f"Tiles: {num_tiles_in_set}")
+
+    def _update_supertile_info_label(self):
+        self.supertile_sel_info_label.config(text=f"Supertiles: {num_supertiles}")
 
     def draw_supertile_definition_canvas(self):
         canvas = self.supertile_def_canvas
