@@ -7,6 +7,9 @@ import struct
 import math
 import argparse
 
+# Force stdout to use UTF-8 encoding
+sys.stdout.reconfigure(encoding='utf-8')
+
 # --- Constants ---
 APP_VERSION = "1.0.0RC6"
 EXPORTER_VERSION = "0.0.1"
@@ -18,7 +21,7 @@ MAX_SUPERTILES = 65535
 
 def print_splash_header(version, exporter_version):
     """
-    Prints a visually distinct header for the MSX Tile Exporter CLI tool,
+    Prints a visually distinct header for the MSX Tile Export CLI tool,
     with the logo on the left and text on the right.
     """
     # ANSI escape codes for standard and bright colors
@@ -54,7 +57,7 @@ def print_splash_header(version, exporter_version):
 
     # Define the text lines that will go next to the logo
     text_lines = [
-        f"{COLOR_TITLE}MSX Tile Exporter{COLOR_RESET} (v{exporter_version})",
+        f"{COLOR_TITLE}MSX Tile Export{COLOR_RESET} (v{exporter_version})",
         f"{COLOR_VERSION}Part of the MSX Tile Forge suite, version {version}{COLOR_RESET}"
     ]
 
