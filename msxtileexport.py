@@ -193,16 +193,14 @@ PROJECT_MAP_INDEX_SIZE: .equ {map_index_size}
             f.write(content)
         print(f"Generated Assembly include file: {os.path.basename(filepath)}")
 
-    def generate_c_header(self, filepath, basename):
-        header_guard = f"{basename.upper().replace(' ', '_')}_H"
+    def generate_c_header_meta(self, filepath, basename):
+        """Generates the C header file with only metadata #defines."""
+        header_guard = f"{basename.upper().replace(' ', '_')}_META_H"
         map_index_size = 2 if self.num_supertiles > 255 else 1
-
+        
         with open(filepath, "w") as f:
-            f.write(f"/*\n * MSX Tile Forge Export Data: {basename}\n */\n\n")
+            f.write(f"/*\n * MSX Tile Forge Project Metadata: {basename}\n */\n\n")
             f.write(f"#ifndef {header_guard}\n#define {header_guard}\n\n")
-            f.write("#include <stdint.h>\n\n")
-
-            # Metadata
             f.write("// --- Defines for Metadata ---\n")
             f.write(f"#define PROJECT_TILE_COUNT      {self.num_tiles_in_set}\n")
             f.write(f"#define PROJECT_SUPERTILE_COUNT {self.num_supertiles}\n")
@@ -211,7 +209,19 @@ PROJECT_MAP_INDEX_SIZE: .equ {map_index_size}
             f.write(f"#define PROJECT_MAP_WIDTH       {self.map_width}\n")
             f.write(f"#define PROJECT_MAP_HEIGHT      {self.map_height}\n")
             f.write(f"#define PROJECT_MAP_INDEX_SIZE  {map_index_size}\n\n")
-            
+            f.write(f"#endif // {header_guard}\n")
+        print(f"Generated C metadata header: {os.path.basename(filepath)}")
+
+    def generate_c_header_data(self, filepath, basename):
+        """Generates the C header file with only the data arrays."""
+        header_guard = f"{basename.upper().replace(' ', '_')}_DATA_H"
+        
+        with open(filepath, "w") as f:
+            f.write(f"/*\n * MSX Tile Forge Project Data: {basename}\n */\n\n")
+            f.write(f"#ifndef {header_guard}\n#define {header_guard}\n\n")
+            f.write("#include <stdint.h>\n")
+            f.write(f'#include "{basename}_meta.h"\n\n')
+
             # Palette
             f.write("// --- Palette Data (16 colors, 3 bytes each: R, G, B) ---\n")
             f.write("const uint8_t palette_data[16][3] = {\n")
@@ -273,29 +283,48 @@ PROJECT_MAP_INDEX_SIZE: .equ {map_index_size}
             f.write("#endif\n\n")
 
             f.write(f"#endif // {header_guard}\n")
-        print(f"Generated C header file: {os.path.basename(filepath)}")
+        print(f"Generated C data header: {os.path.basename(filepath)}")
 
 if __name__ == "__main__":
     print_splash_header(APP_VERSION, EXPORTER_VERSION)
 
-    parser = argparse.ArgumentParser(description="Exports MSX Tile Forge projects to raw binary and include files.")
-    parser.add_argument("--source", required=True, help="Path to any source project file (e.g., project.SC4Map).")
-    parser.add_argument("--output-dir", required=True, help="Directory to save the exported files.")
-    parser.add_argument("--basename", required=True, help="Base name for the exported files (e.g., 'level1').")
-    parser.add_argument("--asm", action="store_true", help="Generate an assembly include file (.s).")
-    parser.add_argument("--c-header", action="store_true", help="Generate a C header file (.h).")
+    parser = argparse.ArgumentParser(
+        description="Exports MSX Tile Forge projects to raw binary and include files.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    
+    parser.add_argument("source_filepath",
+                        help="Path to any source project file (e.g., project.SC4Map).")
+    
+    parser.add_argument("--output-dir",
+                        default=".",
+                        help="Directory to save the exported files (defaults to the current directory).")
+    
+    parser.add_argument("--basename",
+                        help="Base name for exported files. (Defaults to the source file's name).")
+    
+    parser.add_argument("--asm",
+                        action="store_true",
+                        help="Generate an assembly include file (.s).")
+    
+    parser.add_argument("--c-header",
+                        action="store_true",
+                        help="Generate C header files for metadata (_meta.h) and data (_data.h).")
+    
     args = parser.parse_args()
+
+    # If basename is not provided, derive it from the source filepath
+    if not args.basename:
+        args.basename = os.path.splitext(os.path.basename(args.source_filepath))[0]
 
     try:
         if not os.path.isdir(args.output_dir):
             print(f"Output directory not found. Creating '{args.output_dir}'...")
             os.makedirs(args.output_dir, exist_ok=True)
         
-        # Load project data
         converter = ProjectConverter()
-        converter.load_project_from_disk(args.source)
+        converter.load_project_from_disk(args.source_filepath)
         
-        # Export raw binaries
         file_types = {
             "SC4Pal": converter.export_raw_palette,
             "SC4Tiles": converter.export_raw_tileset,
@@ -308,14 +337,15 @@ if __name__ == "__main__":
                 export_func(f)
             print(f"Exported raw binary: {os.path.basename(filepath)}")
         
-        # Generate include files if requested
         if args.asm:
             asm_filepath = os.path.join(args.output_dir, f"{args.basename}.s")
             converter.generate_assembly_include(asm_filepath, args.basename)
 
         if args.c_header:
-            h_filepath = os.path.join(args.output_dir, f"{args.basename}.h")
-            converter.generate_c_header(h_filepath, args.basename)
+            meta_h_filepath = os.path.join(args.output_dir, f"{args.basename}_meta.h")
+            converter.generate_c_header_meta(meta_h_filepath, args.basename)
+            data_h_filepath = os.path.join(args.output_dir, f"{args.basename}_data.h")
+            converter.generate_c_header_data(data_h_filepath, args.basename)
         
         print("\nExport complete.")
         sys.exit(0)
