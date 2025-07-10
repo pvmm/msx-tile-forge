@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.22" # Final fix for multiprocessing warning suppression
+SCRIPT_VERSION = "0.0.23"
 
 # --- Imports ---
 import os
@@ -66,7 +66,7 @@ def print_splash_screen(script_name, script_version):
 
     text_lines = [
         f"{COLOR_TITLE}{script_name}{COLOR_RESET} (v{script_version})",
-        f"{COLOR_VERSION}Part of the MSX Tile Forge suite, version 1.0.0RC8{COLOR_RESET}"
+        f"{COLOR_VERSION}MSX Tile Forge suite, version 1.0.0RC8{COLOR_RESET}"
     ]
 
     print()
@@ -263,12 +263,14 @@ def _calculate_initial_costs_worker(pair):
 def optimize_by_precomputation_and_heap(source_tiles, max_patterns, tm_width, tm_height, palette_255, num_cores, color_metric):
     print("   Finding unique source tiles and their map counts...")
     unique_tile_groups = defaultdict(list)
+    initial_unique_count = len(unique_tile_groups)
     for i, tile_data in enumerate(source_tiles):
         key = tile_data[0].tobytes() + tile_data[1].tobytes()
         unique_tile_groups[key].append(i)
     initial_unique_count = len(unique_tile_groups)
+    print(f"   [INFO] Found {initial_unique_count} unique tiles.")
     if initial_unique_count <= max_patterns:
-        print(f"   Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
+        print(f"   [INFO] Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
         final_patterns = [source_tiles[locs[0]] for locs in unique_tile_groups.values()]
         final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
         for i, locs in enumerate(unique_tile_groups.values()):
@@ -280,8 +282,10 @@ def optimize_by_precomputation_and_heap(source_tiles, max_patterns, tm_width, tm
     active_tiles = { i: {"data": source_tiles[locs[0]], "count": len(locs), "original_indices": {i}}
                      for i, (key, locs) in enumerate(unique_tile_groups.items()) }
 
-    print(f"   Pre-calculating merge costs for all pairs using {num_cores} cores...")
+    print("   Generating memory structure to hold tile pairs...")
     all_pairs = list(combinations(active_tiles.keys(), 2))
+
+    print(f"   Initializing worker pool and transferring data to {num_cores} cores.\r\n      -> This may take some seconds, please wait..")
     chunksize = max(1, len(all_pairs) // (num_cores * 16))
     merge_heap = []
     
@@ -350,17 +354,29 @@ def write_sc4_tiles(filename, unique_patterns):
         for _, color_data in unique_patterns:
             f.write(color_data.tobytes())
 
-def write_sc4_supertiles(filename, num_unique_patterns):
+def write_sc4_supertiles(filename, supertile_definitions, super_w, super_h):
+    num_supertiles = len(supertile_definitions)
     with open(filename, "wb") as f:
-        if num_unique_patterns > 255:
+        # Write header: number of supertiles
+        if num_supertiles > 255:
             f.write(b'\x00')
-            f.write(num_unique_patterns.to_bytes(2, 'little'))
+            f.write(num_supertiles.to_bytes(2, 'little'))
         else:
-            f.write(bytes([num_unique_patterns]))
-        f.write(bytes([1, 1]))
-        f.write(b'\x00' * 4)
-        for i in range(num_unique_patterns):
-            f.write(bytes([i]))
+            f.write(bytes([num_supertiles]))
+        
+        # Write header: supertile grid dimensions
+        f.write(bytes([super_w, super_h]))
+        f.write(b'\x00' * 4) # Reserved bytes
+        
+        # Write the definition for each supertile
+        for supertile_block in supertile_definitions:
+            # Check if the base tile indices need 1 or 2 bytes
+            max_idx = np.max(supertile_block)
+            bytes_per_idx = 2 if max_idx > 255 else 1
+            
+            # Flatten the block and write the indices
+            for base_tile_idx in supertile_block.flat:
+                f.write(int(base_tile_idx).to_bytes(bytes_per_idx, 'little'))
 
 def write_sc4_map(filename, tile_map, num_supertiles):
     map_height, map_width = tile_map.shape
@@ -386,6 +402,46 @@ def reconstruct_sc4_tile_pil(pattern_data, color_data, pil_palette_flat):
             pixels[c, r] = fg_idx if is_fg_pixel else bg_idx
     return tile_img
 
+def discover_supertiles(tile_map, super_w, super_h):
+    """
+    Analyzes an 8x8 tilemap to find unique supertiles of size WxH.
+    Returns a list of unique supertile definitions and a new supertile map.
+    """
+    map_h, map_w = tile_map.shape
+    if map_w % super_w != 0 or map_h % super_h != 0:
+        print(f"Warning: Image dimensions ({map_w*8}x{map_h*8}) are not perfectly divisible by supertile dimensions ({super_w*8}x{super_h*8}).")
+    
+    super_map_w = map_w // super_w
+    super_map_h = map_h // super_h
+    supertile_map = np.zeros((super_map_h, super_map_w), dtype=np.int16)
+    
+    unique_supertiles = {}
+    supertile_definitions = []
+    
+    for r_super in range(super_map_h):
+        for c_super in range(super_map_w):
+            r_start = r_super * super_h
+            c_start = c_super * super_w
+            
+            # Extract the WxH block of 8x8 tile indices
+            block = tile_map[r_start : r_start + super_h, c_start : c_start + super_w]
+            
+            # Use the block's byte representation as a hashable key
+            block_key = block.tobytes()
+            
+            if block_key not in unique_supertiles:
+                # Found a new unique supertile
+                new_supertile_id = len(supertile_definitions)
+                unique_supertiles[block_key] = new_supertile_id
+                supertile_definitions.append(block)
+                supertile_map[r_super, c_super] = new_supertile_id
+            else:
+                # This supertile has been seen before
+                supertile_id = unique_supertiles[block_key]
+                supertile_map[r_super, c_super] = supertile_id
+                
+    return supertile_definitions, supertile_map
+
 def main():
     if COLOUR_SCIENCE_AVAILABLE:
         # Suppress the warning for the main process
@@ -393,7 +449,7 @@ def main():
         
     print_splash_screen(SCRIPT_NAME, SCRIPT_VERSION)
     
-    parser = argparse.ArgumentParser(description=f"An intelligent MSX2 graphics converter.")
+    parser = argparse.ArgumentParser(description=f"Transforming maps in MSX SC4 tiles like a charm.")
     parser.add_argument("input_image", help="Input image file path")
     parser.add_argument("--max_patterns", type=int, default=256, help="Target maximum number of unique patterns")
     parser.add_argument("--num_colors", type=int, default=16, help="Number of colors for the palette (max 16)")
@@ -401,7 +457,10 @@ def main():
     parser.add_argument("--no_dithering", action="store_true", help="Disable dithering during color quantization.")
     parser.add_argument("--cores", type=int, default=os.cpu_count(), help="Number of CPU cores to use. Defaults to all.")
     parser.add_argument("--color-metric", choices=['rgb', 'weighted-rgb', 'cie76', 'ciede2000'], default='weighted-rgb',
-                        help="Algorithm for color difference calculation. 'weighted-rgb' is default. CIE modes require 'pip install colour-science'.")
+                        help="Algorithm for color difference calculation. 'weighted-rgb' is default. CIE modes require 'pip install colormath'.")
+    parser.add_argument("--supertile-width", type=int, default=4, help="Width of supertiles in tiles.")
+    parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles.")
+    
     args = parser.parse_args()
 
     if (args.color_metric in ['cie76', 'ciede2000']) and not COLOUR_SCIENCE_AVAILABLE:
@@ -411,7 +470,7 @@ def main():
         return
 
     if args.num_colors > 16:
-        print("Warning: --num_colors>16. Setting to 16.")
+        print("Warning: --num_colors > 16. Setting to 16.")
         args.num_colors = 16
 
     try:
@@ -424,6 +483,7 @@ def main():
 
     print(f"1. Quantizing image to MSX palette (metric: {args.color_metric})...")
     quantized_pil_image, msx_palette_0_7 = quantize_image_to_msx_colors(original_pil_image, args.num_colors, not args.no_dithering, color_dist_func)
+    print(f"   [INFO] Palette quantization complete. Selected {len(msx_palette_0_7)} unique MSX colors.")
     palette_0_255 = [MSX2_MASTER_PALETTE_0_255[MSX2_MASTER_PALETTE_0_7.index(c)] for c in msx_palette_0_7]
     quantized_pil_image = pad_image_to_tile_size(quantized_pil_image)
     img_width, img_height = quantized_pil_image.size
@@ -435,37 +495,64 @@ def main():
     for ty in tqdm(range(tile_map_height), desc="Processing Tiles"):
         for tx in range(tile_map_width):
             all_source_tiles_data.append(process_tile_for_screen4(quantized_np_indices[ty*8:(ty+1)*8, tx*8:(tx+1)*8], palette_0_255, color_dist_func))
-    
-    print("3. Optimizing patterns...")
+    print(f"   [INFO] Image contains a total of {len(all_source_tiles_data)} tiles (including duplicates).")
+
+    print("3. Optimizing tiles...")
     final_unique_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_data, args.max_patterns, tile_map_width, tile_map_height, palette_0_255, args.cores, args.color_metric)
     
-    num_unique_patterns = len(final_unique_patterns)
-    print(f"Optimization complete. Final unique pattern count: {num_unique_patterns}")
+    num_unique_base_patterns = len(final_unique_patterns)
+    print(f"Optimization complete. Final tile count: {num_unique_base_patterns}")
 
-    print("4. Generating output files...")
+    # --- Supertile Discovery Step ---
+    supertile_definitions = []
+    final_map_to_write = final_tile_map_indices
+    num_supertiles = num_unique_base_patterns
+
+    # Check if we are actually using supertiles (dimensions > 1x1)
+    use_supertiles = args.supertile_width > 1 or args.supertile_height > 1
+    if use_supertiles:
+        print(f"4. Discovering {args.supertile_width}x{args.supertile_height} supertiles from optimized tileset...")
+        print(f"   [INFO] Map dimensions: {tile_map_width}x{tile_map_height} tiles.")
+        super_map_h, super_map_w = final_map_to_write.shape
+        super_map_h = super_map_h // args.supertile_width
+        super_map_w = super_map_w // args.supertile_height
+        print(f"   [INFO] Map dimensions: {super_map_w}x{super_map_h} = {super_map_w * super_map_h} supertiles.")
+        supertile_definitions, supertile_map = discover_supertiles(final_tile_map_indices, args.supertile_width, args.supertile_height)
+        num_supertiles = len(supertile_definitions)
+        final_map_to_write = supertile_map
+        print(f"   [INFO] Found {num_supertiles} unique {args.supertile_width}x{args.supertile_height} supertiles.")
+    else:
+        # Create dummy 1x1 supertile definitions for compatibility
+        print("4. Generating 1x1 supertile definitions...")
+        print(f"   [INFO] Map dimensions: {tile_map_width}x{tile_map_height} tiles.")
+        for i in range(num_unique_base_patterns):
+            supertile_definitions.append(np.array([[i]], dtype=np.int16))
+
+    print("5. Generating output files...")
     output_dir = os.path.dirname(args.output_basename)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
+    
     write_sc4_palette(f"{args.output_basename}.SC4Pal", msx_palette_0_7)
     write_sc4_tiles(f"{args.output_basename}.SC4Tiles", final_unique_patterns)
-    write_sc4_supertiles(f"{args.output_basename}.SC4Super", num_unique_patterns)
-    write_sc4_map(f"{args.output_basename}.SC4Map", final_tile_map_indices, num_unique_patterns)
+    write_sc4_supertiles(f"{args.output_basename}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
+    write_sc4_map(f"{args.output_basename}.SC4Map", final_map_to_write, num_supertiles)
 
-    print("5. Generating visual outputs...")
+    print("6. Generating visual outputs...")
     pil_final_palette_flat = [c for rgb in palette_0_255 for c in rgb]
-    if len(pil_final_palette_flat) < 256 * 3:
+    if len(pil_final_palette_flat) < 256*3:
         pil_final_palette_flat.extend([0,0,0] * (256 - len(palette_0_255)))
     reconstructed_img = Image.new('P', (img_width, img_height), color=0)
     reconstructed_img.putpalette(pil_final_palette_flat)
     for r_map in range(tile_map_height):
         for c_map in range(tile_map_width):
             pattern_idx = final_tile_map_indices[r_map, c_map]
-            if 0 <= pattern_idx < num_unique_patterns:
+            if 0 <= pattern_idx < num_unique_base_patterns:
                 reconstructed_img.paste(reconstruct_sc4_tile_pil(final_unique_patterns[pattern_idx][0], final_unique_patterns[pattern_idx][1], pil_final_palette_flat), (c_map * 8, r_map * 8))
     reconstructed_img.save(f"{args.output_basename}_reconstructed_image.png")
 
     tiles_per_row = 16
-    num_rows = (num_unique_patterns + tiles_per_row - 1) // tiles_per_row
+    num_rows = (num_unique_base_patterns + tiles_per_row - 1) // tiles_per_row
     tileset_vis = Image.new('P', (tiles_per_row*8, num_rows*8), color=0)
     tileset_vis.putpalette(pil_final_palette_flat)
     for i, (p_data, c_data) in enumerate(final_unique_patterns):

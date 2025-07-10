@@ -12,7 +12,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # --- Constants ---
 APP_VERSION = "1.0.0RC8"
-EXPORTER_VERSION = "0.0.1"
+EXPORTER_VERSION = "0.0.2"
 RESERVED_BYTES_COUNT = 4
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
@@ -58,7 +58,7 @@ def print_splash_header(version, exporter_version):
     # Define the text lines that will go next to the logo
     text_lines = [
         f"{COLOR_TITLE}MSX Tile Export{COLOR_RESET} (v{exporter_version})",
-        f"{COLOR_VERSION}Part of the MSX Tile Forge suite, version {version}{COLOR_RESET}"
+        f"{COLOR_VERSION}MSX Tile Forge suite, version {version}{COLOR_RESET}"
     ]
 
     # Print the combined logo and text, line by line
