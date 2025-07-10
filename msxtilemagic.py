@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.23"
+SCRIPT_VERSION = "0.0.24"
 
 # --- Imports ---
 import os
@@ -260,7 +260,7 @@ def _calculate_initial_costs_worker(pair):
     cost = diff * loser_count
     return (cost, idx1, idx2)
 
-def optimize_by_precomputation_and_heap(source_tiles, max_patterns, tm_width, tm_height, palette_255, num_cores, color_metric):
+def optimize_by_precomputation_and_heap(source_tiles, max_tiles, tm_width, tm_height, palette_255, num_cores, color_metric):
     print("   Finding unique source tiles and their map counts...")
     unique_tile_groups = defaultdict(list)
     initial_unique_count = len(unique_tile_groups)
@@ -269,7 +269,7 @@ def optimize_by_precomputation_and_heap(source_tiles, max_patterns, tm_width, tm
         unique_tile_groups[key].append(i)
     initial_unique_count = len(unique_tile_groups)
     print(f"   [INFO] Found {initial_unique_count} unique tiles.")
-    if initial_unique_count <= max_patterns:
+    if initial_unique_count <= max_tiles:
         print(f"   [INFO] Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
         final_patterns = [source_tiles[locs[0]] for locs in unique_tile_groups.values()]
         final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
@@ -295,8 +295,8 @@ def optimize_by_precomputation_and_heap(source_tiles, max_patterns, tm_width, tm
             if result:
                 heapq.heappush(merge_heap, result)
 
-    num_merges_to_perform = len(active_tiles) - max_patterns
-    print(f"   Performing {num_merges_to_perform} merges to reach target of {max_patterns} patterns...")
+    num_merges_to_perform = len(active_tiles) - max_tiles
+    print(f"   Performing {num_merges_to_perform} merges to reach target of {max_tiles} tiles...")
     is_active = {idx: True for idx in active_tiles.keys()}
     
     with tqdm(total=num_merges_to_perform, desc="   Merging tiles") as pbar:
@@ -453,7 +453,8 @@ def main():
     parser.add_argument("input_image", help="Input image file path")
     parser.add_argument("--max-tiles", type=int, default=256, help="Target maximum number of unique tiles")
     parser.add_argument("--num-colors", type=int, default=16, help="Number of colors for the palette (max 16)")
-    parser.add_argument("--output-basename", default="output", help="Basename for output files")
+    parser.add_argument("--output-dir", default=".", help="Directory for output files (defaults to current directory).")
+    parser.add_argument("--output-basename", help="Basename for output files (defaults to the input file's name).")
     parser.add_argument("--no-dithering", action="store_true", help="Disable dithering during color quantization.")
     parser.add_argument("--cores", type=int, default=os.cpu_count(), help="Number of CPU cores to use. Defaults to all.")
     parser.add_argument("--color-metric", choices=['rgb', 'weighted-rgb', 'cie76', 'ciede2000'], default='weighted-rgb',
@@ -479,6 +480,18 @@ def main():
         print(f"Error: Input image '{args.input_image}' not found.")
         return
 
+    # --- Determine Final Output Basename ---
+    if args.output_basename:
+        # User provided a specific basename
+        base_name = args.output_basename
+    else:
+        # Default to the input image's name without the extension
+        base_name = os.path.splitext(os.path.basename(args.input_image))[0]
+
+    # --- Construct the full path for output files ---
+    # This combines the directory and the basename for easy use later
+    full_output_path = os.path.join(args.output_dir, base_name)
+
     color_dist_func = get_color_distance_function(args.color_metric)
 
     print(f"1. Quantizing image to MSX palette (metric: {args.color_metric})...")
@@ -492,16 +505,16 @@ def main():
     print("2. Extracting and processing source tiles...")
     all_source_tiles_data = []
     quantized_np_indices = np.array(quantized_pil_image.getdata(), dtype=np.uint8).reshape((img_height, img_width))
-    for ty in tqdm(range(tile_map_height), desc="Processing Tiles"):
+    for ty in tqdm(range(tile_map_height), desc="   Processing Tiles"):
         for tx in range(tile_map_width):
             all_source_tiles_data.append(process_tile_for_screen4(quantized_np_indices[ty*8:(ty+1)*8, tx*8:(tx+1)*8], palette_0_255, color_dist_func))
     print(f"   [INFO] Image contains a total of {len(all_source_tiles_data)} tiles (including duplicates).")
 
     print("3. Optimizing tiles...")
-    final_unique_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_data, args.max_patterns, tile_map_width, tile_map_height, palette_0_255, args.cores, args.color_metric)
+    final_unique_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_data, args.max_tiles, tile_map_width, tile_map_height, palette_0_255, args.cores, args.color_metric)
     
     num_unique_base_patterns = len(final_unique_patterns)
-    print(f"Optimization complete. Final tile count: {num_unique_base_patterns}")
+    print(f"   [INFO] Optimization complete. Final tile count: {num_unique_base_patterns}")
 
     # --- Supertile Discovery Step ---
     supertile_definitions = []
@@ -529,14 +542,13 @@ def main():
             supertile_definitions.append(np.array([[i]], dtype=np.int16))
 
     print("5. Generating output files...")
-    output_dir = os.path.dirname(args.output_basename)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-    
-    write_sc4_palette(f"{args.output_basename}.SC4Pal", msx_palette_0_7)
-    write_sc4_tiles(f"{args.output_basename}.SC4Tiles", final_unique_patterns)
-    write_sc4_supertiles(f"{args.output_basename}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
-    write_sc4_map(f"{args.output_basename}.SC4Map", final_map_to_write, num_supertiles)
+    # Create the output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    write_sc4_palette(f"{full_output_path}.SC4Pal", msx_palette_0_7)
+    write_sc4_tiles(f"{full_output_path}.SC4Tiles", final_unique_patterns)
+    write_sc4_supertiles(f"{full_output_path}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
+    write_sc4_map(f"{full_output_path}.SC4Map", final_map_to_write, num_supertiles)
 
     print("6. Generating visual outputs...")
     pil_final_palette_flat = [c for rgb in palette_0_255 for c in rgb]
