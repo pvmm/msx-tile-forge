@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.26"
+SCRIPT_VERSION = "0.0.27"
 
 # --- Imports ---
 import os
@@ -296,18 +296,47 @@ def _calculate_initial_costs_worker(pair):
     cost = diff * loser_count
     return (cost, idx1, idx2)
 
-def optimize_by_precomputation_and_heap(source_tiles, max_tiles, tm_width, tm_height, palette_255, num_cores, color_metric):
+def synthesize_ideal_tile(tile_group, palette_255, color_dist_func):
+    num_tiles_in_group = len(tile_group)
+    if num_tiles_in_group == 0:
+        return np.zeros(8, dtype=np.uint8), np.zeros(8, dtype=np.uint8)
+
+    avg_rgb_tile = np.zeros((8, 8, 3), dtype=np.float32)
+    for tile_indices in tile_group:
+        for r in range(8):
+            for c in range(8):
+                palette_idx = tile_indices[r, c]
+                avg_rgb_tile[r, c] += palette_255[palette_idx]
+    
+    avg_rgb_tile /= num_tiles_in_group
+
+    final_indices_tile = np.zeros((8, 8), dtype=np.uint8)
+    for r in range(8):
+        for c in range(8):
+            avg_rgb = tuple(avg_rgb_tile[r, c])
+            best_dist = float('inf')
+            best_idx = 0
+            for i, p_color in enumerate(palette_255):
+                dist = color_distance_rgb(avg_rgb, p_color)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_idx = i
+            final_indices_tile[r, c] = best_idx
+            
+    return process_tile_for_screen4(final_indices_tile, palette_255, color_dist_func)
+
+
+def optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, max_tiles, tm_width, tm_height, palette_255, num_cores, color_metric, synthesize):
     print("   Finding unique source tiles and their map counts...")
     unique_tile_groups = defaultdict(list)
-    initial_unique_count = len(unique_tile_groups)
-    for i, tile_data in enumerate(source_tiles):
+    for i, tile_data in enumerate(all_source_tiles_sc4):
         key = tile_data[0].tobytes() + tile_data[1].tobytes()
         unique_tile_groups[key].append(i)
     initial_unique_count = len(unique_tile_groups)
     print(f"   [INFO] Found {initial_unique_count} unique tiles.")
     if initial_unique_count <= max_tiles:
         print(f"   [INFO] Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
-        final_patterns = [source_tiles[locs[0]] for locs in unique_tile_groups.values()]
+        final_patterns = [all_source_tiles_sc4[locs[0]] for locs in unique_tile_groups.values()]
         final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
         for i, locs in enumerate(unique_tile_groups.values()):
             for loc_idx in locs:
@@ -315,7 +344,10 @@ def optimize_by_precomputation_and_heap(source_tiles, max_tiles, tm_width, tm_he
                 final_tile_map[r, c] = i
         return final_patterns, final_tile_map
 
-    active_tiles = { i: {"data": source_tiles[locs[0]], "count": len(locs), "original_indices": {i}}
+    unique_sc4_keys = list(unique_tile_groups.keys())
+    unique_sc4_to_idx = {key: i for i, key in enumerate(unique_sc4_keys)}
+    
+    active_tiles = { i: {"data": all_source_tiles_sc4[locs[0]], "count": len(locs), "original_indices": {i}}
                      for i, (key, locs) in enumerate(unique_tile_groups.items()) }
 
     print("   Generating memory structure to hold tile pairs...")
@@ -355,17 +387,31 @@ def optimize_by_precomputation_and_heap(source_tiles, max_tiles, tm_width, tm_he
             merges_done += 1
             pbar.update(1)
 
+    if synthesize:
+        print("   Synthesizing ideal tiles for merged groups...")
+        color_dist_func = get_color_distance_function(color_metric)
+        for tile_info in tqdm(active_tiles.values(), desc="   Synthesizing"):
+            if len(tile_info["original_indices"]) > 1:
+                group_locations = []
+                for original_unique_idx in tile_info["original_indices"]:
+                    key = unique_sc4_keys[original_unique_idx]
+                    group_locations.extend(unique_tile_groups[key])
+                
+                quantized_tiles_for_group = [all_source_tiles_quantized[i] for i in group_locations]
+                tile_info["data"] = synthesize_ideal_tile(quantized_tiles_for_group, palette_255, color_dist_func)
+
     print("   Building final tileset and map...")
     final_patterns, final_merge_map = [], {}
     for final_idx, (key, tile_info) in enumerate(active_tiles.items()):
         final_patterns.append(tile_info["data"])
         for original_unique_idx in tile_info["original_indices"]:
             final_merge_map[original_unique_idx] = final_idx
+
     final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
-    original_to_unique_idx = {key: i for i, key in enumerate(unique_tile_groups.keys())}
-    for i, tile_data in enumerate(source_tiles):
+    for i, tile_data in enumerate(all_source_tiles_sc4):
         key = tile_data[0].tobytes() + tile_data[1].tobytes()
-        final_idx = final_merge_map[original_to_unique_idx[key]]
+        unique_idx = unique_sc4_to_idx[key]
+        final_idx = final_merge_map[unique_idx]
         r, c = divmod(i, tm_width)
         final_tile_map[r, c] = final_idx
     return final_patterns, final_tile_map
@@ -479,6 +525,7 @@ def main():
     parser.add_argument("--supertile-width", type=int, default=4, help="Width of supertiles in tiles.")
     parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles.")
     parser.add_argument("--find-best-offset", action="store_true", help="Test all 64 tile offsets in parallel and pick the best one.")
+    parser.add_argument("--synthesize-tiles", action="store_true", help="Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
 
     args = parser.parse_args()
 
@@ -524,16 +571,18 @@ def main():
     tile_map_width, tile_map_height = img_width // 8, img_height // 8
 
     print("2. Extracting and processing source tiles...")
-    all_source_tiles_data = []
+    all_source_tiles_sc4 = []
+    all_source_tiles_quantized = []
     quantized_np_indices = np.array(quantized_pil_image.getdata(), dtype=np.uint8).reshape((img_height, img_width))
     for ty in tqdm(range(tile_map_height), desc="   Processing Tiles"):
         for tx in range(tile_map_width):
             tile_block = quantized_np_indices[ty*8:(ty+1)*8, tx*8:(tx+1)*8]
-            all_source_tiles_data.append(process_tile_for_screen4(tile_block, palette_0_255, color_dist_func))
-    print(f"   [INFO] Image contains a total of {len(all_source_tiles_data)} tiles (including duplicates).")
+            all_source_tiles_quantized.append(tile_block)
+            all_source_tiles_sc4.append(process_tile_for_screen4(tile_block, palette_0_255, color_dist_func))
+    print(f"   [INFO] Image contains a total of {len(all_source_tiles_sc4)} tiles (including duplicates).")
 
     print("3. Optimizing tiles...")
-    final_unique_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_data, args.max_tiles, tile_map_width, tile_map_height, palette_0_255, args.cores, args.color_metric)
+    final_unique_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height, palette_0_255, args.cores, args.color_metric, args.synthesize_tiles)
     
     num_unique_base_patterns = len(final_unique_patterns)
     print(f"   [INFO] Optimization complete. Final tile count: {num_unique_base_patterns}")
