@@ -291,34 +291,19 @@ PROJECT_MAP_INDEX_SIZE: .equ {map_index_size}
 if __name__ == "__main__":
     print_splash_header(APP_VERSION, EXPORTER_VERSION)
 
-    parser = argparse.ArgumentParser(
-        description="Exports MSX Tile Forge projects to raw binary and include files.",
+    parser = argparse.ArgumentParser(description="Exports MSX Tile Forge projects to raw binary and include files.",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    
-    parser.add_argument("source_filepath",
-                        help="Path to any source project file (e.g., project.SC4Map).")
-    
-    parser.add_argument("--output-dir",
-                        default=".",
-                        help="Directory to save the exported files (defaults to the current directory).")
-    
-    parser.add_argument("--basename",
-                        help="Base name for exported files. (Defaults to the source file's name).")
-    
-    parser.add_argument("--asm",
-                        action="store_true",
-                        help="Generate an assembly include file (.s).")
-    
-    parser.add_argument("--c-header",
-                        action="store_true",
-                        help="Generate C header files for metadata (_meta.h) and data (_data.h).")
-    
+    parser.add_argument("source_filepath", help="Path to any source project file (e.g., project.SC4Map).")
+    parser.add_argument("--output-dir", default=".", help="Directory to save the exported files (defaults to the current directory).")
+    parser.add_argument("--output-basename", help="Base name for exported files. (Defaults to the source file's name).")
+    parser.add_argument("--asm", action="store_true", help="Generate an assembly include file (.s).")
+    parser.add_argument("--c-header", action="store_true", help="Generate C header files for metadata (_meta.h) and data (_data.h).")
     args = parser.parse_args()
 
-    # If basename is not provided, derive it from the source filepath
-    if not args.basename:
-        args.basename = os.path.splitext(os.path.basename(args.source_filepath))[0]
+    # If output-basename is not provided, derive it from the source filepath
+    if not args.output_basename:
+        args.output_basename = os.path.splitext(os.path.basename(args.source_filepath))[0]
 
     try:
         if not os.path.isdir(args.output_dir):
@@ -335,20 +320,20 @@ if __name__ == "__main__":
             "SC4Map": converter.export_raw_map,
         }
         for ext, export_func in file_types.items():
-            filepath = os.path.join(args.output_dir, f"{args.basename}_{ext}.bin")
+            filepath = os.path.join(args.output_dir, f"{args.output_basename}_{ext}.bin")
             with open(filepath, "wb") as f:
                 export_func(f)
             print(f"Exported raw binary: {os.path.basename(filepath)}")
         
         if args.asm:
-            asm_filepath = os.path.join(args.output_dir, f"{args.basename}.s")
-            converter.generate_assembly_include(asm_filepath, args.basename)
+            asm_filepath = os.path.join(args.output_dir, f"{args.output_basename}.s")
+            converter.generate_assembly_include(asm_filepath, args.output_basename)
 
         if args.c_header:
-            meta_h_filepath = os.path.join(args.output_dir, f"{args.basename}_meta.h")
-            converter.generate_c_header_meta(meta_h_filepath, args.basename)
-            data_h_filepath = os.path.join(args.output_dir, f"{args.basename}_data.h")
-            converter.generate_c_header_data(data_h_filepath, args.basename)
+            meta_h_filepath = os.path.join(args.output_dir, f"{args.output_basename}_meta.h")
+            converter.generate_c_header_meta(meta_h_filepath, args.output_basename)
+            data_h_filepath = os.path.join(args.output_dir, f"{args.output_basename}_data.h")
+            converter.generate_c_header_data(data_h_filepath, args.output_basename)
         
         print("\nExport complete.")
         sys.exit(0)

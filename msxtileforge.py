@@ -1789,7 +1789,7 @@ class ExportDialog(tk.Toplevel):
             cli_script,
             source_file,
             "--output-dir", output_dir,
-            "--basename", basename
+            "--output-basename", basename
         ]
         if self.gen_asm_var.get():
             command.append("--asm")

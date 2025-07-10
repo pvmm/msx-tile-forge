@@ -451,10 +451,10 @@ def main():
     
     parser = argparse.ArgumentParser(description=f"Transforming maps in MSX SC4 tiles like a charm.")
     parser.add_argument("input_image", help="Input image file path")
-    parser.add_argument("--max_patterns", type=int, default=256, help="Target maximum number of unique patterns")
-    parser.add_argument("--num_colors", type=int, default=16, help="Number of colors for the palette (max 16)")
-    parser.add_argument("--output_basename", default="output", help="Basename for output files")
-    parser.add_argument("--no_dithering", action="store_true", help="Disable dithering during color quantization.")
+    parser.add_argument("--max-tiles", type=int, default=256, help="Target maximum number of unique tiles")
+    parser.add_argument("--num-colors", type=int, default=16, help="Number of colors for the palette (max 16)")
+    parser.add_argument("--output-basename", default="output", help="Basename for output files")
+    parser.add_argument("--no-dithering", action="store_true", help="Disable dithering during color quantization.")
     parser.add_argument("--cores", type=int, default=os.cpu_count(), help="Number of CPU cores to use. Defaults to all.")
     parser.add_argument("--color-metric", choices=['rgb', 'weighted-rgb', 'cie76', 'ciede2000'], default='weighted-rgb',
                         help="Algorithm for color difference calculation. 'weighted-rgb' is default. CIE modes require 'pip install colormath'.")
