@@ -131,7 +131,7 @@ WIN_VIEW_HALF_ROW_COLOR = "#80808080"  # Semi-transparent grey for overscan area
 
 
 logging.basicConfig(
-    level=logging.DEBUG,  # Set the minimum level of messages to handle
+    level=logging.INFO,  # Set the minimum level of messages to handle
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -192,22 +192,22 @@ def get_contrast_color(hex_color):
         return "#000000"
 
 def _debug(message):
-    logging.debug(f"{str(message)}")
+    logger.debug(f"{str(message)}")
 
 def _info(message):
-    logging.info(f"{str(message)}")
+    logger.info(f"{str(message)}")
 
 def _warning(message):
-    logging.warning(f"{str(message)}")
+    logger.warning(f"{str(message)}")
 
 def _error(message):
-    logging.error(f"{str(message)}")
+    logger.error(f"{str(message)}")
     stack_list = traceback.format_stack()
     stack_str = "".join(stack_list)
-    logging.debug(stack_str)
+    logger.debug(stack_str)
 
 def _critical(message):
-    logging.critical(f"{str(message)}")
+    logger.critical(f"{str(message)}")
 
 # --- Usage Window Classes -----------------------------------------------------------------------------------------------
 class ColorUsageWindow(tk.Toplevel):
