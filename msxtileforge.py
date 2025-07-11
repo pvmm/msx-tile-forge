@@ -12494,7 +12494,7 @@ class TileEditorApp:
                 if indicator == 0:
                     count_short_bytes = f_st.read(2)
                     if len(count_short_bytes) < 2: raise EOFError("EOF for ST count.")
-                    file_st_count = struct.unpack(">H", count_short_bytes)[0]
+                    file_st_count = struct.unpack("<H", count_short_bytes)[0]
                     header_size_st_count = 3
                 else:
                     file_st_count = indicator
