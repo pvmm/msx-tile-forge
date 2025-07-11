@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.31"
+SCRIPT_VERSION = "0.0.34"
 
 # --- Imports ---
 import os
@@ -128,18 +128,16 @@ def find_closest_msx_color(rgb_tuple_0_255, color_dist_func, exclude_colors_0_7=
             break
     return closest_msx_color_0_7
 
-def find_best_auto_colors(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
+def find_best_auto_colors_classic(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
     if num_auto_colors <= 0:
         return []
-
+    
     if image.mode != 'RGB':
         image = image.convert('RGB')
         
-    # Get the N best "ideal" colors using Pillow's high-quality quantizer.
     try:
         temp_quantized_img = image.quantize(colors=num_auto_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     except Exception:
-        # Fallback for older Pillow versions or specific image issues
         temp_quantized_img = image.convert('P', palette=Image.Palette.ADAPTIVE, colors=num_auto_colors, dither=Image.Dither.NONE)
     
     pil_palette_255_flat = temp_quantized_img.getpalette()
@@ -149,11 +147,54 @@ def find_best_auto_colors(image: Image.Image, num_auto_colors: int, fixed_colors
         for i in range(num_ideal_colors):
             ideal_colors_255.append((pil_palette_255_flat[i*3], pil_palette_255_flat[i*3+1], pil_palette_255_flat[i*3+2]))
 
-    # Map ideal colors to the closest available unique MSX colors.
     auto_colors_0_7_set = set()
     auto_colors_0_7_list = []
     
     for r255,g255,b255 in ideal_colors_255:
+        msx_color_0_7 = find_closest_msx_color((r255,g255,b255), color_dist_func, exclude_colors_0_7=fixed_colors_0_7)
+        if msx_color_0_7 not in auto_colors_0_7_set and msx_color_0_7 not in fixed_colors_0_7:
+            auto_colors_0_7_set.add(msx_color_0_7)
+            auto_colors_0_7_list.append(msx_color_0_7)
+
+    # This padding is the crucial part of the "classic" algorithm's behavior.
+    idx_master = 0
+    combined_exclusions = auto_colors_0_7_set.union(set(fixed_colors_0_7))
+    while len(auto_colors_0_7_list) < num_auto_colors and idx_master < len(MSX2_MASTER_PALETTE_0_7):
+        candidate_color = MSX2_MASTER_PALETTE_0_7[idx_master]
+        if candidate_color not in combined_exclusions:
+            auto_colors_0_7_list.append(candidate_color)
+            combined_exclusions.add(candidate_color)
+        idx_master += 1
+            
+    return auto_colors_0_7_list[:num_auto_colors]
+
+def find_best_auto_colors_sharp(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
+    return find_best_auto_colors_classic(image, num_auto_colors, fixed_colors_0_7, color_dist_func)
+
+def find_best_auto_colors_soft(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
+    if num_auto_colors <= 0:
+        return []
+
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    try:
+        temp_quantized_img = image.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    except Exception:
+        temp_quantized_img = image.convert('P', palette=Image.Palette.ADAPTIVE, colors=256, dither=Image.Dither.NONE)
+    
+    pil_palette_255_flat = temp_quantized_img.getpalette()
+    ideal_colors_255 = []
+    if pil_palette_255_flat:
+        num_ideal_colors = len(pil_palette_255_flat) // 3
+        for i in range(num_ideal_colors):
+            ideal_colors_255.append((pil_palette_255_flat[i*3], pil_palette_255_flat[i*3+1], pil_palette_255_flat[i*3+2]))
+
+    auto_colors_0_7_set = set()
+    auto_colors_0_7_list = []
+    
+    for r255,g255,b255 in ideal_colors_255:
+        if len(auto_colors_0_7_list) >= num_auto_colors:
+            break
         msx_color_0_7 = find_closest_msx_color((r255,g255,b255), color_dist_func, exclude_colors_0_7=fixed_colors_0_7)
         if msx_color_0_7 not in auto_colors_0_7_set and msx_color_0_7 not in fixed_colors_0_7:
             auto_colors_0_7_set.add(msx_color_0_7)
@@ -163,14 +204,12 @@ def find_best_auto_colors(image: Image.Image, num_auto_colors: int, fixed_colors
 
 def remap_image_to_palette(image: Image.Image, working_palette_0_7: list, dither_enabled: bool):
     if not working_palette_0_7:
-        # Return a black image if there are no colors in the palette.
         black_image = Image.new('P', image.size, color=0)
         black_image.putpalette([0,0,0]*256)
         return black_image
 
     working_palette_255 = [(r*255//7, g*255//7, b*255//7) for r,g,b in working_palette_0_7]
     
-    # Create a full 256-entry palette for Pillow's quantize function.
     full_pil_palette_255 = list(working_palette_255)
     full_pil_palette_255.extend([(0,0,0)] * (256 - len(working_palette_255)))
     pil_palette_flat = [c for rgb in full_pil_palette_255 for c in rgb]
@@ -184,10 +223,8 @@ def remap_image_to_palette(image: Image.Image, working_palette_0_7: list, dither
     dither_method = Image.Dither.FLOYDSTEINBERG if dither_enabled else Image.Dither.NONE
     quantized_image = image.quantize(palette=palette_image_for_remap, dither=dither_method)
 
-    # --- Unconditional Cleanup Pass ---
     quantized_indices_np = np.array(quantized_image, dtype=np.uint8)
     
-    # Create a Look-Up Table (LUT) to remap every possible index (0-255) to a valid working index.
     lut = np.zeros(256, dtype=np.uint8)
     for i, rogue_color in enumerate(full_pil_palette_255):
         min_dist = float('inf')
@@ -201,10 +238,8 @@ def remap_image_to_palette(image: Image.Image, working_palette_0_7: list, dither
                 break
         lut[i] = best_idx
     
-    # Apply the LUT to create a clean array of indices.
     clean_indices_np = lut[quantized_indices_np]
     
-    # Create a new, clean PIL image with a minimal, non-padded palette.
     clean_image = Image.fromarray(clean_indices_np, 'P')
     minimal_palette_flat = [c for rgb in working_palette_255 for c in rgb]
     minimal_palette_flat.extend([0,0,0] * (256 - len(working_palette_255)))
@@ -617,6 +652,12 @@ def main():
     parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles.")
     parser.add_argument("--find-best-offset", action="store_true", help="Test all 64 tile offsets in parallel and pick the best one.")
     parser.add_argument("--synthesize-tiles", action="store_true", help="Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
+    parser.add_argument("--optimization-mode", type=str, choices=['classic', 'sharp', 'balanced', 'soft'], default='classic', 
+                        help="Palette strategy for optimization.\n"
+                             "  classic (default): Faithful, high-quality color selection based on original algorithm.\n"
+                             "  sharp: Balanced palette for render and metrics. Strong visual fidelity.\n"
+                             "  balanced: Sharp render palette, but uses a 'soft' palette for metrics. Better tile reduction.\n"
+                             "  soft: 'Soft' (low-variance) palette for both render and metrics. Maximum tile reduction.")
 
     palette_group = parser.add_argument_group('Palette Constraints', 
         'Rules for controlling palette slots. Later rules override earlier ones.\n'
@@ -679,20 +720,37 @@ def main():
     full_output_path = os.path.join(args.output_dir, base_name)
     color_dist_func = get_color_distance_function(args.color_metric)
 
-    # --- 2. Generate Working Palette and Remap Image ---
-    print(f"2. Finding up to {num_auto_colors} best colors for 'auto' slots...")
-    auto_colors_0_7 = find_best_auto_colors(original_pil_image, num_auto_colors, fixed_colors_0_7, color_dist_func)
-    print(f"   [INFO] Found {len(auto_colors_0_7)} unique auto colors.")
+    # --- 2. Generate Palettes based on Mode ---
+    print(f"2. Generating palettes (mode: {args.optimization_mode})...")
     
-    working_palette_0_7 = fixed_colors_0_7 + auto_colors_0_7
-    working_to_final_map = fixed_slot_indices + auto_slot_indices[:len(auto_colors_0_7)]
-    working_palette_0_255 = [(r*255//7, g*255//7, b*255//7) for r,g,b in working_palette_0_7]
+    if args.optimization_mode == 'classic':
+        render_palette_func = find_best_auto_colors_classic
+        metric_palette_func = find_best_auto_colors_classic
+    elif args.optimization_mode in ['sharp', 'balanced']:
+        render_palette_func = find_best_auto_colors_sharp
+        metric_palette_func = find_best_auto_colors_soft if args.optimization_mode == 'balanced' else find_best_auto_colors_sharp
+    else: # soft
+        render_palette_func = find_best_auto_colors_soft
+        metric_palette_func = find_best_auto_colors_soft
+
+    render_auto_colors = render_palette_func(original_pil_image, num_auto_colors, fixed_colors_0_7, color_dist_func)
+    print(f"   [INFO] Found {len(render_auto_colors)} unique colors for final render palette.")
+    render_working_palette_0_7 = fixed_colors_0_7 + render_auto_colors
+    working_to_final_map = fixed_slot_indices + auto_slot_indices[:len(render_auto_colors)]
     
-    print(f"   [INFO] Remapping image to {len(working_palette_0_7)}-color working palette...")
-    quantized_pil_image = remap_image_to_palette(original_pil_image, working_palette_0_7, not args.no_dithering)
+    if args.optimization_mode == 'balanced':
+        print(f"   [INFO] Generating separate 'soft' palette for optimization metrics...")
+        metric_auto_colors = metric_palette_func(original_pil_image, num_auto_colors, fixed_colors_0_7, color_dist_func)
+        metric_working_palette_0_7 = fixed_colors_0_7 + metric_auto_colors
+    else:
+        metric_working_palette_0_7 = render_working_palette_0_7
+
+    # --- 3. Remap image and process tiles ---
+    print(f"   [INFO] Remapping image to {len(render_working_palette_0_7)}-color render palette...")
+    quantized_pil_image = remap_image_to_palette(original_pil_image, render_working_palette_0_7, not args.no_dithering)
 
     if args.find_best_offset:
-        print(f"2b. Evaluating 64 possible offsets on {args.cores} cores...")
+        print(f"3b. Evaluating 64 possible offsets on {args.cores} cores...")
         best_offset = find_best_tiling_offset(quantized_pil_image, args.cores)
         dx, dy = best_offset
         print(f"   [INFO] Optimal offset found at ({dx}, {dy}). Cropping image.")
@@ -703,59 +761,92 @@ def main():
     img_width, img_height = quantized_pil_image.size
     tile_map_width, tile_map_height = img_width // 8, img_height // 8
 
-    # --- 3. Extract and Process Tiles ---
-    print("3. Extracting and processing source tiles...")
-    all_source_tiles_sc4 = []
-    all_source_tiles_quantized = []
+    print("4. Extracting and processing source tiles...")
+    all_source_tiles_sc4_render = []
+    all_source_tiles_sc4_metric = []
+    all_source_tiles_quantized = [] # For synthesis
+    
+    render_palette_255 = [(r*255//7, g*255//7, b*255//7) for r,g,b in render_working_palette_0_7]
+    metric_palette_255 = [(r*255//7, g*255//7, b*255//7) for r,g,b in metric_working_palette_0_7]
+
     quantized_np_indices = np.array(quantized_pil_image.getdata(), dtype=np.uint8).reshape((img_height, img_width))
     for ty in tqdm(range(tile_map_height), desc="   Processing Tiles"):
         for tx in range(tile_map_width):
             tile_block = quantized_np_indices[ty*8:(ty+1)*8, tx*8:(tx+1)*8]
             all_source_tiles_quantized.append(tile_block)
-            all_source_tiles_sc4.append(process_tile_for_screen4(tile_block, working_palette_0_255, color_dist_func))
-    print(f"   [INFO] Image contains a total of {len(all_source_tiles_sc4)} tiles (including duplicates).")
+            
+            all_source_tiles_sc4_render.append(process_tile_for_screen4(tile_block, render_palette_255, color_dist_func))
+            
+            if args.optimization_mode == 'balanced':
+                metric_remapped_tile_block = np.zeros_like(tile_block)
+                for r in range(8):
+                    for c in range(8):
+                        render_idx = tile_block[r,c]
+                        render_color_255 = render_palette_255[render_idx]
+                        best_dist = float('inf')
+                        best_metric_idx = 0
+                        for i, metric_color_255 in enumerate(metric_palette_255):
+                            dist = color_distance_rgb(render_color_255, metric_color_255)
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_metric_idx = i
+                        metric_remapped_tile_block[r,c] = best_metric_idx
+                all_source_tiles_sc4_metric.append(process_tile_for_screen4(metric_remapped_tile_block, metric_palette_255, color_dist_func))
+            else:
+                all_source_tiles_sc4_metric = all_source_tiles_sc4_render
 
-    # --- 4. Optimize Tiles ---
-    print("4. Optimizing tiles...")
-    optimized_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height, working_palette_0_255, args.cores, args.color_metric, args.synthesize_tiles)
+    print(f"   [INFO] Image contains a total of {len(all_source_tiles_sc4_render)} tiles (including duplicates).")
+
+    # --- 5. Optimize Tiles ---
+    print("5. Optimizing tiles...")
+    optimized_patterns_metric, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_sc4_metric, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height, metric_palette_255, args.cores, args.color_metric, args.synthesize_tiles)
     
-    # --- 5. Translate to Final Palette Indices ---
-    print("5. Translating tiles to final palette indices...")
-    final_unique_patterns = [translate_tile_indices(p, working_to_final_map) for p in optimized_patterns]
+    # --- 6. Translate to Final Render Tiles ---
+    print("6. Translating tiles to final format...")
+    if args.optimization_mode == 'balanced':
+        unique_metric_tile_groups = defaultdict(list)
+        for i, tile_data in enumerate(all_source_tiles_sc4_metric):
+            key = tile_data[0].tobytes() + tile_data[1].tobytes()
+            unique_metric_tile_groups[key].append(i)
+        
+        final_render_patterns = []
+        for metric_tile in optimized_patterns_metric:
+            key = metric_tile[0].tobytes() + metric_tile[1].tobytes()
+            original_location = unique_metric_tile_groups[key][0]
+            final_render_patterns.append(all_source_tiles_sc4_render[original_location])
+    else:
+        final_render_patterns = optimized_patterns_metric
+
+    final_unique_patterns = [translate_tile_indices(p, working_to_final_map) for p in final_render_patterns]
     num_unique_base_patterns = len(final_unique_patterns)
     print(f"   [INFO] Optimization complete. Final tile count: {num_unique_base_patterns}")
 
-    # --- 6. Supertile Discovery ---
+    # --- 7. Supertile Discovery ---
     supertile_definitions = []
     final_map_to_write = final_tile_map_indices
     num_supertiles = num_unique_base_patterns
     use_supertiles = args.supertile_width > 1 or args.supertile_height > 1
 
     if use_supertiles:
-        print(f"6. Discovering {args.supertile_width}x{args.supertile_height} supertiles...")
-        print(f"   [INFO] Map dimensions: {tile_map_width}x{tile_map_height} tiles.")
-        super_map_h, super_map_w = final_map_to_write.shape
-        super_map_h = super_map_h // args.supertile_height
-        super_map_w = super_map_w // args.supertile_width
-        print(f"   [INFO] Map dimensions: {super_map_w}x{super_map_h} = {super_map_w * super_map_h} supertiles.")
+        print(f"7. Discovering {args.supertile_width}x{args.supertile_height} supertiles...")
         supertile_definitions, supertile_map = discover_supertiles(final_tile_map_indices, args.supertile_width, args.supertile_height)
         num_supertiles = len(supertile_definitions)
         final_map_to_write = supertile_map
         print(f"   [INFO] Found {num_supertiles} unique {args.supertile_width}x{args.supertile_height} supertiles.")
     else:
-        print("6. Generating 1x1 supertile definitions...")
+        print("7. Generating 1x1 supertile definitions...")
         for i in range(num_unique_base_patterns):
             supertile_definitions.append(np.array([[i]], dtype=np.int16))
 
-    # --- 7. Generate Output Files ---
-    print("7. Generating output files...")
+    # --- 8. Generate Output Files ---
+    print("8. Generating output files...")
     os.makedirs(args.output_dir, exist_ok=True)
     
     final_palette_0_7 = [(0,0,0)] * 16
     for i, slot_rule in enumerate(final_rules):
         if slot_rule == 'block':
             final_palette_0_7[i] = (128, 0, 0)
-    for i, color in enumerate(working_palette_0_7):
+    for i, color in enumerate(render_working_palette_0_7):
         final_slot = working_to_final_map[i]
         final_palette_0_7[final_slot] = color
         
@@ -764,8 +855,8 @@ def main():
     write_sc4_supertiles(f"{full_output_path}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
     write_sc4_map(f"{full_output_path}.SC4Map", final_map_to_write, num_supertiles)
 
-    # --- 8. Generate Visual Outputs ---
-    print("8. Generating visual outputs...")
+    # --- 9. Generate Visual Outputs ---
+    print("9. Generating visual outputs...")
     final_pil_palette = [(0,0,0)] * 16
     for i, color in enumerate(final_palette_0_7):
         if color[0] < 128:
