@@ -61,7 +61,7 @@ def print_splash_screen(script_name, script_version):
 
     text_lines = [
         f"{COLOR_TITLE}{script_name}{COLOR_RESET} (v{script_version})",
-        f"{COLOR_VERSION}MSX Tile Forge suite, version 1.0.0RC8{COLOR_RESET}"
+        f"{COLOR_VERSION}MSX Tile Forge suite, version 1.0.0RC9{COLOR_RESET}"
     ]
 
     print()
