@@ -9559,6 +9559,7 @@ class TileEditorApp:
 
                 if is_alt_down and 0 <= target_index < max_items:
                     self._execute_replace_all_references(item_type, source_index, target_index)
+                
                 elif is_ctrl_down and 0 <= target_index < max_items and target_index != source_index:
                     success = self._swap_items(item_type, source_index, target_index)
                     if success:
@@ -9568,31 +9569,37 @@ class TileEditorApp:
                         if item_type == "tile":
                             self.scroll_viewers_to_tile(current_tile_index)
                             self._request_tile_usage_refresh()
+                            self._request_supertile_usage_refresh()
                         elif item_type == "supertile":
                             self.scroll_selectors_to_supertile(current_supertile_index)
+                            self._request_tile_usage_refresh()
                             self._request_supertile_usage_refresh()
-                    else:
-                        messagebox.showerror("Swap Error", f"Failed to swap {item_type} from {source_index} to {target_index}.")
-                        self.update_all_displays(changed_level="all")
+                
                 elif not is_ctrl_down and not is_alt_down: # MOVE LOGIC
                     valid_drop_target = (0 <= target_index <= max_items)
                     if valid_drop_target and target_index != source_index:
                         success = False
                         if item_type == "tile": success = self._reposition_tile(source_index, target_index)
                         elif item_type == "supertile": success = self._reposition_supertile(source_index, target_index)
+                        
                         if success:
                             self.clear_all_caches()
                             self.invalidate_minimap_background_cache()
                             self.update_all_displays(changed_level="all")
-                            if item_type == "tile": self.scroll_viewers_to_tile(current_tile_index)
-                            elif item_type == "supertile": self.scroll_selectors_to_supertile(current_supertile_index)
+                            if item_type == "tile":
+                                self.scroll_viewers_to_tile(current_tile_index)
+                                self._request_tile_usage_refresh()
+                                self._request_supertile_usage_refresh()
+                            elif item_type == "supertile":
+                                self.scroll_selectors_to_supertile(current_supertile_index)
+                                self._request_tile_usage_refresh()
+                                self._request_supertile_usage_refresh()
                         else:
                             messagebox.showerror("Reposition Error", f"Failed to move {item_type} from {source_index} to {target_index}.")
                             self.update_all_displays(changed_level="all")
                     else:
                         self.update_all_displays(changed_level="all")
         finally:
-            # This block ensures all state is reset, regardless of what happened in the try block.
             if self.drag_indicator_id:
                 try:
                     if self.drag_canvas and self.drag_canvas.winfo_exists():
