@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.27"
+SCRIPT_VERSION = "0.0.31"
 
 # --- Imports ---
 import os
@@ -110,61 +110,139 @@ def get_color_distance_function(metric_name):
     return color_distance_weighted_rgb
 
 # --- Helper Functions ---
-def find_closest_msx_color(rgb_tuple_0_255, color_dist_func):
+def find_closest_msx_color(rgb_tuple_0_255, color_dist_func, exclude_colors_0_7=None):
     min_dist = float('inf')
     closest_msx_color_0_7 = (0,0,0)
+    exclude_set = set(exclude_colors_0_7) if exclude_colors_0_7 else set()
+
     for idx, msx_color_candidate in enumerate(MSX2_MASTER_PALETTE_0_255):
+        msx_color_0_7 = MSX2_MASTER_PALETTE_0_7[idx]
+        if msx_color_0_7 in exclude_set:
+            continue
+            
         dist = color_dist_func(rgb_tuple_0_255, msx_color_candidate)
         if dist < min_dist:
             min_dist = dist
-            closest_msx_color_0_7 = MSX2_MASTER_PALETTE_0_7[idx]
+            closest_msx_color_0_7 = msx_color_0_7
         if dist == 0:
             break
     return closest_msx_color_0_7
 
-def quantize_image_to_msx_colors(image: Image.Image, num_target_colors: int, dither_enabled: bool, color_dist_func):
+def find_best_auto_colors(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
+    if num_auto_colors <= 0:
+        return []
+
     if image.mode != 'RGB':
         image = image.convert('RGB')
+        
+    # Get the N best "ideal" colors using Pillow's high-quality quantizer.
     try:
-        temp_quantized_img = image.quantize(colors=num_target_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        temp_quantized_img = image.quantize(colors=num_auto_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     except Exception:
-        temp_quantized_img = image.convert('P', palette=Image.Palette.ADAPTIVE, colors=num_target_colors, dither=Image.Dither.NONE)
+        # Fallback for older Pillow versions or specific image issues
+        temp_quantized_img = image.convert('P', palette=Image.Palette.ADAPTIVE, colors=num_auto_colors, dither=Image.Dither.NONE)
     
     pil_palette_255_flat = temp_quantized_img.getpalette()
-    ideal_colors_255=[]
+    ideal_colors_255 = []
     if pil_palette_255_flat:
-        for i in range(num_target_colors):
-            if i*3+2<len(pil_palette_255_flat):
-                ideal_colors_255.append((pil_palette_255_flat[i*3], pil_palette_255_flat[i*3+1], pil_palette_255_flat[i*3+2]))
+        num_ideal_colors = len(pil_palette_255_flat) // 3
+        for i in range(num_ideal_colors):
+            ideal_colors_255.append((pil_palette_255_flat[i*3], pil_palette_255_flat[i*3+1], pil_palette_255_flat[i*3+2]))
 
-    final_msx_palette_0_7_set=set()
-    final_msx_palette_0_7_list=[]
+    # Map ideal colors to the closest available unique MSX colors.
+    auto_colors_0_7_set = set()
+    auto_colors_0_7_list = []
+    
     for r255,g255,b255 in ideal_colors_255:
-        msx_color_0_7=find_closest_msx_color((r255,g255,b255), color_dist_func)
-        if msx_color_0_7 not in final_msx_palette_0_7_set:
-            final_msx_palette_0_7_set.add(msx_color_0_7)
-            final_msx_palette_0_7_list.append(msx_color_0_7)
+        msx_color_0_7 = find_closest_msx_color((r255,g255,b255), color_dist_func, exclude_colors_0_7=fixed_colors_0_7)
+        if msx_color_0_7 not in auto_colors_0_7_set and msx_color_0_7 not in fixed_colors_0_7:
+            auto_colors_0_7_set.add(msx_color_0_7)
+            auto_colors_0_7_list.append(msx_color_0_7)
     
-    idx_master=0
-    while len(final_msx_palette_0_7_list)<num_target_colors and idx_master<len(MSX2_MASTER_PALETTE_0_7):
-        candidate_color=MSX2_MASTER_PALETTE_0_7[idx_master]
-        if candidate_color not in final_msx_palette_0_7_set:
-            final_msx_palette_0_7_list.append(candidate_color)
-            final_msx_palette_0_7_set.add(candidate_color)
-        idx_master+=1
+    return auto_colors_0_7_list
+
+def remap_image_to_palette(image: Image.Image, working_palette_0_7: list, dither_enabled: bool):
+    if not working_palette_0_7:
+        # Return a black image if there are no colors in the palette.
+        black_image = Image.new('P', image.size, color=0)
+        black_image.putpalette([0,0,0]*256)
+        return black_image
+
+    working_palette_255 = [(r*255//7, g*255//7, b*255//7) for r,g,b in working_palette_0_7]
     
-    final_msx_palette_0_7 = final_msx_palette_0_7_list[:num_target_colors]
-    pil_palette_for_quantize_flat=[]
-    for r07,g07,b07 in final_msx_palette_0_7:
-        pil_palette_for_quantize_flat.extend([(r07*255//7),(g07*255//7),(b07*255//7)])
+    # Create a full 256-entry palette for Pillow's quantize function.
+    full_pil_palette_255 = list(working_palette_255)
+    full_pil_palette_255.extend([(0,0,0)] * (256 - len(working_palette_255)))
+    pil_palette_flat = [c for rgb in full_pil_palette_255 for c in rgb]
     
-    if len(pil_palette_for_quantize_flat)<256*3:
-        pil_palette_for_quantize_flat.extend([0,0,0]*(256-(len(pil_palette_for_quantize_flat)//3)))
+    palette_image_for_remap = Image.new('P',(1,1))
+    palette_image_for_remap.putpalette(pil_palette_flat)
     
-    palette_image_for_remap=Image.new('P',(1,1))
-    palette_image_for_remap.putpalette(pil_palette_for_quantize_flat)
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+        
     dither_method = Image.Dither.FLOYDSTEINBERG if dither_enabled else Image.Dither.NONE
-    return image.quantize(palette=palette_image_for_remap, dither=dither_method), final_msx_palette_0_7
+    quantized_image = image.quantize(palette=palette_image_for_remap, dither=dither_method)
+
+    # --- Unconditional Cleanup Pass ---
+    quantized_indices_np = np.array(quantized_image, dtype=np.uint8)
+    
+    # Create a Look-Up Table (LUT) to remap every possible index (0-255) to a valid working index.
+    lut = np.zeros(256, dtype=np.uint8)
+    for i, rogue_color in enumerate(full_pil_palette_255):
+        min_dist = float('inf')
+        best_idx = 0
+        for j, valid_color in enumerate(working_palette_255):
+            dist = color_distance_rgb(rogue_color, valid_color)
+            if dist < min_dist:
+                min_dist = dist
+                best_idx = j
+            if min_dist == 0:
+                break
+        lut[i] = best_idx
+    
+    # Apply the LUT to create a clean array of indices.
+    clean_indices_np = lut[quantized_indices_np]
+    
+    # Create a new, clean PIL image with a minimal, non-padded palette.
+    clean_image = Image.fromarray(clean_indices_np, 'P')
+    minimal_palette_flat = [c for rgb in working_palette_255 for c in rgb]
+    minimal_palette_flat.extend([0,0,0] * (256 - len(working_palette_255)))
+    clean_image.putpalette(minimal_palette_flat)
+    
+    return clean_image
+
+def process_palette_constraints(args):
+    rules = [args.palette_all_slots.lower()] * 16
+
+    if args.palette_constraints_file:
+        try:
+            with open(args.palette_constraints_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    parts = line.split()
+                    if len(parts) != 2:
+                        continue
+                    idx_str, rule_str = parts
+                    idx = int(idx_str)
+                    if 0 <= idx <= 15:
+                        rules[idx] = rule_str.lower()
+        except FileNotFoundError:
+            print(f"Warning: Constraint file '{args.palette_constraints_file}' not found. Ignoring.")
+
+    if args.palette_slot:
+        for idx_str, rule_str in args.palette_slot:
+            try:
+                idx = int(idx_str)
+                if 0 <= idx <= 15:
+                    rules[idx] = rule_str.lower()
+                else:
+                    print(f"Warning: Invalid slot index '{idx_str}' in --palette-slot. Must be 0-15. Ignoring.")
+            except ValueError:
+                print(f"Warning: Invalid slot index '{idx_str}' in --palette-slot. Must be an integer. Ignoring.")
+    return rules
 
 def _offset_worker_initializer(img_data):
     global worker_img_data, worker_height, worker_width
@@ -416,14 +494,11 @@ def optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_q
         final_tile_map[r, c] = final_idx
     return final_patterns, final_tile_map
 
-def write_sc4_palette(filename, palette_0_7):
+def write_sc4_palette(filename, final_palette_0_7):
     with open(filename, "wb") as f:
-        f.write(b'\x00' * 4)
-        for i in range(16):
-            if i < len(palette_0_7):
-                f.write(bytes(palette_0_7[i]))
-            else:
-                f.write(b'\x00\x00\x00')
+        f.write(b'\x00' * 4) # Reserved header
+        for r,g,b in final_palette_0_7:
+            f.write(bytes([r, g, b]))
 
 def write_sc4_tiles(filename, unique_patterns):
     num_tiles = len(unique_patterns)
@@ -506,16 +581,32 @@ def discover_supertiles(tile_map, super_w, super_h):
                 
     return supertile_definitions, supertile_map
 
+def translate_tile_indices(tile_tuple, working_to_final_map):
+    pattern_data, color_data = tile_tuple
+    final_color_data = np.zeros_like(color_data)
+    for r in range(8):
+        working_byte = color_data[r]
+        working_fg = (working_byte >> 4) & 0x0F
+        working_bg = working_byte & 0x0F
+        
+        final_fg = working_to_final_map[working_fg]
+        final_bg = working_to_final_map[working_bg]
+        
+        final_color_data[r] = (final_fg << 4) | final_bg
+    return (pattern_data, final_color_data)
+
 def main():
     if COLOUR_SCIENCE_AVAILABLE:
         warnings.filterwarnings("ignore", category=ColourUsageWarning)
         
     print_splash_screen(SCRIPT_NAME, SCRIPT_VERSION)
     
-    parser = argparse.ArgumentParser(description=f"Transforming maps in MSX SC4 tiles like a charm.")
+    parser = argparse.ArgumentParser(
+        description=f"Transforming maps in MSX SC4 tiles like a charm.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument("input_image", help="Input image file path")
     parser.add_argument("--max-tiles", type=int, default=256, help="Target maximum number of unique tiles")
-    parser.add_argument("--num-colors", type=int, default=16, help="Number of colors for the palette (max 16)")
     parser.add_argument("--output-dir", default=".", help="Directory for output files (defaults to current directory).")
     parser.add_argument("--output-basename", help="Basename for output files (defaults to the input file's name).")
     parser.add_argument("--no-dithering", action="store_true", help="Disable dithering during color quantization.")
@@ -527,6 +618,14 @@ def main():
     parser.add_argument("--find-best-offset", action="store_true", help="Test all 64 tile offsets in parallel and pick the best one.")
     parser.add_argument("--synthesize-tiles", action="store_true", help="Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
 
+    palette_group = parser.add_argument_group('Palette Constraints', 
+        'Rules for controlling palette slots. Later rules override earlier ones.\n'
+        'Rule formats: "auto", "block", or a color like "700" (R=7, G=0, B=0).\n'
+        'Example: --palette-slot 0 700 --palette-slot 15 block')
+    palette_group.add_argument("--palette-all-slots", default="auto", help="Baseline rule for all 16 slots.")
+    palette_group.add_argument("--palette-constraints-file", help="Path to a text file with palette rules (e.g., '0 700').")
+    palette_group.add_argument("--palette-slot", nargs=2, action='append', metavar=('<INDEX>', '<RULE>'), help="Set a rule for a specific slot. Can be used multiple times.")
+
     args = parser.parse_args()
 
     if (args.color_metric in ['cie76', 'ciede2000']) and not COLOUR_SCIENCE_AVAILABLE:
@@ -535,10 +634,37 @@ def main():
         print("Please install it using: pip install colour-science")
         return
 
-    if args.num_colors > 16:
-        print("Warning: --num_colors > 16. Setting to 16.")
-        args.num_colors = 16
+    # --- 1. Process Palette Constraints ---
+    print("1. Processing palette constraints...")
+    final_rules = process_palette_constraints(args)
+    
+    fixed_colors_0_7 = []
+    fixed_slot_indices = []
+    auto_slot_indices = []
+    
+    for i, rule in enumerate(final_rules):
+        if rule == 'auto':
+            auto_slot_indices.append(i)
+        elif rule == 'block':
+            pass
+        else:
+            try:
+                r, g, b = int(rule[0]), int(rule[1]), int(rule[2])
+                if not all(0 <= c <= 7 for c in (r, g, b)): raise ValueError
+                fixed_colors_0_7.append((r, g, b))
+                fixed_slot_indices.append(i)
+            except (ValueError, IndexError):
+                print(f"Error: Invalid color rule '{rule}' for slot {i}. Must be 3 digits from 0-7 (e.g., '700').")
+                return
 
+    num_auto_colors = len(auto_slot_indices)
+    num_valid_colors = len(fixed_colors_0_7) + num_auto_colors
+    print(f"   [INFO] Palette config: {len(fixed_colors_0_7)} fixed, {num_auto_colors} auto, {16-num_valid_colors} blocked.")
+    
+    if num_valid_colors == 0:
+        print("Error: All palette slots are blocked. Cannot process image.")
+        return
+    
     try:
         original_pil_image = Image.open(args.input_image)
     except FileNotFoundError:
@@ -553,13 +679,20 @@ def main():
     full_output_path = os.path.join(args.output_dir, base_name)
     color_dist_func = get_color_distance_function(args.color_metric)
 
-    print(f"1. Quantizing image to MSX palette (metric: {args.color_metric})...")
-    quantized_pil_image, msx_palette_0_7 = quantize_image_to_msx_colors(original_pil_image, args.num_colors, not args.no_dithering, color_dist_func)
-    print(f"   [INFO] Palette quantization complete. Selected {len(msx_palette_0_7)} unique MSX colors.")
-    palette_0_255 = [MSX2_MASTER_PALETTE_0_255[MSX2_MASTER_PALETTE_0_7.index(c)] for c in msx_palette_0_7]
+    # --- 2. Generate Working Palette and Remap Image ---
+    print(f"2. Finding up to {num_auto_colors} best colors for 'auto' slots...")
+    auto_colors_0_7 = find_best_auto_colors(original_pil_image, num_auto_colors, fixed_colors_0_7, color_dist_func)
+    print(f"   [INFO] Found {len(auto_colors_0_7)} unique auto colors.")
+    
+    working_palette_0_7 = fixed_colors_0_7 + auto_colors_0_7
+    working_to_final_map = fixed_slot_indices + auto_slot_indices[:len(auto_colors_0_7)]
+    working_palette_0_255 = [(r*255//7, g*255//7, b*255//7) for r,g,b in working_palette_0_7]
+    
+    print(f"   [INFO] Remapping image to {len(working_palette_0_7)}-color working palette...")
+    quantized_pil_image = remap_image_to_palette(original_pil_image, working_palette_0_7, not args.no_dithering)
 
     if args.find_best_offset:
-        print(f"1b. Evaluating 64 possible offsets on {args.cores} cores to find the optimal tile grid...")
+        print(f"2b. Evaluating 64 possible offsets on {args.cores} cores...")
         best_offset = find_best_tiling_offset(quantized_pil_image, args.cores)
         dx, dy = best_offset
         print(f"   [INFO] Optimal offset found at ({dx}, {dy}). Cropping image.")
@@ -570,7 +703,8 @@ def main():
     img_width, img_height = quantized_pil_image.size
     tile_map_width, tile_map_height = img_width // 8, img_height // 8
 
-    print("2. Extracting and processing source tiles...")
+    # --- 3. Extract and Process Tiles ---
+    print("3. Extracting and processing source tiles...")
     all_source_tiles_sc4 = []
     all_source_tiles_quantized = []
     quantized_np_indices = np.array(quantized_pil_image.getdata(), dtype=np.uint8).reshape((img_height, img_width))
@@ -578,22 +712,27 @@ def main():
         for tx in range(tile_map_width):
             tile_block = quantized_np_indices[ty*8:(ty+1)*8, tx*8:(tx+1)*8]
             all_source_tiles_quantized.append(tile_block)
-            all_source_tiles_sc4.append(process_tile_for_screen4(tile_block, palette_0_255, color_dist_func))
+            all_source_tiles_sc4.append(process_tile_for_screen4(tile_block, working_palette_0_255, color_dist_func))
     print(f"   [INFO] Image contains a total of {len(all_source_tiles_sc4)} tiles (including duplicates).")
 
-    print("3. Optimizing tiles...")
-    final_unique_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height, palette_0_255, args.cores, args.color_metric, args.synthesize_tiles)
+    # --- 4. Optimize Tiles ---
+    print("4. Optimizing tiles...")
+    optimized_patterns, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height, working_palette_0_255, args.cores, args.color_metric, args.synthesize_tiles)
     
+    # --- 5. Translate to Final Palette Indices ---
+    print("5. Translating tiles to final palette indices...")
+    final_unique_patterns = [translate_tile_indices(p, working_to_final_map) for p in optimized_patterns]
     num_unique_base_patterns = len(final_unique_patterns)
     print(f"   [INFO] Optimization complete. Final tile count: {num_unique_base_patterns}")
 
+    # --- 6. Supertile Discovery ---
     supertile_definitions = []
     final_map_to_write = final_tile_map_indices
     num_supertiles = num_unique_base_patterns
     use_supertiles = args.supertile_width > 1 or args.supertile_height > 1
 
     if use_supertiles:
-        print(f"4. Discovering {args.supertile_width}x{args.supertile_height} supertiles from optimized tileset...")
+        print(f"6. Discovering {args.supertile_width}x{args.supertile_height} supertiles...")
         print(f"   [INFO] Map dimensions: {tile_map_width}x{tile_map_height} tiles.")
         super_map_h, super_map_w = final_map_to_write.shape
         super_map_h = super_map_h // args.supertile_height
@@ -604,23 +743,37 @@ def main():
         final_map_to_write = supertile_map
         print(f"   [INFO] Found {num_supertiles} unique {args.supertile_width}x{args.supertile_height} supertiles.")
     else:
-        print("4. Generating 1x1 supertile definitions...")
-        print(f"   [INFO] Map dimensions: {tile_map_width}x{tile_map_height} tiles.")
+        print("6. Generating 1x1 supertile definitions...")
         for i in range(num_unique_base_patterns):
             supertile_definitions.append(np.array([[i]], dtype=np.int16))
 
-    print("5. Generating output files...")
+    # --- 7. Generate Output Files ---
+    print("7. Generating output files...")
     os.makedirs(args.output_dir, exist_ok=True)
-
-    write_sc4_palette(f"{full_output_path}.SC4Pal", msx_palette_0_7)
+    
+    final_palette_0_7 = [(0,0,0)] * 16
+    for i, slot_rule in enumerate(final_rules):
+        if slot_rule == 'block':
+            final_palette_0_7[i] = (128, 0, 0)
+    for i, color in enumerate(working_palette_0_7):
+        final_slot = working_to_final_map[i]
+        final_palette_0_7[final_slot] = color
+        
+    write_sc4_palette(f"{full_output_path}.SC4Pal", final_palette_0_7)
     write_sc4_tiles(f"{full_output_path}.SC4Tiles", final_unique_patterns)
     write_sc4_supertiles(f"{full_output_path}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
     write_sc4_map(f"{full_output_path}.SC4Map", final_map_to_write, num_supertiles)
 
-    print("6. Generating visual outputs...")
-    pil_final_palette_flat = [c for rgb in palette_0_255 for c in rgb]
-    if len(pil_final_palette_flat) < 256*3:
-        pil_final_palette_flat.extend([0,0,0] * (256 - len(palette_0_255)))
+    # --- 8. Generate Visual Outputs ---
+    print("8. Generating visual outputs...")
+    final_pil_palette = [(0,0,0)] * 16
+    for i, color in enumerate(final_palette_0_7):
+        if color[0] < 128:
+            final_pil_palette[i] = (color[0]*255//7, color[1]*255//7, color[2]*255//7)
+    
+    pil_final_palette_flat = [c for rgb in final_pil_palette for c in rgb]
+    pil_final_palette_flat.extend([0,0,0] * (256-16))
+
     reconstructed_img = Image.new('P', (img_width, img_height), color=0)
     reconstructed_img.putpalette(pil_final_palette_flat)
     for r_map in range(tile_map_height):
