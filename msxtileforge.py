@@ -8116,6 +8116,8 @@ class TileEditorApp:
         self.root.bind_all("<Control-Key-0>", lambda event: self._open_recent_by_index('projects', 9))
         self.root.bind_all("<Alt-Key-0>", lambda event: self._open_recent_by_index('modules', 9))
 
+        self.root.bind("<FocusIn>", self._on_window_focus_in)
+
         _debug(" Global key bindings set up.")
 
     def handle_map_tab_keypress(self, event):
@@ -15454,6 +15456,14 @@ class TileEditorApp:
                 best_match_idx = dest_idx
         
         return best_match_idx
+
+    def _on_window_focus_in(self, event=None):
+        """
+        Called when the main application window gains focus.
+        Updates the edit menu to reflect the current clipboard state.
+        """
+        _debug("Main window gained focus. Re-evaluating menu states.")
+        self._update_edit_menu_state()
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
