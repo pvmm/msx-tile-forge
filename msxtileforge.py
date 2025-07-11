@@ -9186,6 +9186,20 @@ class TileEditorApp:
             if st_def_modified_this_iteration:
                 self.invalidate_supertile_cache(st_idx_refo)
 
+        # Update the set of marked unused tiles.
+        if self.marked_unused_tiles:
+            new_marked_set = set()
+            for idx in self.marked_unused_tiles:
+                if idx == source_index_tile:
+                    new_marked_set.add(actual_insert_idx)
+                elif source_index_tile < actual_insert_idx and source_index_tile < idx <= actual_insert_idx:
+                    new_marked_set.add(idx - 1)
+                elif source_index_tile > actual_insert_idx and actual_insert_idx <= idx < source_index_tile:
+                    new_marked_set.add(idx + 1)
+                else:
+                    new_marked_set.add(idx)
+            self.marked_unused_tiles = new_marked_set
+
         # Update Selections
         if current_tile_index == source_index_tile:
             current_tile_index = actual_insert_idx
@@ -9251,6 +9265,20 @@ class TileEditorApp:
                 
                 if new_map_ref != current_map_ref:
                      map_data[r_map_refo][c_map_refo] = new_map_ref
+
+        # Update the set of marked unused supertiles.
+        if self.marked_unused_supertiles:
+            new_marked_set = set()
+            for idx in self.marked_unused_supertiles:
+                if idx == source_index_st:
+                    new_marked_set.add(actual_insert_idx_st)
+                elif source_index_st < actual_insert_idx_st and source_index_st < idx <= actual_insert_idx_st:
+                    new_marked_set.add(idx - 1)
+                elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= idx < source_index_st:
+                    new_marked_set.add(idx + 1)
+                else:
+                    new_marked_set.add(idx)
+            self.marked_unused_supertiles = new_marked_set
 
         # Update Selections
         if current_supertile_index == source_index_st:
