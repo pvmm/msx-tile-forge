@@ -25,6 +25,7 @@ import traceback
 import subprocess
 import threading
 import queue
+from scipy.optimize import linear_sum_assignment
 
 # --- Constants ---
 APP_VERSION = "1.0.0RC9"
@@ -175,9 +176,6 @@ map_height = DEFAULT_MAP_HEIGHT  # In supertiles
 map_data = [[0 for _ in range(map_width)] for _ in range(map_height)]
 selected_supertile_for_map = 0
 last_painted_map_cell = None
-tile_clipboard_pattern = None
-tile_clipboard_colors = None
-supertile_clipboard_data = None
 
 # --- Utility Functions ---
 def get_contrast_color(hex_color):
@@ -5070,7 +5068,6 @@ class TileEditorApp:
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
         global supertiles_data, current_supertile_index, num_supertiles, selected_tile_for_supertile
         global map_data, map_width, map_height, selected_supertile_for_map, last_painted_map_cell
-        global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data
         global selected_color_index
 
         new_dim_w = DEFAULT_SUPERTILE_GRID_WIDTH
@@ -5137,9 +5134,6 @@ class TileEditorApp:
         map_data = [[0 for _ in range(map_width)] for _ in range(map_height)]
         last_painted_map_cell = None
 
-        tile_clipboard_pattern = None
-        tile_clipboard_colors = None
-        supertile_clipboard_data = None 
         self.map_clipboard_data = None
 
         self.active_msx_palette = []
@@ -6124,8 +6118,6 @@ class TileEditorApp:
         self.is_ctrl_pressed = False
         self.is_shift_pressed = False
         self.current_mouse_action = None
-        global tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data 
-        tile_clipboard_pattern, tile_clipboard_colors, supertile_clipboard_data = None, None, None
         self.map_clipboard_data = None
         self._clear_map_selection()
         self._clear_paste_preview_rect()
@@ -6609,91 +6601,219 @@ class TileEditorApp:
             self._request_supertile_usage_refresh()
 
     def copy_current_tile(self):
-        global tile_clipboard_pattern, tile_clipboard_colors, current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
+        global current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Copy Tile", "No valid tile selected.")
             return
-        tile_clipboard_pattern = copy.deepcopy(tileset_patterns[current_tile_index])
-        tile_clipboard_colors = copy.deepcopy(tileset_colors[current_tile_index])
-        print(f"Tile {current_tile_index} copied.")
-        self._update_edit_menu_state()
+
+        # Assemble data, including the palette, for the clipboard.
+        clipboard_data = {
+            "app_id": "MSXTileForge",
+            "data_type": "tile",
+            "version": "1.1", # Version for format with palette
+            "payload": {
+                "pattern": tileset_patterns[current_tile_index],
+                "colors": tileset_colors[current_tile_index],
+                "source_palette_hex": self.active_msx_palette
+            }
+        }
+
+        try:
+            # Serialize to a JSON string and place on system clipboard.
+            json_string = json.dumps(clipboard_data)
+            self.root.clipboard_clear()
+            self.root.clipboard_append(json_string)
+            _info(f"Tile {current_tile_index} copied to the system clipboard (with palette).")
+            self._update_edit_menu_state()
+        except Exception as e:
+            _error(f"Failed to copy tile to system clipboard: {e}")
+            messagebox.showerror("Copy Error", "Could not copy tile data to the system clipboard.")
 
     def paste_tile(self):
-        global tile_clipboard_pattern, tile_clipboard_colors, current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
-        if tile_clipboard_pattern is None or tile_clipboard_colors is None:
-            messagebox.showinfo("Paste Tile", "Tile clipboard is empty.")
-            return
+        global current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
         if not (0 <= current_tile_index < num_tiles_in_set):
-            messagebox.showwarning("Paste Tile", "No valid tile selected to paste onto.") 
+            messagebox.showwarning("Paste Tile", "No valid tile selected to paste onto.")
             return
-        
-        self._mark_project_modified()
-        tileset_patterns[current_tile_index] = copy.deepcopy(tile_clipboard_pattern)
-        tileset_colors[current_tile_index] = copy.deepcopy(tile_clipboard_colors)
-        self.invalidate_tile_cache(current_tile_index)
-        self.update_all_displays(changed_level="all")
-        
-        self._request_color_usage_refresh()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        
-        print(f"Pasted onto Tile {current_tile_index}.")
+
+        try:
+            # Get content from the system clipboard.
+            json_string = self.root.clipboard_get()
+            clipboard_data = json.loads(json_string)
+
+            # Validate clipboard data format.
+            if not isinstance(clipboard_data, dict) or \
+               clipboard_data.get("app_id") != "MSXTileForge" or \
+               clipboard_data.get("data_type") != "tile":
+                messagebox.showinfo("Paste Tile", "The clipboard does not contain valid MSX Tile Forge tile data.")
+                return
+
+            # Extract payload data.
+            payload = clipboard_data.get("payload", {})
+            pasted_pattern = payload.get("pattern")
+            pasted_colors = payload.get("colors")
+            source_palette_hex = payload.get("source_palette_hex")
+
+            # Check for complete payload.
+            if not all([pasted_pattern, pasted_colors, source_palette_hex]):
+                raise ValueError("Clipboard data payload is missing pattern, colors, or palette information.")
+            
+            # Create a color remap table and apply it.
+            remap_table = self._create_color_remap_table(source_palette_hex, self.active_msx_palette)
+            remapped_colors = []
+            for src_fg, src_bg in pasted_colors:
+                dest_fg = remap_table.get(src_fg, 0) # Default to 0 on error
+                dest_bg = remap_table.get(src_bg, 0) # Default to 0 on error
+                remapped_colors.append((dest_fg, dest_bg))
+
+            # Apply the pasted and remapped data.
+            self._mark_project_modified()
+            tileset_patterns[current_tile_index] = copy.deepcopy(pasted_pattern)
+            tileset_colors[current_tile_index] = remapped_colors
+            
+            self.invalidate_tile_cache(current_tile_index)
+            self.update_all_displays(changed_level="all")
+            
+            self._request_color_usage_refresh()
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
+            
+            _info(f"Pasted from system clipboard onto Tile {current_tile_index} with color remapping.")
+
+        except tk.TclError:
+            messagebox.showinfo("Paste Tile", "Clipboard is empty or does not contain text data.")
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            _error(f"Error pasting from clipboard: {e}")
+            messagebox.showinfo("Paste Tile", "The clipboard does not contain valid MSX Tile Forge tile data.")
 
     def copy_current_supertile(self):
-        global supertile_clipboard_data, current_supertile_index, num_supertiles, supertiles_data
+        global current_supertile_index, num_supertiles, supertiles_data
+        global tileset_patterns, tileset_colors
+
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Copy Supertile", "No valid supertile selected.")
             return
-        
-        # The clipboard will store a definition matching current project's ST dimensions
-        supertile_clipboard_data = copy.deepcopy(
-            supertiles_data[current_supertile_index] # supertiles_data is global
-        )
-        # Store dimensions with clipboard data for safer paste
-        if hasattr(self, 'supertile_grid_width') and hasattr(self, 'supertile_grid_height'):
-             # This is a good idea, but supertile_clipboard_data is just the list of lists currently.
-             # To store dimensions, we'd need to change it to a dictionary:
-             # self.supertile_clipboard_data_with_dims = {
-             #    "width": self.supertile_grid_width,
-             #    "height": self.supertile_grid_height,
-             #    "data": copy.deepcopy(supertiles_data[current_supertile_index])
-             # }
-             # For now, sticking to existing global structure of supertile_clipboard_data.
-             # Paste operation will assume clipboard data matches current project ST dimensions.
-             pass
 
-        print(f"Supertile {current_supertile_index} copied.")
-        self._update_edit_menu_state()
+        definition = supertiles_data[current_supertile_index]
+
+        # Find all unique tile indices used in this supertile.
+        unique_tile_indices = set()
+        for row in definition:
+            for tile_idx in row:
+                unique_tile_indices.add(tile_idx)
+        
+        # For each unique tile, package its pattern and color data.
+        # This creates a self-contained tileset on the clipboard.
+        source_tiles_payload = {}
+        for tile_idx in unique_tile_indices:
+            if 0 <= tile_idx < num_tiles_in_set:
+                source_tiles_payload[tile_idx] = {
+                    "pattern": tileset_patterns[tile_idx],
+                    "colors": tileset_colors[tile_idx]
+                }
+
+        # Assemble the final clipboard data structure.
+        clipboard_data = {
+            "app_id": "MSXTileForge",
+            "data_type": "supertile",
+            "version": "1.0",
+            "payload": {
+                "definition": definition,
+                "source_tiles": source_tiles_payload,
+                "source_palette_hex": self.active_msx_palette
+            }
+        }
+
+        try:
+            # Serialize and copy to the system clipboard.
+            json_string = json.dumps(clipboard_data)
+            self.root.clipboard_clear()
+            self.root.clipboard_append(json_string)
+            
+            _info(f"Supertile {current_supertile_index} copied to the system clipboard.")
+            self._update_edit_menu_state()
+
+        except Exception as e:
+            _error(f"Failed to copy supertile to system clipboard: {e}")
+            messagebox.showerror("Copy Error", "Could not copy supertile data to the system clipboard.")
 
     def paste_supertile(self):
-        global supertile_clipboard_data, current_supertile_index, num_supertiles, supertiles_data
-        if supertile_clipboard_data is None:
-            messagebox.showinfo("Paste Supertile", "Supertile clipboard is empty.")
-            return
+        global current_supertile_index, num_supertiles, supertiles_data
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Paste Supertile", "No valid supertile selected to paste onto.")
             return
 
         try:
-            if len(supertile_clipboard_data) == self.supertile_grid_height and \
-               (self.supertile_grid_height == 0 or (self.supertile_grid_width > 0 and len(supertile_clipboard_data[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0):
-                supertiles_data[current_supertile_index] = copy.deepcopy(
-                    supertile_clipboard_data 
+            # 1. Get and validate the clipboard data.
+            json_string = self.root.clipboard_get()
+            clipboard_data = json.loads(json_string)
+
+            if not isinstance(clipboard_data, dict) or \
+               clipboard_data.get("app_id") != "MSXTileForge" or \
+               clipboard_data.get("data_type") != "supertile":
+                messagebox.showinfo("Paste Supertile", "The clipboard does not contain valid MSX Tile Forge supertile data.")
+                return
+
+            # 2. Extract the payload.
+            payload = clipboard_data.get("payload", {})
+            pasted_definition = payload.get("definition")
+            source_tiles = payload.get("source_tiles", {})
+            source_palette_hex = payload.get("source_palette_hex")
+
+            if not all([pasted_definition, source_tiles, source_palette_hex]):
+                raise ValueError("Clipboard data payload is missing definition, tiles, or palette information.")
+            
+            # 3. Pre-calculate the LAB "fingerprints" for the entire destination tileset.
+            #    This is an optimization to avoid recalculating for every source tile.
+            dest_tileset_fingerprints = {}
+            for i in range(num_tiles_in_set):
+                fingerprint = self._render_tile_to_lab_pixels(
+                    tileset_patterns[i], tileset_colors[i], self.active_msx_palette
                 )
-                self._mark_project_modified()
-                self.invalidate_supertile_cache(current_supertile_index)
-                self.invalidate_minimap_background_cache()
-                self.update_all_displays(changed_level="all")
+                if fingerprint:
+                    dest_tileset_fingerprints[i] = fingerprint
+            
+            # 4. Create the tile remap table using the greedy approach.
+            tile_remap_table = {}
+            for src_idx_str, src_tile_data in source_tiles.items():
+                src_idx = int(src_idx_str) # JSON keys are strings
+                source_lab_pixels = self._render_tile_to_lab_pixels(
+                    src_tile_data["pattern"], src_tile_data["colors"], source_palette_hex
+                )
+                if source_lab_pixels:
+                    best_match_dest_idx = self._find_best_tile_match(source_lab_pixels, dest_tileset_fingerprints)
+                    tile_remap_table[src_idx] = best_match_dest_idx
 
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
+            _debug(f"Supertile Remap Table created: {tile_remap_table}")
 
-                print(f"Pasted onto Supertile {current_supertile_index}.")
-            else:
-                messagebox.showerror("Paste Error", "Supertile clipboard dimensions do not match current project supertile dimensions. Paste aborted.")
+            # 5. Build the new supertile definition using the remapped tile indices.
+            new_definition = copy.deepcopy(pasted_definition)
+            for r in range(len(new_definition)):
+                for c in range(len(new_definition[r])):
+                    original_tile_idx = new_definition[r][c]
+                    new_definition[r][c] = tile_remap_table.get(original_tile_idx, 0)
 
-        except Exception as e:
-            messagebox.showerror("Paste Error", f"Could not paste supertile data due to structure mismatch or error: {e}")
+            # 6. Apply the remapped definition.
+            # Check dimensions against current project settings.
+            if len(new_definition) != self.supertile_grid_height or \
+               len(new_definition[0]) != self.supertile_grid_width:
+                messagebox.showerror("Paste Error", "Supertile clipboard dimensions do not match current project dimensions. Paste aborted.")
+                return
+
+            supertiles_data[current_supertile_index] = new_definition
+            self._mark_project_modified()
+            self.invalidate_supertile_cache(current_supertile_index)
+            self.invalidate_minimap_background_cache()
+            self.update_all_displays(changed_level="all")
+
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
+            _info(f"Pasted from system clipboard onto Supertile {current_supertile_index} with tile remapping.")
+
+        except tk.TclError:
+            messagebox.showinfo("Paste Supertile", "Clipboard is empty or does not contain text data.")
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            _error(f"Error pasting supertile from clipboard: {e}")
+            messagebox.showinfo("Paste Supertile", "The clipboard does not contain valid MSX Tile Forge supertile data.")
 
     # --- Zoom Methods ---
     def change_map_zoom_mult(self, factor):  # Renamed from change_map_zoom
@@ -7682,7 +7802,7 @@ class TileEditorApp:
         if not self.edit_menu:
             _debug(" _update_edit_menu_state: self.edit_menu is None. Aborting.")
             return
-        if not tk.Menu.winfo_exists(self.edit_menu): # Check if menu widget still exists
+        if not tk.Menu.winfo_exists(self.edit_menu):
             _debug(" _update_edit_menu_state: self.edit_menu widget no longer exists. Aborting.")
             return
 
@@ -7699,7 +7819,7 @@ class TileEditorApp:
                 _debug(f" _update_edit_menu_state: Actual type of item at copy_menu_item_index ({self.copy_menu_item_index}) is '{actual_copy_type}'")
                 _debug(f" _update_edit_menu_state: Actual type of item at paste_menu_item_index ({self.paste_menu_item_index}) is '{actual_paste_type}'")
 
-                num_items_now = self.edit_menu.index(tk.END) # This can be None if menu is empty
+                num_items_now = self.edit_menu.index(tk.END)
                 if num_items_now is not None:
                     _debug(f" _update_edit_menu_state: Total items in edit_menu NOW: {num_items_now + 1}")
                     for i in range(num_items_now + 1):
@@ -7709,7 +7829,6 @@ class TileEditorApp:
                             item_label_str = self.edit_menu.entrycget(i, 'label')
                         elif item_type_str == 'cascade':
                              item_label_str = self.edit_menu.entrycget(i, 'label') + " (Cascade)"
-                        # Add other types if necessary (checkbutton, radiobutton, separator)
                         _debug(f"   _update_edit_menu_state: Item {i}: Type='{item_type_str}', Label='{item_label_str}'")
                 else:
                     _debug(" _update_edit_menu_state: edit_menu.index(tk.END) is None (menu might be empty or not fully formed).")
@@ -7732,23 +7851,39 @@ class TileEditorApp:
         copy_label = "Copy"
         paste_label = "Paste"
 
-        if selected_tab_index == 1: 
+        if selected_tab_index == 1:
             copy_label = "Copy Tile"
             paste_label = "Paste Tile"
             can_copy = 0 <= current_tile_index < num_tiles_in_set
-            can_paste = (
-                tile_clipboard_pattern is not None
-                and 0 <= current_tile_index < num_tiles_in_set
-            )
+            
+            # Check system clipboard for valid tile data.
+            can_paste = False
+            if 0 <= current_tile_index < num_tiles_in_set:
+                try:
+                    clipboard_data = json.loads(self.root.clipboard_get())
+                    if isinstance(clipboard_data, dict) and \
+                       clipboard_data.get("data_type") == "tile" and \
+                       clipboard_data.get("app_id") == "MSXTileForge":
+                        can_paste = True
+                except (tk.TclError, json.JSONDecodeError):
+                    pass # Clipboard empty or has invalid data.
 
         elif selected_tab_index == 2: 
             copy_label = "Copy Supertile"
             paste_label = "Paste Supertile"
             can_copy = 0 <= current_supertile_index < num_supertiles
-            can_paste = (
-                supertile_clipboard_data is not None
-                and 0 <= current_supertile_index < num_supertiles
-            )
+            
+            # Check system clipboard for valid supertile data.
+            can_paste = False
+            if 0 <= current_supertile_index < num_supertiles:
+                try:
+                    clipboard_data = json.loads(self.root.clipboard_get())
+                    if isinstance(clipboard_data, dict) and \
+                       clipboard_data.get("data_type") == "supertile" and \
+                       clipboard_data.get("app_id") == "MSXTileForge":
+                        can_paste = True
+                except (tk.TclError, json.JSONDecodeError):
+                    pass # Clipboard empty or has invalid data.
 
         elif selected_tab_index == 3: 
             copy_label = "Copy Map Region"
@@ -7770,7 +7905,6 @@ class TileEditorApp:
         paste_state = tk.NORMAL if can_paste else tk.DISABLED
 
         try:
-            # Re-check types just before configuring, in case the debug prints above are misleading due to timing
             current_copy_type_final_check = self.edit_menu.type(self.copy_menu_item_index)
             current_paste_type_final_check = self.edit_menu.type(self.paste_menu_item_index)
 
@@ -15163,6 +15297,163 @@ class TileEditorApp:
 
         export_dialog = ExportDialog(self.root, self, self.current_project_base_path)
         export_dialog.wait_window()
+
+    def _create_color_remap_table(self, source_palette_hex, dest_palette_hex):
+        """
+        Creates an optimal mapping from source to destination palette indices
+        using the CIELAB color space for perceptual distance and the Hungarian
+        algorithm to prevent color collisions.
+        """
+        # Convert both source and destination palettes to the CIELAB color space.
+        source_lab = []
+        for hex_color in source_palette_hex:
+            r = int(hex_color[1:3], 16)
+            g = int(hex_color[3:5], 16)
+            b = int(hex_color[5:7], 16)
+            source_lab.append(self._rgb_to_lab(r, g, b))
+
+        dest_lab = []
+        for hex_color in dest_palette_hex:
+            r = int(hex_color[1:3], 16)
+            g = int(hex_color[3:5], 16)
+            b = int(hex_color[5:7], 16)
+            dest_lab.append(self._rgb_to_lab(r, g, b))
+
+        # Create a cost matrix where each cell (i, j) is the perceptual
+        # distance between source color i and destination color j.
+        cost_matrix = [[0.0 for _ in range(16)] for _ in range(16)]
+        for i, src_lab_color in enumerate(source_lab):
+            for j, dest_lab_color in enumerate(dest_lab):
+                # Calculate squared Euclidean distance in CIELAB space (Delta E 76).
+                delta_l = src_lab_color[0] - dest_lab_color[0]
+                delta_a = src_lab_color[1] - dest_lab_color[1]
+                delta_b = src_lab_color[2] - dest_lab_color[2]
+                cost_matrix[i][j] = delta_l**2 + delta_a**2 + delta_b**2
+
+        # Use the Hungarian algorithm to find the optimal assignment (minimum total cost).
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+        # Build the final remap table, converting NumPy integers to standard Python ints.
+        remap_table = {int(r): int(c) for r, c in zip(row_ind, col_ind)}
+        
+        _debug(f"Optimal Color Remap Table created: {remap_table}")
+        return remap_table
+
+    def _rgb_to_xyz(self, r, g, b):
+        # Helper to convert sRGB to XYZ color space.
+        # Assumes sRGB values are 0-255.
+        
+        # Normalize to 0-1
+        r_lin, g_lin, b_lin = [x / 255.0 for x in (r, g, b)]
+
+        # Apply the sRGB gamma correction formula
+        r_lin = ((r_lin + 0.055) / 1.055)**2.4 if r_lin > 0.04045 else r_lin / 12.92
+        g_lin = ((g_lin + 0.055) / 1.055)**2.4 if g_lin > 0.04045 else g_lin / 12.92
+        b_lin = ((b_lin + 0.055) / 1.055)**2.4 if b_lin > 0.04045 else b_lin / 12.92
+
+        # Standard sRGB to XYZ conversion matrix
+        x = r_lin * 0.4124564 + g_lin * 0.3575761 + b_lin * 0.1804375
+        y = r_lin * 0.2126729 + g_lin * 0.7151522 + b_lin * 0.0721750
+        z = r_lin * 0.0193339 + g_lin * 0.1191920 + b_lin * 0.9503041
+        
+        return x * 100, y * 100, z * 100
+
+    def _xyz_to_lab(self, x, y, z):
+        # Helper to convert XYZ to CIELAB color space.
+        # Uses D65 illuminant as a reference.
+        ref_x, ref_y, ref_z = 95.047, 100.000, 108.883
+        
+        x /= ref_x
+        y /= ref_y
+        z /= ref_z
+
+        # CIELAB formula for f(t)
+        def f(t):
+            return t**(1/3) if t > (6/29)**3 else (1/3) * ((29/6)**2) * t + (4/29)
+
+        fx, fy, fz = f(x), f(y), f(z)
+
+        L = 116 * fy - 16
+        a = 500 * (fx - fy)
+        b = 200 * (fy - fz)
+        
+        return L, a, b
+
+    def _rgb_to_lab(self, r, g, b):
+        # Convenience function to convert sRGB (0-255) to CIELAB.
+        x, y, z = self._rgb_to_xyz(r, g, b)
+        return self._xyz_to_lab(x, y, z)
+
+    def _render_tile_to_lab_pixels(self, tile_pattern, tile_colors_per_row, palette_hex):
+        """
+        Renders a tile's data into a flat list of 64 CIELAB color values.
+        This list acts as a 'fingerprint' for visual comparison.
+
+        Args:
+            tile_pattern (list): The 8x8 pattern data for the tile.
+            tile_colors_per_row (list): The list of (fg_idx, bg_idx) tuples for each row.
+            palette_hex (list): The 16-color hex palette to use for rendering.
+
+        Returns:
+            list: A list of 64 (L, a, b) CIELAB tuples, or None on error.
+        """
+        try:
+            lab_pixels = []
+            for r in range(TILE_HEIGHT):
+                fg_idx, bg_idx = tile_colors_per_row[r]
+                fg_hex = palette_hex[fg_idx]
+                bg_hex = palette_hex[bg_idx]
+
+                # Pre-convert the two possible colors for this row to LAB.
+                fg_lab = self._rgb_to_lab(int(fg_hex[1:3], 16), int(fg_hex[3:5], 16), int(fg_hex[5:7], 16))
+                bg_lab = self._rgb_to_lab(int(bg_hex[1:3], 16), int(bg_hex[3:5], 16), int(bg_hex[5:7], 16))
+
+                for c in range(TILE_WIDTH):
+                    if tile_pattern[r][c] == 1:
+                        lab_pixels.append(fg_lab)
+                    else:
+                        lab_pixels.append(bg_lab)
+            return lab_pixels
+        except (IndexError, TypeError) as e:
+            _error(f"Error rendering tile to LAB pixels: {e}")
+            return None
+
+    def _find_best_tile_match(self, source_lab_pixels, dest_tileset_lab_fingerprints):
+        """
+        Finds the best matching tile in the destination tileset for a given source tile.
+
+        Args:
+            source_lab_pixels (list): The LAB fingerprint of the source tile.
+            dest_tileset_lab_fingerprints (dict): A pre-calculated dictionary of
+                                                  {dest_idx: dest_lab_fingerprint}.
+
+        Returns:
+            int: The index of the best matching tile in the destination tileset.
+        """
+        best_match_idx = 0
+        min_total_distance = float('inf')
+
+        # Iterate through all pre-calculated fingerprints of the destination tileset.
+        for dest_idx, dest_lab_pixels in dest_tileset_lab_fingerprints.items():
+            if not dest_lab_pixels:
+                continue
+
+            current_total_distance = 0
+            # Calculate the total perceptual distance by summing the distance
+            # for each of the 64 corresponding pixels.
+            for i in range(len(source_lab_pixels)):
+                src_lab = source_lab_pixels[i]
+                dest_lab = dest_lab_pixels[i]
+                delta_l = src_lab[0] - dest_lab[0]
+                delta_a = src_lab[1] - dest_lab[1]
+                delta_b = src_lab[2] - dest_lab[2]
+                current_total_distance += delta_l**2 + delta_a**2 + delta_b**2
+            
+            if current_total_distance < min_total_distance:
+                min_total_distance = current_total_distance
+                best_match_idx = dest_idx
+        
+        return best_match_idx
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
