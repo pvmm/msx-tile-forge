@@ -6467,7 +6467,7 @@ class TileEditorApp:
                 _error(f"Error setting supertile count: {e}")
 
     def set_map_dimensions(self):
-        global map_width, map_height, map_data # map_data is global
+        global map_width, map_height, map_data
 
         prompt = "Enter new dimensions (Width x Height):"
         dims_str = simpledialog.askstring(
@@ -6491,7 +6491,7 @@ class TileEditorApp:
                     raise ValueError(f"Height must be between {MIN_DIM} and {MAX_DIM}")
 
                 if new_w == map_width and new_h == map_height:
-                    return  # No change
+                    return
 
                 reducing = new_w < map_width or new_h < map_height
                 confirmed = True  
@@ -6501,36 +6501,48 @@ class TileEditorApp:
 
                 if confirmed:
                     if self._clear_marked_unused(trigger_redraw=False):
-                        # Redraw will be handled by update_all_displays
                         pass
                     self._mark_project_modified()
                     
-                    new_map_data_temp = [[0 for _ in range(new_w)] for _ in range(new_h)] # Temporary new map data
+                    new_map_data_temp = [[0 for _ in range(new_w)] for _ in range(new_h)]
                     
                     rows_to_copy = min(map_height, new_h)
                     cols_to_copy = min(map_width, new_w)
                     
                     for r_idx_map_dim in range(rows_to_copy): 
                         for c_idx_map_dim in range(cols_to_copy): 
-                            if r_idx_map_dim < len(map_data) and c_idx_map_dim < len(map_data[r_idx_map_dim]): # Check bounds of old map_data
+                            if r_idx_map_dim < len(map_data) and c_idx_map_dim < len(map_data[r_idx_map_dim]):
                                 new_map_data_temp[r_idx_map_dim][c_idx_map_dim] = map_data[r_idx_map_dim][c_idx_map_dim]
-                            # Else, new_map_data_temp cells remain 0 (default)
 
                     map_width = new_w
                     map_height = new_h
-                    map_data = new_map_data_temp # Assign new map data
+                    map_data = new_map_data_temp
 
-                    self.map_render_cache.clear() # Map dimensions changed, rendered STs may shift
-                    self.invalidate_minimap_background_cache() # Minimap needs full redraw
+                    # <<< START OF ADDED LOGIC
+                    # First, ensure the Window View's SIZE is not larger than the new map.
+                    total_map_tiles_w = map_width * self.supertile_grid_width
+                    total_map_tiles_h = map_height * self.supertile_grid_height
+
+                    if self.window_view_tile_w.get() > total_map_tiles_w:
+                        self.window_view_tile_w.set(total_map_tiles_w)
                     
-                    # Determine appropriate refresh level
-                    if self.marked_unused_tiles or self.marked_unused_supertiles: # If marks were present (now cleared)
+                    if self.window_view_tile_h.get() > total_map_tiles_h:
+                        self.window_view_tile_h.set(total_map_tiles_h)
+                    # <<< END OF ADDED LOGIC
+
+                    # Now, clamp the window view position to the new map boundaries.
+                    self._clamp_window_view_position()
+
+                    self.map_render_cache.clear()
+                    self.invalidate_minimap_background_cache()
+                    
+                    if self.marked_unused_tiles or self.marked_unused_supertiles:
                         self.update_all_displays(changed_level="all")
-                    else: # No marks involved, just map changed
-                        self.update_all_displays(changed_level="map") # This will redraw map canvas
+                    else:
+                        self.update_all_displays(changed_level="map")
                     
-                    self._trigger_minimap_reconfigure() # Ensure minimap aspect ratio is re-evaluated
-                    self._request_supertile_usage_refresh() # MODIFIED: ADDED THIS LINE
+                    self._trigger_minimap_reconfigure()
+                    self._request_supertile_usage_refresh()
 
             except ValueError as e:
                 messagebox.showerror("Invalid Input", f"Error setting dimensions: {e}", parent=self.root)
