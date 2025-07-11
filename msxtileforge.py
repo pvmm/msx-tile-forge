@@ -9128,9 +9128,9 @@ class TileEditorApp:
                 parent=self.root
             )
 
-    def _reposition_tile(self, source_index_tile, target_index_tile): # Renamed
-        global num_tiles_in_set, tileset_patterns, tileset_colors # Globals
-        global current_tile_index, selected_tile_for_supertile, supertiles_data # Globals
+    def _reposition_tile(self, source_index_tile, target_index_tile):
+        global num_tiles_in_set, tileset_patterns, tileset_colors
+        global current_tile_index, selected_tile_for_supertile, supertiles_data
 
         if not (0 <= source_index_tile < num_tiles_in_set):
             _error(f"Invalid source index {source_index_tile} for tile move.")
@@ -9139,19 +9139,17 @@ class TileEditorApp:
         clamped_target_index_tile = max(0, min(target_index_tile, num_tiles_in_set))
 
         if source_index_tile == clamped_target_index_tile or \
-           (clamped_target_index_tile == num_tiles_in_set and source_index_tile == num_tiles_in_set -1) : # Moving last item to end
-             if source_index_tile == clamped_target_index_tile -1 and clamped_target_index_tile == num_tiles_in_set : # Moving last to effectively be "at the end" which is its current pos + 1 for insert
+           (clamped_target_index_tile == num_tiles_in_set and source_index_tile == num_tiles_in_set -1) :
+             if source_index_tile == clamped_target_index_tile -1 and clamped_target_index_tile == num_tiles_in_set :
                   pass 
              elif source_index_tile == clamped_target_index_tile :
-                  return False # No move needed if source is already at target (and not the special end case)
+                  return False
 
         _debug(f"Repositioning Tile: From {source_index_tile} to {clamped_target_index_tile}")
 
         moved_pattern_data = tileset_patterns.pop(source_index_tile)
         moved_colors_data = tileset_colors.pop(source_index_tile)
 
-        # The actual insertion index must be clamped to the new list length.
-        # After pop, the length is num_tiles_in_set - 1. The max valid insert index is this length.
         new_list_len = len(tileset_patterns)
         actual_insert_idx = min(clamped_target_index_tile, new_list_len)
 
@@ -9159,9 +9157,8 @@ class TileEditorApp:
         tileset_colors.insert(actual_insert_idx, moved_colors_data)
 
         # Update Supertile References
-        references_in_sts_changed = False # Track if any ST definition was modified
         for st_idx_refo in range(num_supertiles):
-            definition_refo = supertiles_data[st_idx_refo] # global
+            definition_refo = supertiles_data[st_idx_refo]
             if not definition_refo or len(definition_refo) != self.supertile_grid_height or \
                (self.supertile_grid_height > 0 and (len(definition_refo[0]) != self.supertile_grid_width)):
                 _warning(f"ST {st_idx_refo} dim mismatch in _reposition_tile. Skipping ref update.")
@@ -9175,20 +9172,19 @@ class TileEditorApp:
 
                     if current_ref_val == source_index_tile:
                         new_ref_val = actual_insert_idx
-                    elif source_index_tile < actual_insert_idx: # Moved DOWN (target > source logically, actual_insert_idx reflects this)
+                    elif source_index_tile < actual_insert_idx:
                         if source_index_tile < current_ref_val <= actual_insert_idx:
                              new_ref_val = current_ref_val - 1
-                    elif source_index_tile > actual_insert_idx: # Moved UP (target < source logically)
+                    elif source_index_tile > actual_insert_idx:
                         if actual_insert_idx <= current_ref_val < source_index_tile:
                              new_ref_val = current_ref_val + 1
                     
                     if new_ref_val != current_ref_val:
-                         supertiles_data[st_idx_refo][r_refo][c_refo] = new_ref_val # Update global
+                         supertiles_data[st_idx_refo][r_refo][c_refo] = new_ref_val
                          st_def_modified_this_iteration = True
             
             if st_def_modified_this_iteration:
-                references_in_sts_changed = True
-                self.invalidate_supertile_cache(st_idx_refo) # Invalidate ST cache if its definition changed
+                self.invalidate_supertile_cache(st_idx_refo)
 
         # Update Selections
         if current_tile_index == source_index_tile:
@@ -9209,15 +9205,11 @@ class TileEditorApp:
         selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, num_tiles_in_set - 1))
 
         self._mark_project_modified()
-        self.clear_all_caches() # Could clear more selectively, but all is safer
-        self.invalidate_minimap_background_cache()
-        if references_in_sts_changed: # If ST definitions were altered by the remapping
-            self._request_tile_usage_refresh()
         _debug(f"  Successfully moved Tile {source_index_tile} to {actual_insert_idx}")
         return True
 
-    def _reposition_supertile(self, source_index_st, target_index_st): # Renamed
-        global num_supertiles, supertiles_data, map_data, map_width, map_height # Globals
+    def _reposition_supertile(self, source_index_st, target_index_st):
+        global num_supertiles, supertiles_data, map_data, map_width, map_height
         global current_supertile_index, selected_supertile_for_map 
 
         if not (0 <= source_index_st < num_supertiles):
@@ -9235,18 +9227,17 @@ class TileEditorApp:
 
         _debug(f"Repositioning Supertile: From {source_index_st} to {clamped_target_index_st}")
 
-        moved_st_definition = supertiles_data.pop(source_index_st) # Global
+        moved_st_definition = supertiles_data.pop(source_index_st)
 
         new_list_len = len(supertiles_data)
         actual_insert_idx_st = min(clamped_target_index_st, new_list_len)
 
-        supertiles_data.insert(actual_insert_idx_st, moved_st_definition) # Global
+        supertiles_data.insert(actual_insert_idx_st, moved_st_definition)
 
         # Update Map References
-        map_references_changed = False # Track if map data was modified
         for r_map_refo in range(map_height):
             for c_map_refo in range(map_width):
-                current_map_ref = map_data[r_map_refo][c_map_refo] # Global
+                current_map_ref = map_data[r_map_refo][c_map_refo]
                 new_map_ref = current_map_ref
 
                 if current_map_ref == source_index_st:
@@ -9259,8 +9250,7 @@ class TileEditorApp:
                          new_map_ref = current_map_ref + 1
                 
                 if new_map_ref != current_map_ref:
-                     map_data[r_map_refo][c_map_refo] = new_map_ref # Global
-                     map_references_changed = True
+                     map_data[r_map_refo][c_map_refo] = new_map_ref
 
         # Update Selections
         if current_supertile_index == source_index_st:
@@ -9281,13 +9271,6 @@ class TileEditorApp:
         selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
 
         self._mark_project_modified()
-        self.supertile_image_cache.clear() 
-        self.map_render_cache.clear() # Map render cache also needs clearing as ST indices changed
-        self.invalidate_minimap_background_cache()
-        
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-
         _debug(f"  Successfully moved Supertile {source_index_st} to {actual_insert_idx_st}")
         return True
 
