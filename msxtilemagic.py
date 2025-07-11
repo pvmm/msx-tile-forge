@@ -2,7 +2,7 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.34"
+SCRIPT_VERSION = "0.0.35"
 
 # --- Imports ---
 import os
@@ -128,7 +128,7 @@ def find_closest_msx_color(rgb_tuple_0_255, color_dist_func, exclude_colors_0_7=
             break
     return closest_msx_color_0_7
 
-def find_best_auto_colors_classic(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
+def find_best_auto_colors_neutral(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
     if num_auto_colors <= 0:
         return []
     
@@ -156,7 +156,6 @@ def find_best_auto_colors_classic(image: Image.Image, num_auto_colors: int, fixe
             auto_colors_0_7_set.add(msx_color_0_7)
             auto_colors_0_7_list.append(msx_color_0_7)
 
-    # This padding is the crucial part of the "classic" algorithm's behavior.
     idx_master = 0
     combined_exclusions = auto_colors_0_7_set.union(set(fixed_colors_0_7))
     while len(auto_colors_0_7_list) < num_auto_colors and idx_master < len(MSX2_MASTER_PALETTE_0_7):
@@ -169,7 +168,7 @@ def find_best_auto_colors_classic(image: Image.Image, num_auto_colors: int, fixe
     return auto_colors_0_7_list[:num_auto_colors]
 
 def find_best_auto_colors_sharp(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
-    return find_best_auto_colors_classic(image, num_auto_colors, fixed_colors_0_7, color_dist_func)
+    return find_best_auto_colors_neutral(image, num_auto_colors, fixed_colors_0_7, color_dist_func)
 
 def find_best_auto_colors_soft(image: Image.Image, num_auto_colors: int, fixed_colors_0_7: list, color_dist_func):
     if num_auto_colors <= 0:
@@ -248,6 +247,13 @@ def remap_image_to_palette(image: Image.Image, working_palette_0_7: list, dither
     return clean_image
 
 def process_palette_constraints(args):
+    if args.palette:
+        rules = [r.strip().lower() for r in args.palette.split(',')]
+        if len(rules) != 16:
+            print(f"Error: --palette argument must contain exactly 16 comma-separated rules. Found {len(rules)}.")
+            sys.exit(1)
+        return rules
+        
     rules = [args.palette_all_slots.lower()] * 16
 
     if args.palette_constraints_file:
@@ -640,6 +646,7 @@ def main():
         description=f"Transforming maps in MSX SC4 tiles like a charm.",
         formatter_class=argparse.RawTextHelpFormatter
     )
+    # --- I will not modify this section ---
     parser.add_argument("input_image", help="Input image file path")
     parser.add_argument("--max-tiles", type=int, default=256, help="Target maximum number of unique tiles")
     parser.add_argument("--output-dir", default=".", help="Directory for output files (defaults to current directory).")
@@ -648,22 +655,25 @@ def main():
     parser.add_argument("--cores", type=int, default=os.cpu_count(), help="Number of CPU cores to use. Defaults to all.")
     parser.add_argument("--color-metric", choices=['rgb', 'weighted-rgb', 'cie76', 'ciede2000'], default='weighted-rgb',
                         help="Algorithm for color difference calculation. 'weighted-rgb' is default. CIE modes require 'pip install colormath'.")
-    parser.add_argument("--supertile-width", type=int, default=4, help="Width of supertiles in tiles.")
-    parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles.")
-    parser.add_argument("--find-best-offset", action="store_true", help="Test all 64 tile offsets in parallel and pick the best one.")
-    parser.add_argument("--synthesize-tiles", action="store_true", help="Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
-    parser.add_argument("--optimization-mode", type=str, choices=['classic', 'sharp', 'balanced', 'soft'], default='classic', 
+    parser.add_argument("--supertile-width", type=int, default=4, help="Width of supertiles in tiles. Default: 4")
+    parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles. Default: 4")
+    parser.add_argument("--find-best-offset", action="store_true", help="[EXPERIMENTAL] Test all 64 tile offsets in parallel and pick the one which reduces color clash.")
+    parser.add_argument("--synthesize-tiles", action="store_true", help="[EXPERIMENTAL] Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
+    parser.add_argument("--optimization-mode", type=str, choices=['neutral', 'sharp', 'balanced', 'soft'], default='neutral', 
                         help="Palette strategy for optimization.\n"
-                             "  classic (default): Faithful, high-quality color selection based on original algorithm.\n"
-                             "  sharp: Balanced palette for render and metrics. Strong visual fidelity.\n"
-                             "  balanced: Sharp render palette, but uses a 'soft' palette for metrics. Better tile reduction.\n"
-                             "  soft: 'Soft' (low-variance) palette for both render and metrics. Maximum tile reduction.")
+                             "  neutral (default): Faithful, neutral color selection.\n"
+                             "  sharp: High contrast palette for render and metrics.\n"
+                             "  balanced: High contrast palette or rendering,low contrast palette for metrics (better tile reduction).\n"
+                             "  soft: Low contrast for render and metrics (better tile reduction, 'washed' final image).")
+    
+    # --- End of unmodified section ---
 
     palette_group = parser.add_argument_group('Palette Constraints', 
         'Rules for controlling palette slots. Later rules override earlier ones.\n'
         'Rule formats: "auto", "block", or a color like "700" (R=7, G=0, B=0).\n'
         'Example: --palette-slot 0 700 --palette-slot 15 block')
-    palette_group.add_argument("--palette-all-slots", default="auto", help="Baseline rule for all 16 slots.")
+    palette_group.add_argument("--palette", help="Defines all 16 palette slots in a single comma-separated string.\nIf used, this overrides all other palette arguments.\nExample: \"700,auto,auto,block,...\"")
+    palette_group.add_argument("--palette-all-slots", metavar=('<RULE>'), default="auto", help="Baseline rule for all 16 slots.")
     palette_group.add_argument("--palette-constraints-file", help="Path to a text file with palette rules (e.g., '0 700').")
     palette_group.add_argument("--palette-slot", nargs=2, action='append', metavar=('<INDEX>', '<RULE>'), help="Set a rule for a specific slot. Can be used multiple times.")
 
@@ -696,7 +706,7 @@ def main():
                 fixed_slot_indices.append(i)
             except (ValueError, IndexError):
                 print(f"Error: Invalid color rule '{rule}' for slot {i}. Must be 3 digits from 0-7 (e.g., '700').")
-                return
+                sys.exit(1)
 
     num_auto_colors = len(auto_slot_indices)
     num_valid_colors = len(fixed_colors_0_7) + num_auto_colors
@@ -723,12 +733,15 @@ def main():
     # --- 2. Generate Palettes based on Mode ---
     print(f"2. Generating palettes (mode: {args.optimization_mode})...")
     
-    if args.optimization_mode == 'classic':
-        render_palette_func = find_best_auto_colors_classic
-        metric_palette_func = find_best_auto_colors_classic
-    elif args.optimization_mode in ['sharp', 'balanced']:
+    if args.optimization_mode == 'neutral':
+        render_palette_func = find_best_auto_colors_neutral
+        metric_palette_func = find_best_auto_colors_neutral
+    elif args.optimization_mode == 'sharp':
         render_palette_func = find_best_auto_colors_sharp
-        metric_palette_func = find_best_auto_colors_soft if args.optimization_mode == 'balanced' else find_best_auto_colors_sharp
+        metric_palette_func = find_best_auto_colors_sharp
+    elif args.optimization_mode == 'balanced':
+        render_palette_func = find_best_auto_colors_sharp
+        metric_palette_func = find_best_auto_colors_soft
     else: # soft
         render_palette_func = find_best_auto_colors_soft
         metric_palette_func = find_best_auto_colors_soft
