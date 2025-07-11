@@ -7236,32 +7236,30 @@ class TileEditorApp:
 
     def handle_map_drag_release(self, event):
         """Handles mouse button release: ends the current action (paint, pan, window ops)."""
-        global last_painted_map_cell  # Ensure global is accessible
+        global last_painted_map_cell
         action_at_release = self.current_mouse_action
 
-        last_painted_map_cell = None  # Stop continuous paint if it was happening
+        last_painted_map_cell = None
 
-        # Reset the current action state FIRST
+        # Reset the current action state FIRST.
         self.current_mouse_action = None
 
-        # Perform any finalization based on the action that just finished
+        # Perform any finalization based on the action that just finished.
         if action_at_release == "panning":
-            pass  # No explicit action needed, scan_dragto stopped with motion
+            # After a pan, perform a single redraw to ensure content is crisp.
+            self.draw_map_canvas()
 
         elif action_at_release == "window_dragging":
-            # Position is already snapped during drag, just update minimap (done below)
             pass
 
         elif action_at_release == "window_resizing":
-            # Clamp final position and update entries/IntVar state just in case
             self._clamp_window_view_position()
-            self._update_window_size_vars_from_state()  # Sync IntVars post-resize
+            self._update_window_size_vars_from_state()
             self.window_view_resize_handle = None
-            # Redraw needed to finalize visual state and ensure entries match
-            self.draw_map_canvas()  # Redraw map canvas to remove potential temp visuals
+            self.draw_map_canvas()
 
         elif action_at_release == "painting":
-            pass  # No specific finalization needed
+            pass
 
         self._update_map_cursor()
         self.draw_minimap()
@@ -7748,14 +7746,14 @@ class TileEditorApp:
 
         if self.current_mouse_action == "panning":
             canvas.scan_dragto(event.x, event.y, gain=1)
-            # After scan_dragto, the view has changed, so redraw the map content
-            self.draw_map_canvas() # <<< ADDED THIS LINE
-            self.draw_minimap()    # Minimap was already being updated
+            # The expensive draw_map_canvas() call has been removed from here.
+            # We only update the fast minimap during the pan.
+            self.draw_minimap()
 
         elif self.current_mouse_action == "window_dragging":
             canvas_x = canvas.canvasx(event.x)
             canvas_y = canvas.canvasy(event.y)
-            self._do_window_move_drag(canvas_x, canvas_y) # This calls draw_map_canvas internally if needed
+            self._do_window_move_drag(canvas_x, canvas_y)
 
         return "break"
 
