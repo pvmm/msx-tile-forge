@@ -11,7 +11,7 @@ import argparse
 sys.stdout.reconfigure(encoding='utf-8')
 
 # --- Constants ---
-APP_VERSION = "1.0.0RC9"
+MSXTILEFORGE_VERSION = "1.0.0RC14"
 EXPORTER_VERSION = "0.0.2"
 RESERVED_BYTES_COUNT = 4
 TILE_WIDTH = 8
@@ -289,7 +289,7 @@ PROJECT_MAP_INDEX_SIZE: .equ {map_index_size}
         print(f"Generated C data header: {os.path.basename(filepath)}")
 
 if __name__ == "__main__":
-    print_splash_header(APP_VERSION, EXPORTER_VERSION)
+    print_splash_header(MSXTILEFORGE_VERSION, EXPORTER_VERSION)
 
     parser = argparse.ArgumentParser(description="Exports MSX Tile Forge projects to raw binary and include files.",
         formatter_class=argparse.RawTextHelpFormatter

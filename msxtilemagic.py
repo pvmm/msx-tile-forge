@@ -2,7 +2,8 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.35"
+SCRIPT_VERSION = "0.0.36"
+MSXTILEFORGE_VERSION = "1.0.0RC14"
 
 # --- Imports ---
 import os
@@ -61,7 +62,7 @@ def print_splash_screen(script_name, script_version):
 
     text_lines = [
         f"{COLOR_TITLE}{script_name}{COLOR_RESET} (v{script_version})",
-        f"{COLOR_VERSION}MSX Tile Forge suite, version 1.0.0RC9{COLOR_RESET}"
+        f"{COLOR_VERSION}MSX Tile Forge suite, version {MSXTILEFORGE_VERSION}{COLOR_RESET}"
     ]
 
     print()
@@ -705,7 +706,7 @@ def main():
                 fixed_colors_0_7.append((r, g, b))
                 fixed_slot_indices.append(i)
             except (ValueError, IndexError):
-                print(f"Error: Invalid color rule '{rule}' for slot {i}. Must be 3 digits from 0-7 (e.g., '700').")
+                print(f"Error: Invalid color rule '{rule}' for slot {i}. Rules must be either 3 digits from 0-7 (e.g., '700'), 'block' or 'auto'.")
                 sys.exit(1)
 
     num_auto_colors = len(auto_slot_indices)
