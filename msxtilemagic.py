@@ -446,68 +446,79 @@ def synthesize_ideal_tile(tile_group, palette_255, color_dist_func):
     return process_tile_for_screen4(final_indices_tile, palette_255, color_dist_func)
 
 
-def optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, max_tiles, tm_width, tm_height, palette_255, num_cores, color_metric, synthesize):
+def optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_quantized, max_tiles, tm_width, tm_height, palette_255, num_cores, color_metric, synthesize, sort_strategy='cluster'):
     print("   Finding unique source tiles and their map counts...")
     unique_tile_groups = defaultdict(list)
     for i, tile_data in enumerate(all_source_tiles_sc4):
         key = tile_data[0].tobytes() + tile_data[1].tobytes()
         unique_tile_groups[key].append(i)
+    
     initial_unique_count = len(unique_tile_groups)
     print(f"   [INFO] Found {initial_unique_count} unique tiles.")
-    if initial_unique_count <= max_tiles:
-        print(f"   [INFO] Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
-        final_patterns = [all_source_tiles_sc4[locs[0]] for locs in unique_tile_groups.values()]
-        final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
-        for i, locs in enumerate(unique_tile_groups.values()):
-            for loc_idx in locs:
-                r,c = divmod(loc_idx,tm_width)
-                final_tile_map[r, c] = i
-        return final_patterns, final_tile_map
 
+    if initial_unique_count == 0:
+        return [], np.zeros((tm_height, tm_width), dtype=np.int16)
+
+    # --- Step 1: Build initial tile data and calculate all-pairs similarity ---
     unique_sc4_keys = list(unique_tile_groups.keys())
     unique_sc4_to_idx = {key: i for i, key in enumerate(unique_sc4_keys)}
-    
+
     active_tiles = { i: {"data": all_source_tiles_sc4[locs[0]], "count": len(locs), "original_indices": {i}}
                      for i, (key, locs) in enumerate(unique_tile_groups.items()) }
 
-    print("   Generating memory structure to hold tile pairs...")
     all_pairs = list(combinations(active_tiles.keys(), 2))
-
-    print(f"   Initializing worker pool and transferring data to {num_cores} cores.\r\n      -> This may take some seconds, please wait..")
-    chunksize = max(1, len(all_pairs) // (num_cores * 16))
+    print(f"   Generating memory structure for {len(all_pairs)} tile pairs...")
+    
     merge_heap = []
+    similarity_map = defaultdict(list)
     
-    init_args = (active_tiles, palette_255, color_metric)
-    with multiprocessing.Pool(processes=num_cores, initializer=_init_worker, initargs=init_args) as pool:
-        for result in tqdm(pool.imap_unordered(_calculate_initial_costs_worker, all_pairs, chunksize=chunksize), total=len(all_pairs), desc="   Pre-calculating costs", mininterval=10.0):
-            if result:
-                heapq.heappush(merge_heap, result)
+    if all_pairs:
+        print(f"   Initializing worker pool and transferring data to {num_cores} cores.\r\n      -> This may take some seconds, please wait..")
+        chunksize = max(1, len(all_pairs) // (num_cores * 16))
+        init_args = (active_tiles, palette_255, color_metric)
+        with multiprocessing.Pool(processes=num_cores, initializer=_init_worker, initargs=init_args) as pool:
+            for result in tqdm(pool.imap_unordered(_calculate_initial_costs_worker, all_pairs, chunksize=chunksize), total=len(all_pairs), desc="   Pre-calculating costs", mininterval=10.0):
+                if result:
+                    cost, idx1, idx2 = result
+                    heapq.heappush(merge_heap, result)
+                    similarity_map[idx1].append((cost, idx2))
+                    similarity_map[idx2].append((cost, idx1))
 
-    num_merges_to_perform = len(active_tiles) - max_tiles
-    print(f"   Performing {num_merges_to_perform} merges to reach target of {max_tiles} tiles...")
-    is_active = {idx: True for idx in active_tiles.keys()}
-    
-    with tqdm(total=num_merges_to_perform, desc="   Merging tiles") as pbar:
-        merges_done = 0
-        while merges_done < num_merges_to_perform and merge_heap:
-            cost, idx1, idx2 = heapq.heappop(merge_heap)
-            if not (is_active.get(idx1) and is_active.get(idx2)):
-                continue
-            tile1, tile2 = active_tiles[idx1], active_tiles[idx2]
-            if tile1["count"] > tile2["count"]:
-                winner_idx, loser_idx = idx1, idx2
-            elif tile2["count"] > tile1["count"]:
-                winner_idx, loser_idx = idx2, idx1
-            else:
-                winner_idx, loser_idx = (idx1, idx2) if idx1 < idx2 else (idx2, idx1)
-            active_tiles[winner_idx]["count"] += active_tiles[loser_idx]["count"]
-            active_tiles[winner_idx]["original_indices"].update(active_tiles[loser_idx]["original_indices"])
-            del active_tiles[loser_idx]
-            is_active[loser_idx] = False
-            merges_done += 1
-            pbar.update(1)
+    for idx in similarity_map:
+        similarity_map[idx].sort()
 
-    if synthesize:
+    # --- Step 2: Merge tiles if necessary ---
+    if initial_unique_count > max_tiles:
+        num_merges_to_perform = len(active_tiles) - max_tiles
+        print(f"   Performing {num_merges_to_perform} merges to reach target of {max_tiles} tiles...")
+        is_active = {idx: True for idx in active_tiles.keys()}
+        
+        with tqdm(total=num_merges_to_perform, desc="   Merging tiles") as pbar:
+            merges_done = 0
+            while merges_done < num_merges_to_perform and merge_heap:
+                cost, idx1, idx2 = heapq.heappop(merge_heap)
+                if not (is_active.get(idx1) and is_active.get(idx2)):
+                    continue
+                
+                tile1, tile2 = active_tiles[idx1], active_tiles[idx2]
+                if tile1["count"] > tile2["count"]:
+                    winner_idx, loser_idx = idx1, idx2
+                elif tile2["count"] > tile1["count"]:
+                    winner_idx, loser_idx = idx2, idx1
+                else:
+                    winner_idx, loser_idx = (idx1, idx2) if idx1 < idx2 else (idx2, idx1)
+                
+                active_tiles[winner_idx]["count"] += active_tiles[loser_idx]["count"]
+                active_tiles[winner_idx]["original_indices"].update(active_tiles[loser_idx]["original_indices"])
+                del active_tiles[loser_idx]
+                is_active[loser_idx] = False
+                merges_done += 1
+                pbar.update(1)
+    else:
+        print(f"   [INFO] Initial unique tile count ({initial_unique_count}) is within limit. No merge needed.")
+
+    # --- Step 3: Synthesize new tiles if requested ---
+    if synthesize and initial_unique_count > max_tiles:
         print("   Synthesizing ideal tiles for merged groups...")
         color_dist_func = get_color_distance_function(color_metric)
         for tile_info in tqdm(active_tiles.values(), desc="   Synthesizing"):
@@ -520,20 +531,37 @@ def optimize_by_precomputation_and_heap(all_source_tiles_sc4, all_source_tiles_q
                 quantized_tiles_for_group = [all_source_tiles_quantized[i] for i in group_locations]
                 tile_info["data"] = synthesize_ideal_tile(quantized_tiles_for_group, palette_255, color_dist_func)
 
+    # --- Step 4: Sort final tiles by similarity ---
+    print("   Sorting final tileset for visual coherence...")
+    sorted_tile_infos, old_winner_to_new_map = sort_items_by_similarity(
+        list(active_tiles.values()),
+        similarity_map,
+        active_tiles,
+        strategy=sort_strategy
+    )
+    
+    # --- Step 5: Build final tileset and map based on sorted order ---
     print("   Building final tileset and map...")
-    final_patterns, final_merge_map = [], {}
-    for final_idx, (key, tile_info) in enumerate(active_tiles.items()):
-        final_patterns.append(tile_info["data"])
+    final_patterns = [info['data'] for info in sorted_tile_infos]
+    
+    # Create the final mapping from an original unique tile to its new sorted final index
+    final_merge_map = {}
+    for winner_idx, tile_info in active_tiles.items():
+        if winner_idx not in old_winner_to_new_map: continue
+        new_sorted_idx = old_winner_to_new_map[winner_idx]
         for original_unique_idx in tile_info["original_indices"]:
-            final_merge_map[original_unique_idx] = final_idx
+            final_merge_map[original_unique_idx] = new_sorted_idx
 
     final_tile_map = np.zeros((tm_height, tm_width), dtype=np.int16)
     for i, tile_data in enumerate(all_source_tiles_sc4):
         key = tile_data[0].tobytes() + tile_data[1].tobytes()
-        unique_idx = unique_sc4_to_idx[key]
-        final_idx = final_merge_map[unique_idx]
-        r, c = divmod(i, tm_width)
-        final_tile_map[r, c] = final_idx
+        if key in unique_sc4_to_idx:
+            unique_idx = unique_sc4_to_idx[key]
+            if unique_idx in final_merge_map:
+                final_idx = final_merge_map[unique_idx]
+                r, c = divmod(i, tm_width)
+                final_tile_map[r, c] = final_idx
+    
     return final_patterns, final_tile_map
 
 def write_sc4_palette(filename, final_palette_0_7):
@@ -637,6 +665,179 @@ def translate_tile_indices(tile_tuple, working_to_final_map):
         final_color_data[r] = (final_fg << 4) | final_bg
     return (pattern_data, final_color_data)
 
+def calculate_supertile_difference(st1_block, st2_block, base_tiles, palette_255, color_dist_func):
+    total_damage = 0
+    h, w = st1_block.shape
+    for r in range(h):
+        for c in range(w):
+            idx1 = st1_block[r, c]
+            idx2 = st2_block[r, c]
+            if idx1 == idx2:
+                continue
+            tile1_data = base_tiles[idx1]
+            tile2_data = base_tiles[idx2]
+            total_damage += calculate_tile_difference(tile1_data, tile2_data, palette_255, color_dist_func)
+    return total_damage / (w * h)
+
+def _sort_greedy_chain(items_to_sort, similarity_map, old_indices):
+    if not items_to_sort:
+        return [], {}
+
+    num_items = len(items_to_sort)
+    remaining_indices = set(old_indices)
+    
+    # Start the chain with the first available index
+    start_index = old_indices[0]
+    sorted_indices = [start_index]
+    remaining_indices.remove(start_index)
+    
+    current_index = start_index
+    
+    for _ in range(num_items - 1):
+        if not remaining_indices: break
+        
+        best_next_index = -1
+        min_dist = float('inf')
+        
+        # Find the closest neighbor to the current end of the chain
+        if current_index in similarity_map:
+            for dist, neighbor_idx in similarity_map[current_index]:
+                if neighbor_idx in remaining_indices:
+                    best_next_index = neighbor_idx
+                    min_dist = dist
+                    break # The list is sorted, so the first match is the best
+        
+        # Fallback if no pre-calculated neighbor is found (shouldn't happen)
+        if best_next_index == -1:
+            best_next_index = list(remaining_indices)[0]
+
+        sorted_indices.append(best_next_index)
+        remaining_indices.remove(best_next_index)
+        current_index = best_next_index
+        
+    return sorted_indices
+
+def _sort_cluster_aware(items_to_sort, similarity_map, old_indices, threshold_multiplier):
+    if not items_to_sort:
+        return [], {}
+
+    # Find the average distance of the closest neighbor for all items
+    avg_min_dist = 0
+    valid_items = 0
+    for idx in old_indices:
+        if idx in similarity_map and similarity_map[idx]:
+            avg_min_dist += similarity_map[idx][0][0] # cost of closest neighbor
+            valid_items += 1
+    if valid_items > 0:
+        avg_min_dist /= valid_items
+    
+    # Set the threshold for what is considered "in the same cluster"
+    cluster_threshold = avg_min_dist * threshold_multiplier
+
+    # Identify seeds for clusters (items with many close neighbors)
+    seeds = []
+    for idx in old_indices:
+        if idx in similarity_map:
+            close_neighbors = sum(1 for cost, _ in similarity_map[idx] if cost < cluster_threshold)
+            seeds.append((-close_neighbors, idx)) # Use negative for max-heap behavior
+    heapq.heapify(seeds)
+
+    # Group all items into clusters starting from the best seeds
+    all_clusters = []
+    remaining_indices = set(old_indices)
+    
+    while seeds:
+        _, seed_idx = heapq.heappop(seeds)
+        if seed_idx not in remaining_indices:
+            continue
+        
+        current_cluster = []
+        q = [seed_idx]
+        visited_in_cluster = {seed_idx}
+        
+        while q:
+            current_idx = q.pop(0)
+            if current_idx in remaining_indices:
+                current_cluster.append(current_idx)
+                remaining_indices.remove(current_idx)
+
+                if current_idx in similarity_map:
+                    for cost, neighbor_idx in similarity_map[current_idx]:
+                        if cost < cluster_threshold and neighbor_idx in remaining_indices and neighbor_idx not in visited_in_cluster:
+                            q.append(neighbor_idx)
+                            visited_in_cluster.add(neighbor_idx)
+        
+        if current_cluster:
+            # Sort within the cluster using the greedy chain method
+            sorted_sub_chain = _sort_greedy_chain(current_cluster, similarity_map, current_cluster)
+            all_clusters.append(sorted_sub_chain)
+
+    # Handle any remaining orphans
+    if remaining_indices:
+        all_clusters.append(list(remaining_indices))
+
+    # Linearly order the clusters themselves by finding the closest connection
+    final_sorted_indices = []
+    if not all_clusters:
+        return [], {}
+        
+    ordered_clusters = [all_clusters.pop(0)]
+    
+    while all_clusters:
+        last_cluster = ordered_clusters[-1]
+        last_idx = last_cluster[-1]
+        best_next_cluster_idx = -1
+        min_dist = float('inf')
+        
+        for i, candidate_cluster in enumerate(all_clusters):
+            first_idx = candidate_cluster[0]
+            if last_idx in similarity_map:
+                for cost, neighbor_idx in similarity_map[last_idx]:
+                    if neighbor_idx == first_idx:
+                        if cost < min_dist:
+                            min_dist = cost
+                            best_next_cluster_idx = i
+                        break
+        
+        if best_next_cluster_idx != -1:
+            ordered_clusters.append(all_clusters.pop(best_next_cluster_idx))
+        else: # Fallback
+            ordered_clusters.append(all_clusters.pop(0))
+
+    for cluster in ordered_clusters:
+        final_sorted_indices.extend(cluster)
+        
+    return final_sorted_indices
+
+def sort_items_by_similarity(items_to_sort, similarity_map, original_indices_map, strategy='cluster', threshold=2.5):
+    old_indices = list(original_indices_map.keys())
+    
+    if strategy == 'cluster':
+        sorted_indices = _sort_cluster_aware(items_to_sort, similarity_map, old_indices, threshold)
+    elif strategy == 'greedy':
+        sorted_indices = _sort_greedy_chain(items_to_sort, similarity_map, old_indices)
+    else: # 'none' or invalid
+        return items_to_sort, {i: i for i in range(len(items_to_sort))}
+
+    old_to_new_map = {old_idx: new_idx for new_idx, old_idx in enumerate(sorted_indices)}
+    
+    final_sorted_items = [None] * len(items_to_sort)
+    for old_idx, new_idx in old_to_new_map.items():
+        original_item = original_indices_map[old_idx]
+        final_sorted_items[new_idx] = original_item
+
+    return final_sorted_items, old_to_new_map
+
+def remap_indices(map_array, old_to_new_map):
+    h, w = map_array.shape
+    new_map = np.zeros_like(map_array)
+    for r in range(h):
+        for c in range(w):
+            old_idx = map_array[r,c]
+            if old_idx in old_to_new_map:
+                new_map[r,c] = old_to_new_map[old_idx]
+    return new_map
+
 def main():
     if COLOUR_SCIENCE_AVAILABLE:
         warnings.filterwarnings("ignore", category=ColourUsageWarning)
@@ -647,7 +848,6 @@ def main():
         description=f"Transforming maps in MSX SC4 tiles like a charm.",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    # --- I will not modify this section ---
     parser.add_argument("input_image", help="Input image file path")
     parser.add_argument("--max-tiles", type=int, default=256, help="Target maximum number of unique tiles")
     parser.add_argument("--output-dir", default=".", help="Directory for output files (defaults to current directory).")
@@ -660,14 +860,19 @@ def main():
     parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles. Default: 4")
     parser.add_argument("--find-best-offset", action="store_true", help="[EXPERIMENTAL] Test all 64 tile offsets in parallel and pick the one which reduces color clash.")
     parser.add_argument("--synthesize-tiles", action="store_true", help="[EXPERIMENTAL] Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
+
     parser.add_argument("--optimization-mode", type=str, choices=['neutral', 'sharp', 'balanced', 'soft'], default='neutral', 
                         help="Palette strategy for optimization.\n"
                              "  neutral (default): Faithful, neutral color selection.\n"
                              "  sharp: High contrast palette for render and metrics.\n"
                              "  balanced: High contrast palette or rendering,low contrast palette for metrics (better tile reduction).\n"
                              "  soft: Low contrast for render and metrics (better tile reduction, 'washed' final image).")
-    
-    # --- End of unmodified section ---
+
+    parser.add_argument("--sort-tileset", type=str, choices=['none', 'greedy', 'cluster'], default='cluster',
+                    help="Method to sort the final tileset for visual coherence.\n"
+                            "  cluster (default): Groups tiles into visually similar clusters.\n"
+                            "  greedy: Creates a continuous chain of most-similar tiles.\n"
+                            "  none: Disables sorting, uses arbitrary order.")
 
     palette_group = parser.add_argument_group('Palette Constraints', 
         'Rules for controlling palette slots. Later rules override earlier ones.\n'
@@ -750,7 +955,7 @@ def main():
     render_auto_colors = render_palette_func(original_pil_image, num_auto_colors, fixed_colors_0_7, color_dist_func)
     print(f"   [INFO] Found {len(render_auto_colors)} unique colors for final render palette.")
     render_working_palette_0_7 = fixed_colors_0_7 + render_auto_colors
-    working_to_final_map = fixed_slot_indices + auto_slot_indices[:len(render_auto_colors)]
+    working_to_final_map = {i: final_slot for i, final_slot in enumerate(fixed_slot_indices + auto_slot_indices[:len(render_auto_colors)])}
     
     if args.optimization_mode == 'balanced':
         print(f"   [INFO] Generating separate 'soft' palette for optimization metrics...")
@@ -813,8 +1018,9 @@ def main():
 
     # --- 5. Optimize Tiles ---
     print("5. Optimizing tiles...")
-    optimized_patterns_metric, final_tile_map_indices = optimize_by_precomputation_and_heap(all_source_tiles_sc4_metric, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height, metric_palette_255, args.cores, args.color_metric, args.synthesize_tiles)
-    
+    optimized_patterns_metric, final_tile_map_indices = optimize_by_precomputation_and_heap(
+        all_source_tiles_sc4_metric, all_source_tiles_quantized, args.max_tiles, tile_map_width, tile_map_height,
+        metric_palette_255, args.cores, args.color_metric, args.synthesize_tiles, args.sort_tileset)    
     # --- 6. Translate to Final Render Tiles ---
     print("6. Translating tiles to final format...")
     if args.optimization_mode == 'balanced':
@@ -859,6 +1065,7 @@ def main():
     final_palette_0_7 = [(0,0,0)] * 16
     for i, slot_rule in enumerate(final_rules):
         if slot_rule == 'block':
+            # red channel bit 7 is the flag for MSX Tile Forge to skip importing blocked slot
             final_palette_0_7[i] = (128, 0, 0)
     for i, color in enumerate(render_working_palette_0_7):
         final_slot = working_to_final_map[i]
