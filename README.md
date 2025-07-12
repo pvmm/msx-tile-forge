@@ -1,5 +1,5 @@
 # MSX Tile Forge
-v1.0.0RC5
+v1.0.0RC15
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and Tkinter.
 
@@ -105,11 +105,11 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
 
 ## Getting Started
 
-This section explains how to set up your system and run MSX Tile Forge.
+This section explains how to set up your system and run MSX Tile Forge, including the dependencies required for its advanced import/export features.
 
 ### System Requirements & Dependencies
 
-To run MSX Tile Forge, your system will need the following:
+To run MSX Tile Forge and use all its features, your system will need the following:
 
 *   **Python:**
     *   Version 3.x is required. The application has been primarily developed and tested with Python 3.12, but it is expected to be compatible with other recent Python 3 releases (e.g., Python 3.7 and newer).
@@ -124,44 +124,41 @@ To run MSX Tile Forge, your system will need the following:
         sudo apt-get install python3-tk
         ```
 
-*   **Pillow (Python Imaging Library Fork):**
-    *   Pillow is required for various image processing tasks, including displaying the splash screen and efficiently rendering graphics in the map and ROM importer views.
-    *   If you do not have Pillow installed, you can install it using pip (Python's package installer). Open your terminal or command prompt and execute:
+*   **Required Python Libraries:**
+    These libraries provide the core functionality for image processing, numerical operations, and advanced algorithms used by the application and its integrated scripts. You can install them all at once using pip. Open your terminal or command prompt and execute:
+    ```bash
+    pip install Pillow numpy scipy platformdirs tqdm
+    ```
+    *   **Pillow:** The Python Imaging Library Fork is required for all image processing tasks.
+    *   **NumPy:** A fundamental package for scientific computing, used by the import scripts for efficient array manipulation.
+    *   **SciPy:** This library provides scientific algorithms. It is specifically used for the "Hungarian algorithm" (`linear_sum_assignment`) to perform optimal color and tile remapping during paste operations.
+    *   **platformdirs:** Used to find the correct user-specific directory for saving application settings (`settings.json`).
+    *   **tqdm:** Used by the `MSX Tile Magic` script to display progress bars in the console, which are streamed to the application's process runner window.
+
+*   **Optional `colour-science` Library (for advanced color accuracy):**
+    *   For the highest quality color palette generation and analysis, MSX Tile Forge can use the `colour-science` library. This enables the "CIE76" and "CIEDE2000" color difference metrics, which are based on human perceptual models.
+    *   This dependency is optional. If it is not installed, the application will default to its high-quality `weighted-rgb` metric.
+    *   To install it for advanced use, run:
         ```bash
-        pip install Pillow
-        ```
-    *   **Note:** If you have multiple Python versions or work with virtual environments, you might need to use `pip3` or specify the Python interpreter for pip:
-        ```bash
-        python -m pip install Pillow
-        ```
-        or
-        ```bash
-        python3 -m pip install Pillow
-        ```
-*   **platformdirs (Optional but Recommended):**
-    *   This library is used to find the appropriate user-specific configuration directory on different operating systems (Windows, macOS, Linux). This is the modern, standard way to store application settings without cluttering the user's home or documents folder.
-    *   The application will function without it, but will fall back to saving the `settings.json` file in the same directory as the script, which may not be ideal.
-    *   Install it via pip:
-        ```bash
-        pip install platformdirs
+        pip install colour-science
         ```
 
 ### Running the Application
 
 1.  **Ensure Dependencies are Installed:**
-    Verify that Python 3, Tkinter, Pillow, and optionally `platformdirs` are installed.
+    Verify that Python 3 and all the required Python libraries listed above are installed.
 
-2.  **Obtain the Script:**
-    Download or clone the `msxtileforge.py` script to your computer.
+2.  **Obtain the Scripts:**
+    Download or clone the `msxtileforge.py` script and its required companion script, `msxtilemagic.py`. **Both files must be in the same directory for the application to function correctly.**
 
-3.  **Navigate to the Script's Directory:**
-    Open your command line interface (Terminal, Command Prompt, PowerShell, etc.) and navigate to the directory where you saved the `msxtileforge.py` file.
+3.  **Navigate to the Scripts' Directory:**
+    Open your command line interface (Terminal, Command Prompt, PowerShell, etc.) and navigate to the directory where you saved the `.py` files.
     ```bash
     cd path/to/your/msx-tile-forge-directory
     ```
 
 4.  **Execute the Script:**
-    Run the application using the Python interpreter:
+    Run the main application using the Python interpreter:
     ```bash
     python msxtileforge.py
     ```
@@ -174,10 +171,6 @@ To run MSX Tile Forge, your system will need the following:
     To launch the application with detailed diagnostic messages printed to the console (useful for troubleshooting or development), use the `--debug` flag:
     ```bash
     python msxtileforge.py --debug
-    ```
-    or
-    ```bash
-    python3 msxtileforge.py --debug
     ```
 
 Upon successful execution, the MSX Tile Forge application window should appear after a brief splash screen.
