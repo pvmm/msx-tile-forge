@@ -2,8 +2,8 @@
 
 # --- Program Identification ---
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.36"
-MSXTILEFORGE_VERSION = "1.0.0RC14"
+SCRIPT_VERSION = "0.0.37"
+MSXTILEFORGE_VERSION = "1.0.0RC15"
 
 # --- Imports ---
 import os
@@ -665,7 +665,7 @@ def translate_tile_indices(tile_tuple, working_to_final_map):
         final_color_data[r] = (final_fg << 4) | final_bg
     return (pattern_data, final_color_data)
 
-def calculate_supertile_difference(st1_block, st2_block, base_tiles, palette_255, color_dist_func):
+def calculate_supertile_difference(st1_block, st2_block, base_tiles, final_pil_palette_flat, color_dist_func):
     total_damage = 0
     h, w = st1_block.shape
     for r in range(h):
@@ -674,10 +674,15 @@ def calculate_supertile_difference(st1_block, st2_block, base_tiles, palette_255
             idx2 = st2_block[r, c]
             if idx1 == idx2:
                 continue
+            # Ensure indices are within bounds before accessing
+            if idx1 >= len(base_tiles) or idx2 >= len(base_tiles):
+                continue
             tile1_data = base_tiles[idx1]
             tile2_data = base_tiles[idx2]
-            total_damage += calculate_tile_difference(tile1_data, tile2_data, palette_255, color_dist_func)
-    return total_damage / (w * h)
+            total_damage += calculate_tile_difference(tile1_data, tile2_data, final_pil_palette_flat, color_dist_func)
+    # Avoid division by zero if supertile is 1x1
+    denominator = (w * h) if (w * h) > 0 else 1
+    return total_damage / denominator
 
 def _sort_greedy_chain(items_to_sort, similarity_map, old_indices):
     if not items_to_sort:
@@ -837,6 +842,22 @@ def remap_indices(map_array, old_to_new_map):
             if old_idx in old_to_new_map:
                 new_map[r,c] = old_to_new_map[old_idx]
     return new_map
+
+def _init_supertile_worker(st_defs, base_tiles, palette, metric_name):
+    global worker_st_defs, worker_base_tiles, worker_palette, worker_color_dist_func
+    if COLOUR_SCIENCE_AVAILABLE:
+        warnings.filterwarnings("ignore", category=ColourUsageWarning)
+    worker_st_defs = st_defs
+    worker_base_tiles = base_tiles
+    worker_palette = palette
+    worker_color_dist_func = get_color_distance_function(metric_name)
+
+def _calculate_supertile_cost_worker(pair):
+    idx1, idx2 = pair
+    st1_block = worker_st_defs[idx1]
+    st2_block = worker_st_defs[idx2]
+    dist = calculate_supertile_difference(st1_block, st2_block, worker_base_tiles, worker_palette, worker_color_dist_func)
+    return dist, idx1, idx2
 
 def main():
     if COLOUR_SCIENCE_AVAILABLE:
@@ -1041,12 +1062,13 @@ def main():
     num_unique_base_patterns = len(final_unique_patterns)
     print(f"   [INFO] Optimization complete. Final tile count: {num_unique_base_patterns}")
 
-    # --- 7. Supertile Discovery ---
+    # --- 7. Supertile Discovery and Sorting ---
     supertile_definitions = []
     final_map_to_write = final_tile_map_indices
     num_supertiles = num_unique_base_patterns
     use_supertiles = args.supertile_width > 1 or args.supertile_height > 1
 
+    # Part A: Discover unique supertiles
     if use_supertiles:
         print(f"7. Discovering {args.supertile_width}x{args.supertile_height} supertiles...")
         supertile_definitions, supertile_map = discover_supertiles(final_tile_map_indices, args.supertile_width, args.supertile_height)
@@ -1057,6 +1079,51 @@ def main():
         print("7. Generating 1x1 supertile definitions...")
         for i in range(num_unique_base_patterns):
             supertile_definitions.append(np.array([[i]], dtype=np.int16))
+
+    # Part B: Create the final MSX palette (must be done before sorting supertiles)
+    final_palette_0_7 = [(0,0,0)] * 16
+    for i, slot_rule in enumerate(final_rules):
+        if slot_rule == 'block':
+            final_palette_0_7[i] = (128, 0, 0)
+    for i, color in enumerate(render_working_palette_0_7):
+        final_slot = working_to_final_map[i]
+        final_palette_0_7[final_slot] = color
+
+    # Part C: Sort the supertiles by visual similarity if requested
+    if use_supertiles and args.sort_tileset != 'none' and num_supertiles > 1:
+        # Create a PIL-compatible RGB 0-255 palette for the comparison function
+        final_pil_palette_for_compare = [(c[0]*255//7, c[1]*255//7, c[2]*255//7) if c[0] < 128 else (0,0,0) for c in final_palette_0_7]
+        pil_final_palette_flat_for_compare = [comp for rgb in final_pil_palette_for_compare for comp in rgb]
+        
+        print(f"   Sorting {num_supertiles} supertiles for visual coherence...")
+        st_similarity_map = defaultdict(list)
+        st_pairs = list(combinations(range(num_supertiles), 2))
+        
+        st_similarity_map = defaultdict(list)
+        st_pairs = list(combinations(range(num_supertiles), 2))
+
+        init_args = (supertile_definitions, final_unique_patterns, final_pil_palette_for_compare, args.color_metric)
+        chunksize = max(1, len(st_pairs) // (args.cores * 16))
+
+        with multiprocessing.Pool(processes=args.cores, initializer=_init_supertile_worker, initargs=init_args) as pool:
+            for dist, idx1, idx2 in tqdm(pool.imap_unordered(_calculate_supertile_cost_worker, st_pairs, chunksize=chunksize), total=len(st_pairs), desc="   Clustering supertiles", leave=False):
+                st_similarity_map[idx1].append((dist, idx2))
+                st_similarity_map[idx2].append((dist, idx1))
+
+        for idx in st_similarity_map:
+            st_similarity_map[idx].sort()
+
+        original_st_map = {i: st for i, st in enumerate(supertile_definitions)}
+        sorted_supertiles, old_st_to_new_map = sort_items_by_similarity(
+            supertile_definitions,
+            st_similarity_map,
+            original_st_map,
+            strategy=args.sort_tileset
+        )
+
+        # Update the definitions and map with the new sorted order
+        supertile_definitions = sorted_supertiles
+        final_map_to_write = remap_indices(supertile_map, old_st_to_new_map)
 
     # --- 8. Generate Output Files ---
     print("8. Generating output files...")
