@@ -5517,11 +5517,9 @@ class TileEditorApp:
                         raise struct.error("Not enough bytes in color data block for unpacking.")
                     r_val, g_val, b_val = struct.unpack_from("BBB", palette_data_bytes, offset)
 
-                    # --- New logic for handling blocked slots ---
                     if preserved_palette and (r_val, g_val, b_val) == (128, 0, 0):
                         new_palette_hex_from_file.append(preserved_palette[i])
                         continue
-                    # --- End of new logic ---
 
                     if not (0 <= r_val <= 7 and 0 <= g_val <= 7 and 0 <= b_val <= 7):
                         _warning(f"Invalid RGB ({r_val},{g_val},{b_val}) at slot {i} in '{os.path.basename(load_path)}'. Clamping.")
@@ -6781,7 +6779,6 @@ class TileEditorApp:
                     map_height = new_h
                     map_data = new_map_data_temp
 
-                    # <<< START OF ADDED LOGIC
                     # First, ensure the Window View's SIZE is not larger than the new map.
                     total_map_tiles_w = map_width * self.supertile_grid_width
                     total_map_tiles_h = map_height * self.supertile_grid_height
@@ -6791,7 +6788,6 @@ class TileEditorApp:
                     
                     if self.window_view_tile_h.get() > total_map_tiles_h:
                         self.window_view_tile_h.set(total_map_tiles_h)
-                    # <<< END OF ADDED LOGIC
 
                     # Now, clamp the window view position to the new map boundaries.
                     self._clamp_window_view_position()
@@ -9263,6 +9259,7 @@ class TileEditorApp:
             current_supertile_index = new_st_idx  
 
             self.supertile_image_cache.clear()  
+            self.map_render_cache.clear()
             self.invalidate_minimap_background_cache() # Map not directly changed, but ST count did
             
             self.update_all_displays(changed_level="all") 
@@ -9304,6 +9301,7 @@ class TileEditorApp:
 
 
             self.supertile_image_cache.clear()
+            self.map_render_cache.clear()
             self.invalidate_minimap_background_cache() # Map refs changed by _update_map_refs...
             self.update_all_displays(changed_level="all") 
             self.scroll_selectors_to_supertile(current_supertile_index)
@@ -11148,7 +11146,6 @@ class TileEditorApp:
         if not canvas or not canvas.winfo_exists():
             return
 
-        # --- Start of existing logic to determine clicked_rom_tile_absolute_idx ---
         rom_data = dialog.rom_data
         current_global_fine_offset = dialog.fine_offset_var.get() 
         tile_display_size = VIEWER_TILE_SIZE
@@ -11178,7 +11175,6 @@ class TileEditorApp:
         if not (0 <= clicked_rom_tile_absolute_idx < total_potential_tiles):
             _debug(f" Click outside valid tile area. Clicked index: {clicked_rom_tile_absolute_idx}, Total potential: {total_potential_tiles}")
             return
-        # --- End of logic to determine clicked_rom_tile_absolute_idx ---
 
 
         is_shift_pressed = (event.state & 0x0001) != 0
@@ -13349,7 +13345,6 @@ class TileEditorApp:
             return ph_photo
 
         # --- Part 3: Render supertile content onto temp_full_photo ---
-        # (This extensive rendering logic remains the same as in Step 12/ your last working version of it)
         if not (0 <= supertile_index < num_supertiles):
             temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, temp_full_photo_w, temp_full_photo_h))
         else:
@@ -13402,7 +13397,6 @@ class TileEditorApp:
                                             except tk.TclError: break 
                                     else: continue
                                     break 
-        # --- End of rendering onto temp_full_photo ---
 
         # --- Part 4: Determine final_photo_width and create final_photo ---
         # final_photo_width is the minimum of the actual scaled content width and the available column area
@@ -15959,15 +15953,12 @@ if __name__ == "__main__":
     splash_image_label.pack(side=tk.TOP, padx=0, pady=0)
     splash_image_label.image = splash_photo_ref # Keep reference on label
 
-    # --- START of MODIFIED/NEW CODE ---
     # Create a frame for the contribution links
     contrib_splash_frame = ttk.Frame(content_frame)
     contrib_splash_frame.pack(side=tk.BOTTOM, fill='x', pady=(2, 2))
 
-    # Link font
     splash_link_font = font.Font(family="Segoe UI", size=8, underline=True)
 
-    # Clickable "Buy Me a Coffee" link
     bmac_url = "https://www.buymeacoffee.com/DamnedAngel"
     bmac_splash_label = tk.Label(
         contrib_splash_frame, 
@@ -15979,13 +15970,11 @@ if __name__ == "__main__":
     bmac_splash_label.pack(side=tk.LEFT, padx=(5, 5))
     bmac_splash_label.bind("<Button-1>", lambda e: webbrowser.open_new(bmac_url))
 
-    # Non-clickable text labels for PayPal and Pix
     ttk.Label(
         contrib_splash_frame, 
         text="| PayPal / Pix: danilo@angelo.eng.br",
         font=("Segoe UI", 8)
     ).pack(side=tk.LEFT, padx=(0, 5))
-    # --- END of MODIFIED/NEW CODE ---
 
     version_text_label = ttk.Label(
         content_frame, 
