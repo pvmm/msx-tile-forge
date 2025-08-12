@@ -4979,20 +4979,19 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
 
-        command = TransformCommand("Flip Tile Horizontal", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        command = TransformCommand("Flip Tile Horizontal", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+
+        # Original flip logic (modifies global state)
         current_pattern = tileset_patterns[current_tile_index]
         new_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
         for r in range(TILE_HEIGHT):
             new_pattern[r] = current_pattern[r][::-1]
         tileset_patterns[current_tile_index] = new_pattern
         
+        # Capture the result of the modification
         command.capture_new_state()
         self.undo_manager.do(command)
         
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         print(f"Tile {current_tile_index} flipped horizontally.")
 
     def flip_tile_vertical(self):
@@ -5000,22 +4999,22 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
 
-        pattern_command = TransformCommand("Flip Tile Vertical (Pattern)", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
-        color_command = TransformCommand("Flip Tile Vertical (Color)", tileset_colors, current_tile_index, self.invalidate_tile_cache)
+        # Create a command for each data list that will be changed
+        pattern_command = TransformCommand("Flip Tile Vertical", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Flip Tile Vertical", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
 
+        # Original flip logic
         tileset_patterns[current_tile_index].reverse()
         tileset_colors[current_tile_index].reverse()
         
+        # Capture the new state for both commands
         pattern_command.capture_new_state()
         color_command.capture_new_state()
         
+        # Group them into a single undoable action
         composite_command = CompositeCommand("Flip Tile Vertical", [pattern_command, color_command])
         self.undo_manager.do(composite_command)
         
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         print(f"Tile {current_tile_index} flipped vertically.")
 
     def rotate_tile_90cw(self):
@@ -5023,8 +5022,8 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
 
-        pattern_command = TransformCommand("Rotate Tile (Pattern)", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
-        color_command = TransformCommand("Rotate Tile (Color)", tileset_colors, current_tile_index, self.invalidate_tile_cache)
+        pattern_command = TransformCommand("Rotate Tile", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Rotate Tile", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
 
         # Original rotate logic
         current_pattern = tileset_patterns[current_tile_index]
@@ -5037,21 +5036,15 @@ class TileEditorApp:
             (WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)
         ]  
         
-        # Capture the new state for both commands
         pattern_command.capture_new_state()
         color_command.capture_new_state()
 
-        # Group them into a single undoable action
         composite_command = CompositeCommand("Rotate Tile", [pattern_command, color_command])
         self.undo_manager.do(composite_command)
         
         messagebox.showinfo(
             "Rotation Complete", "Tile rotated.\nRow colors have been reset to default."
         )
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         print(f"Tile {current_tile_index} rotated 90 CW (colors reset).")
 
     def shift_tile_up(self):
@@ -5059,17 +5052,15 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-
         if not (len(tileset_patterns[current_tile_index]) == TILE_HEIGHT and 
                 len(tileset_colors[current_tile_index]) == TILE_HEIGHT):
             _error(f"Tile {current_tile_index} data is malformed. Cannot shift up.")
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
-        pattern_command = TransformCommand("Shift Tile Up (Pattern)", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
-        color_command = TransformCommand("Shift Tile Up (Color)", tileset_colors, current_tile_index, self.invalidate_tile_cache)
+        pattern_command = TransformCommand("Shift Tile Up", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Shift Tile Up", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
 
-        # Original shift logic
         current_pattern = tileset_patterns[current_tile_index]
         current_colors = tileset_colors[current_tile_index]
         first_pattern_row = current_pattern.pop(0)
@@ -5083,11 +5074,6 @@ class TileEditorApp:
         composite_command = CompositeCommand("Shift Tile Up", [pattern_command, color_command])
         self.undo_manager.do(composite_command)
         
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_color_usage_refresh()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         _debug(f"Tile {current_tile_index} shifted up.")
 
     def shift_tile_down(self):
@@ -5095,17 +5081,15 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-        
         if not (len(tileset_patterns[current_tile_index]) == TILE_HEIGHT and 
                 len(tileset_colors[current_tile_index]) == TILE_HEIGHT):
             _error(f"Tile {current_tile_index} data is malformed. Cannot shift down.")
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
-        pattern_command = TransformCommand("Shift Tile Down (Pattern)", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
-        color_command = TransformCommand("Shift Tile Down (Color)", tileset_colors, current_tile_index, self.invalidate_tile_cache)
+        pattern_command = TransformCommand("Shift Tile Down", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Shift Tile Down", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
 
-        # Original shift logic
         current_pattern = tileset_patterns[current_tile_index]
         current_colors = tileset_colors[current_tile_index]
         last_pattern_row = current_pattern.pop(-1)
@@ -5119,11 +5103,6 @@ class TileEditorApp:
         composite_command = CompositeCommand("Shift Tile Down", [pattern_command, color_command])
         self.undo_manager.do(composite_command)
         
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_color_usage_refresh() 
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         _debug(f"Tile {current_tile_index} shifted down.")
 
     def shift_tile_left(self):
@@ -5131,7 +5110,6 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-        
         current_pattern = tileset_patterns[current_tile_index]
         if not (isinstance(current_pattern, list) and 
                 len(current_pattern) == TILE_HEIGHT and
@@ -5140,9 +5118,8 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
         
-        command = TransformCommand("Shift Tile Left", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        command = TransformCommand("Shift Tile Left", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
 
-        # Original shift logic
         for r_idx_shift in range(TILE_HEIGHT):
             row_data = current_pattern[r_idx_shift]
             first_pixel_val = row_data.pop(0)
@@ -5151,10 +5128,6 @@ class TileEditorApp:
         command.capture_new_state()
         self.undo_manager.do(command)
         
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         _debug(f"Tile {current_tile_index} shifted left.")
 
     def shift_tile_right(self):
@@ -5162,7 +5135,6 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-        
         current_pattern = tileset_patterns[current_tile_index]
         if not (isinstance(current_pattern, list) and 
                 len(current_pattern) == TILE_HEIGHT and
@@ -5171,9 +5143,8 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
         
-        command = TransformCommand("Shift Tile Right", tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        command = TransformCommand("Shift Tile Right", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
 
-        # Original shift logic
         for r_idx_shift_r in range(TILE_HEIGHT):
             row_data = current_pattern[r_idx_shift_r]
             last_pixel_val = row_data.pop(-1)
@@ -5182,10 +5153,6 @@ class TileEditorApp:
         command.capture_new_state()
         self.undo_manager.do(command)
         
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
         _debug(f"Tile {current_tile_index} shifted right.")
 
     # --- Supertile Editor Handlers ---
@@ -7241,8 +7208,6 @@ class TileEditorApp:
 
             command = ClearMapCommand(self)
             self.undo_manager.do(command)
-            self.update_all_displays(changed_level="map")
-            self._request_supertile_usage_refresh()
 
     def copy_current_tile(self):
         global current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
@@ -8831,7 +8796,6 @@ class TileEditorApp:
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Flip Supertile", "No valid supertile selected.", parent=self.root)
             return
-
         current_definition = supertiles_data[current_supertile_index]
         if not (current_definition and 
                 len(current_definition) == self.supertile_grid_height and
@@ -8840,9 +8804,8 @@ class TileEditorApp:
             messagebox.showerror("Flip Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot flip.", parent=self.root)
             return
 
-        command = TransformCommand("Flip Supertile Horizontal", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        command = TransformCommand("Flip Supertile Horizontal", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        # Original flip logic
         new_definition_flipped_h_st = []
         for r_flip_st_h in range(self.supertile_grid_height):
             if r_flip_st_h < len(current_definition) and isinstance(current_definition[r_flip_st_h], list):
@@ -8853,11 +8816,7 @@ class TileEditorApp:
 
         command.capture_new_state()
         self.undo_manager.do(command)
-
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
+        
         _debug(f"Supertile {current_supertile_index} flipped horizontally.")
 
     def flip_supertile_vertical(self):
@@ -8865,7 +8824,6 @@ class TileEditorApp:
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Flip Supertile", "No valid supertile selected.", parent=self.root)
             return
-
         current_definition_to_flip_st = supertiles_data[current_supertile_index]
         if not (current_definition_to_flip_st and 
                 len(current_definition_to_flip_st) == self.supertile_grid_height and
@@ -8873,35 +8831,27 @@ class TileEditorApp:
             _warning(f"Supertile {current_supertile_index} dimensions mismatch for vertical flip. Cannot flip.")
             messagebox.showerror("Flip Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot flip.", parent=self.root)
             return
-
-        command = TransformCommand("Flip Supertile Vertical", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
             
-        # Original flip logic
+        command = TransformCommand("Flip Supertile Vertical", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        
         current_definition_to_flip_st.reverse()
 
         command.capture_new_state()
         self.undo_manager.do(command)
-
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
+        
         _debug(f"Supertile {current_supertile_index} flipped vertically.")
 
     def rotate_supertile_90cw(self):
         global supertiles_data, current_supertile_index, num_supertiles
-        
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Rotate Supertile", "No valid supertile selected.", parent=self.root)
             return
-
         if self.supertile_grid_width != self.supertile_grid_height:
             messagebox.showinfo("Rotate Supertile", "Rotation is only enabled for square supertiles.", parent=self.root)
             return
 
         current_definition_rotate_st = supertiles_data[current_supertile_index]
         dim_st_rotate = self.supertile_grid_width
-        
         if not (current_definition_rotate_st and 
                 len(current_definition_rotate_st) == dim_st_rotate and
                 (dim_st_rotate == 0 or all(len(row) == dim_st_rotate for row in current_definition_rotate_st))):
@@ -8909,9 +8859,8 @@ class TileEditorApp:
             messagebox.showerror("Rotate Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot rotate.", parent=self.root)
             return
 
-        command = TransformCommand("Rotate Supertile", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        command = TransformCommand("Rotate Supertile", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        # Original rotate logic
         new_definition_rotated_st = [[0 for _c in range(dim_st_rotate)] for _r in range(dim_st_rotate)]
         for r_rot_st_val in range(dim_st_rotate):
             for c_rot_st_val in range(dim_st_rotate):
@@ -8921,16 +8870,11 @@ class TileEditorApp:
 
         command.capture_new_state()
         self.undo_manager.do(command)
-
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
+        
         _debug(f"Supertile {current_supertile_index} rotated 90 CW.")
 
     def shift_supertile_up(self):
         global supertiles_data, current_supertile_index, num_supertiles
-        
         current_st_h_for_shift = self.supertile_grid_height
         if not (0 <= current_supertile_index < num_supertiles) or current_st_h_for_shift <= 0:
             if current_st_h_for_shift <=1 and 0 <= current_supertile_index < num_supertiles :
@@ -8938,9 +8882,7 @@ class TileEditorApp:
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_up = supertiles_data[current_supertile_index]
-        
         if not (current_definition_shift_st_up and 
                 len(current_definition_shift_st_up) == current_st_h_for_shift and
                 (current_st_h_for_shift == 0 or (self.supertile_grid_width > 0 and len(current_definition_shift_st_up[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
@@ -8948,24 +8890,18 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
             
-        command = TransformCommand("Shift Supertile Up", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        command = TransformCommand("Shift Supertile Up", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        # Original shift logic
         first_row_data_st = current_definition_shift_st_up.pop(0)
         current_definition_shift_st_up.append(first_row_data_st)
         
         command.capture_new_state()
         self.undo_manager.do(command)
         
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
         _debug(f"Supertile {current_supertile_index} shifted up.")
 
     def shift_supertile_down(self):
         global supertiles_data, current_supertile_index, num_supertiles
-        
         current_st_h_for_shift_d = self.supertile_grid_height
         if not (0 <= current_supertile_index < num_supertiles) or current_st_h_for_shift_d <= 0:
             if current_st_h_for_shift_d <=1 and 0 <= current_supertile_index < num_supertiles:
@@ -8973,9 +8909,7 @@ class TileEditorApp:
                 return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_d = supertiles_data[current_supertile_index]
-
         if not (current_definition_shift_st_d and 
                 len(current_definition_shift_st_d) == current_st_h_for_shift_d and
                 (current_st_h_for_shift_d == 0 or (self.supertile_grid_width > 0 and len(current_definition_shift_st_d[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
@@ -8983,36 +8917,27 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
             
-        command = TransformCommand("Shift Supertile Down", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        command = TransformCommand("Shift Supertile Down", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        # Original shift logic
         last_row_data_st = current_definition_shift_st_d.pop(-1)
         current_definition_shift_st_d.insert(0, last_row_data_st)
 
         command.capture_new_state()
         self.undo_manager.do(command)
-
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
+        
         _debug(f"Supertile {current_supertile_index} shifted down.")
 
     def shift_supertile_left(self):
         global supertiles_data, current_supertile_index, num_supertiles
-        
         current_st_w_for_shift_l = self.supertile_grid_width
         current_st_h_for_shift_l = self.supertile_grid_height
-        
         if not (0 <= current_supertile_index < num_supertiles) or current_st_w_for_shift_l <= 0 or current_st_h_for_shift_l <= 0:
             if current_st_w_for_shift_l <=1 and 0 <= current_supertile_index < num_supertiles :
                  _debug(f"Supertile {current_supertile_index} is {current_st_w_for_shift_l} unit(s) wide, cannot shift left.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_l = supertiles_data[current_supertile_index]
-
         if not (current_definition_shift_st_l and 
                 len(current_definition_shift_st_l) == current_st_h_for_shift_l and
                 (current_st_h_for_shift_l == 0 or (current_st_w_for_shift_l > 0 and len(current_definition_shift_st_l[0]) == current_st_w_for_shift_l) or current_st_w_for_shift_l == 0)):
@@ -9020,9 +8945,8 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
-        command = TransformCommand("Shift Supertile Left", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        command = TransformCommand("Shift Supertile Left", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        # Original shift logic
         for r_shift_st_l_val in range(current_st_h_for_shift_l):
             if r_shift_st_l_val < len(current_definition_shift_st_l):
                 row_data_list_st_l = current_definition_shift_st_l[r_shift_st_l_val]
@@ -9032,28 +8956,20 @@ class TileEditorApp:
 
         command.capture_new_state()
         self.undo_manager.do(command)
-
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
+        
         _debug(f"Supertile {current_supertile_index} shifted left.")
 
     def shift_supertile_right(self):
         global supertiles_data, current_supertile_index, num_supertiles
-
         current_st_w_for_shift_r = self.supertile_grid_width
         current_st_h_for_shift_r = self.supertile_grid_height
-        
         if not (0 <= current_supertile_index < num_supertiles) or current_st_w_for_shift_r <= 0 or current_st_h_for_shift_r <= 0:
             if current_st_w_for_shift_r <= 1 and 0 <= current_supertile_index < num_supertiles :
                  _debug(f"Supertile {current_supertile_index} is {current_st_w_for_shift_r} unit(s) wide, cannot shift right.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_r = supertiles_data[current_supertile_index]
-
         if not (current_definition_shift_st_r and 
                 len(current_definition_shift_st_r) == current_st_h_for_shift_r and
                 (current_st_h_for_shift_r == 0 or (current_st_w_for_shift_r > 0 and len(current_definition_shift_st_r[0]) == current_st_w_for_shift_r) or current_st_w_for_shift_r == 0)):
@@ -9061,9 +8977,8 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
-        command = TransformCommand("Shift Supertile Right", supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        command = TransformCommand("Shift Supertile Right", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        # Original shift logic
         for r_shift_st_r_val in range(current_st_h_for_shift_r):
             if r_shift_st_r_val < len(current_definition_shift_st_r):
                 row_data_list_st_r = current_definition_shift_st_r[r_shift_st_r_val]
@@ -9074,10 +8989,6 @@ class TileEditorApp:
         command.capture_new_state()
         self.undo_manager.do(command)
         
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_supertile_usage_refresh()
         _debug(f"Supertile {current_supertile_index} shifted right.")
 
     def handle_supertile_def_right_click(self, event):
