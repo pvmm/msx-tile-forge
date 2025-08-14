@@ -387,31 +387,26 @@ class PaintMapCellCommand(ICommand):
 
 class CompositeCommand(ICommand):
     """A command that groups multiple commands into a single undoable action."""
-    def __init__(self, description, commands_list, app_ref=None, post_execute_hooks=None, post_undo_hooks=None):
+    def __init__(self, description, commands_list, app_ref=None, post_hooks=None):
         super().__init__(description)
         self.commands = commands_list
         self.app_ref = app_ref
-        self.post_execute_hooks = post_execute_hooks if post_execute_hooks else []
-        self.post_undo_hooks = post_undo_hooks if post_undo_hooks else self.post_execute_hooks
-        _debug(f"[CompositeCommand CREATED] Desc: '{self.description}', Contains {len(self.commands)} child commands.")
+        # Always take a copy, and expect the argument to be a list.
+        self.post_hooks = list(post_hooks) if post_hooks else []
 
     def execute(self):
-        _debug(f"  -> EXECUTE CompositeCommand '{self.description}'")
         for cmd in self.commands:
             cmd.execute()
         if self.app_ref:
-            for func in self.post_execute_hooks:
+            for func in self.post_hooks:
                 func()
 
     def undo(self):
-        _debug(f"  <- UNDO CompositeCommand '{self.description}'")
-        _debug(f"     It contains {len(self.commands)} child commands to undo.")
         for cmd in reversed(self.commands):
-            _debug(f"     -> Calling .undo() on child command: {cmd.description}")
             cmd.undo()
         if self.app_ref:
-            _debug("     -> Calling post_undo_hooks.")
-            for func in self.post_undo_hooks:
+            # For undo, we execute the same hooks.
+            for func in self.post_hooks:
                 func()
 
 class ClearTileCommand(ICommand):
@@ -7449,16 +7444,19 @@ class TileEditorApp:
                 dest_bg = remap_table.get(src_bg, 0)
                 remapped_colors.append((dest_fg, dest_bg))
 
-            def pattern_setter(data):
-                tileset_patterns[current_tile_index] = data
-            def colors_setter(data):
-                tileset_colors[current_tile_index] = data
+            # Capture the index at the time of command creation.
+            target_tile_index = current_tile_index
 
-            pattern_command = SetDataCommand("Paste Tile (Pattern)", pattern_setter, pasted_pattern, tileset_patterns[current_tile_index])
-            colors_command = SetDataCommand("Paste Tile (Colors)", colors_setter, remapped_colors, tileset_colors[current_tile_index])
+            def pattern_setter(data):
+                tileset_patterns[target_tile_index] = data
+            def colors_setter(data):
+                tileset_colors[target_tile_index] = data
+
+            pattern_command = SetDataCommand("Paste Tile (Pattern)", self, pattern_setter, pasted_pattern, tileset_patterns[target_tile_index])
+            colors_command = SetDataCommand("Paste Tile (Colors)", self, colors_setter, remapped_colors, tileset_colors[target_tile_index])
             
             post_paste_hooks = [
-                lambda: self.invalidate_tile_cache(current_tile_index),
+                lambda: self.invalidate_tile_cache(target_tile_index),
                 self._request_color_usage_refresh,
                 self._request_tile_usage_refresh,
                 self._request_supertile_usage_refresh
@@ -7468,11 +7466,11 @@ class TileEditorApp:
                 "Paste Tile", 
                 [pattern_command, colors_command],
                 app_ref=self,
-                post_execute_hooks=[post_paste_hooks]
+                post_hooks=post_paste_hooks
             )
             self.undo_manager.execute(composite)
-
-            _info(f"Pasted from system clipboard onto Tile {current_tile_index} with color remapping.")
+            
+            _info(f"Pasted from system clipboard onto Tile {target_tile_index} with color remapping.")
 
         except tk.TclError:
             messagebox.showinfo("Paste Tile", "Clipboard is empty or does not contain text data.")
@@ -7584,24 +7582,22 @@ class TileEditorApp:
                 messagebox.showerror("Paste Error", "Supertile clipboard dimensions do not match current project dimensions. Paste aborted.")
                 return
 
+            # Capture the index at the time of command creation.
+            target_st_index = current_supertile_index
+
             def st_data_setter(data):
-                supertiles_data[current_supertile_index] = data
-                # Move side-effects into the setter
-                self.invalidate_supertile_cache(current_supertile_index)
+                supertiles_data[target_st_index] = data
+                # Move side-effects that depend on the index into the setter
+                self.invalidate_supertile_cache(target_st_index)
                 self.invalidate_minimap_background_cache()
                 self._request_tile_usage_refresh()
                 self._request_supertile_usage_refresh()
-
-            command = SetDataCommand("Paste Supertile", self, st_data_setter, new_definition, supertiles_data[current_supertile_index])
+            
+            command = SetDataCommand("Paste Supertile", self, st_data_setter, new_definition, supertiles_data[target_st_index])
+            # The CompositeCommand is not needed for a single command
             self.undo_manager.execute(command)
 
-            self._mark_project_modified()
-            self.invalidate_supertile_cache(current_supertile_index)
-            self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all")
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
-            _info(f"Pasted from system clipboard onto Supertile {current_supertile_index} with tile remapping.")
+            _info(f"Pasted from system clipboard onto Supertile {target_st_index} with tile remapping.")
 
         except tk.TclError:
             messagebox.showinfo("Paste Supertile", "Clipboard is empty or does not contain text data.")
@@ -9586,8 +9582,8 @@ class TileEditorApp:
             "Add Tile", 
             [pattern_command, color_command, state_command],
             app_ref=self,
-            post_execute_hooks=[post_add_hooks]
-        )
+            post_hooks=[post_add_hooks]
+    )
         self.undo_manager.execute(composite)
         
         _debug(f"Added new tile {new_tile_idx}")
@@ -9627,7 +9623,7 @@ class TileEditorApp:
             self._request_color_usage_refresh()
             self.scroll_viewers_to_tile(current_tile_index)
 
-        composite = CompositeCommand("Insert Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_execute_hooks=[post_insert_hooks])
+        composite = CompositeCommand("Insert Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_hooks=[post_insert_hooks])
         self.undo_manager.execute(composite)
         _debug(f"Inserted tile at index {insert_idx}")
 
@@ -9678,7 +9674,7 @@ class TileEditorApp:
             self._request_color_usage_refresh()
             self.scroll_viewers_to_tile(current_tile_index)
 
-        composite = CompositeCommand("Delete Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_execute_hooks=[post_delete_hooks])
+        composite = CompositeCommand("Delete Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_hooks=[post_delete_hooks])
         self.undo_manager.execute(composite)
         _debug(f"Deleted tile at index {delete_idx}")
 
@@ -9729,7 +9725,7 @@ class TileEditorApp:
             "Add Supertile", 
             [st_add_command, state_command],
             app_ref=self,
-            post_execute_hooks=[post_add_hooks]
+            post_hooks=[post_add_hooks]
         )
         self.undo_manager.execute(composite)
         
@@ -9795,12 +9791,7 @@ class TileEditorApp:
             self.scroll_selectors_to_supertile(current_supertile_index)
 
         # --- Combine all actions into one ---
-        composite = CompositeCommand(
-            "Insert Supertile",
-            [st_insert_command, map_refs_command, state_command],
-            app_ref=self,
-            post_execute_hooks=[post_insert_hooks]
-        )
+        composite = CompositeCommand("Insert Supertile", [st_insert_command, map_refs_command, state_command], app_ref=self, post_hooks=[post_insert_hooks])
         self.undo_manager.execute(composite)
 
         _debug(f"Inserted supertile at index {insert_idx}")
@@ -9878,12 +9869,7 @@ class TileEditorApp:
             self._request_supertile_usage_refresh()
             self.scroll_selectors_to_supertile(current_supertile_index)
 
-        composite = CompositeCommand(
-            "Delete Supertile",
-            [st_delete_command, map_refs_command, state_command],
-            app_ref=self,
-            post_execute_hooks=[post_delete_hooks]
-        )
+        composite = CompositeCommand("Delete Supertile", [st_delete_command, map_refs_command, state_command], app_ref=self, post_hooks=[post_delete_hooks])
         self.undo_manager.execute(composite)
 
         _debug(f"Deleted supertile at index {delete_idx}")
@@ -9920,7 +9906,7 @@ class TileEditorApp:
         elif source_index < actual_insert_idx:
             if source_index < selected_tile_for_supertile <= actual_insert_idx: new_sts -= 1
         else:
-            if actual_insert_idx <= selected_tile_for_supertile < source_index: new_sts += 1
+            if actual_insert_idx <= selected_tile_for_supertile < source_index: new_sts += 1 
         new_state = (new_cti, new_sts)
 
         def state_setter(state_tuple):
@@ -9934,7 +9920,7 @@ class TileEditorApp:
             # for the state command and final redraw coordination.
             self.scroll_viewers_to_tile(current_tile_index)
 
-        composite = CompositeCommand("Move Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_execute_hooks=[post_hooks])
+        composite = CompositeCommand("Move Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_hooks=[post_hooks])
         self.undo_manager.execute(composite)
         return True
 
@@ -10005,7 +9991,7 @@ class TileEditorApp:
             self._request_tile_usage_refresh()
             self._request_supertile_usage_refresh()
 
-        composite = CompositeCommand("Move Supertile", [st_reorder_command, map_refs_command, state_command], app_ref=self, post_execute_hooks=[post_hooks])
+        composite = CompositeCommand("Move Supertile", [st_reorder_command, map_refs_command, state_command], app_ref=self, post_hooks=[post_hooks])
         self.undo_manager.execute(composite)
         
         _debug(f"  Successfully moved Supertile {source_index_st} to {actual_insert_idx_st}")
@@ -12877,7 +12863,7 @@ class TileEditorApp:
             self._request_color_usage_refresh()
             self.scroll_viewers_to_tile(current_tile_index)
 
-        composite = CompositeCommand(f"Add {num_to_add} Tiles", commands, app_ref=self, post_execute_hooks=[post_add_hooks])
+        composite = CompositeCommand(f"Add {num_to_add} Tiles", commands, app_ref=self, post_hooks=[post_add_hooks])
         self.undo_manager.execute(composite)
         _debug(f"Added {num_to_add} new tiles.")
 
@@ -12912,7 +12898,7 @@ class TileEditorApp:
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
         commands.append(state_command)
 
-        def post_hooks():
+        def post_add_hooks():
             self._mark_project_modified()
             self.clear_all_caches()
             self._update_editor_button_states()
@@ -12921,7 +12907,7 @@ class TileEditorApp:
             self.scroll_selectors_to_supertile(current_supertile_index)
             _debug("[post_hooks] Executed.")
 
-        composite = CompositeCommand(f"Add {num_to_add} Supertiles", commands, app_ref=self, post_execute_hooks=[post_hooks])
+        composite = CompositeCommand(f"Add {num_to_add} Supertiles", commands, app_ref=self, post_hooks=[post_add_hooks])
         self.undo_manager.execute(composite)
         _debug(f"[HANDLE ADD MANY] FINISHED. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
 
@@ -15047,7 +15033,7 @@ class TileEditorApp:
             elif item_type == "supertile":
                 self.scroll_selectors_to_supertile(current_supertile_index)
 
-        composite = CompositeCommand(f"Swap {item_type}s", commands, app_ref=self, post_execute_hooks=[post_hooks])
+        composite = CompositeCommand(f"Swap {item_type}s", commands, app_ref=self, post_hooks=[post_hooks])
         self.undo_manager.execute(composite)
         return True
 
