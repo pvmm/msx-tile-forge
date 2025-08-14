@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # --- Version info ---
-APP_VERSION = "1.0.0RC16"
+APP_VERSION = "1.0.0RC17"
 
 # --- Application Icon ---
 ICON_IMAGE = r"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAACxEAAAsRAX9kX5EAABLlSURBVBgZBcFbrLb5XRbg6/49z7vWt9b3TWemLUaMrZWwObAFQdnJTIgWmxgNPZAoUA3GuDswcRMSNcoJxsR4oNEYowIaxd2Bm8RaIAgyVYjEJhTbsdAWbKt2Q6fMTKfzbdZa7/O/va60BYAPfehDP/uzP/fiR1588vjJzKyWJpnMtm+ka7VNkpm2bdsm2bYNbZNs2xbJOI7Vrm3bk6y1utZqkSSTSUjbmahjLYjjfKy12iZJRI61juP8lre+9du+5Vufe/6566trANq2bfvRj370O9/9nfvpks2+2Xenk9PJ6eR0sp+cTk4np92+23anCxcXLk4uTi5OTrvT7nSy7/bdvtt3p93p5LQ7nZxOTienk9PJ6WQ/2Xenk323n+y7fbPvTrvT7rQ77fbdxcnF7uLk4mQLfutXvO1Hf/Sft23bNm3xwgsvvOeP/pHPfPqzD55+YzxxvgttGwjayKFOl7PdW+u8bl4PCACUQNpmc/3UiMcPe75tsmIiFbCiNdHVubx2uuxx5/YRSdISUUJh27NfPXr4+Pzk0Q/+9R/8gb/2A0jbj33sY9/2/HOvvPrqg6eecvtk3vSVx5velkiUIJRycernP37+/KdO95+5+JpvXRIiaIuQZIXZ8vi1xx/7udze3nvbN3jTW7vOK1WTaBuSgpnt+MQv3n3hU556s7f+9jnOkcWKaNY2lay++pnjc780++lYXv/iK//yX/2L7/2e9+z4y3/lr3zhpZeeefaNDtvzf+r4mnedL69KamkMmkbn6unL//YP7j75oYsv/6oHf/hv3eUix1k0qApJVqyLexef//jN3/6uu9uXL779u7dveo/HX1RFS4NEldPV/cf/7C88+eSHt9/8tf2Ov3ycH1praYNmbTFNtnU7H/3p/rd/vMfp3uVf/YEfePd3vnv/Xy+++N73vvepZ59Zd4/3b/uT52/4nruHr6ybV7cOk5xnbUs60mxr1u1Nxznr/ORVveg6N11pEoG2xPneevKlmtrON4/z8It98pqqma44yqKtZOvZ+Sax1jmPXlnrti0FqVXBXWZ/xx+4WMf5/f/o6qkHn/zVT/zUT//U/PhP/MT57i495+nffPfV7zy//rKeN1vNombNGKPSYxYBkklIyWZLJ2tmZczWGTOhq12WSFo6XbSmIZKJrYaEqSQQSUCJSs1ax8PXjq/+9vkNb3N7a+aFn/kv89Ff/mWzOd/mzW9Z965Wj6iFJh2JNe20egwRgK6oAJGoSAe1tClIqYolqyqLpEPoDANZJTS0SEgFIF3ni4u+6a093+bi4uO/8olZXRKt/bKyAoICCowqAMSSZgAqWgAiU5BVS0ppAiBgtUe1EUBaIagQRKQWW3Kimbm7O4YI0pU0W0Ih0SKgKtEQ0TZEo6QqJREKRSUkNUoZHVLThiYVOkwhtZAIAaWoqkRbJdNODMHKdiRiihxRGgor7UBFBEl1LCpN2i6WtADlCJFmirQhrFgJWbV0mCncjQjQaKCxohxDSdGQtGsaoEmQhWFJ01SLRiGoVtB2JQ1UDKMCkhDaopU2ESmgSAxJIDTaVW2Vtg0ESUSoVEobGYJowHJoR9IUSQlTSUQFqEgEqSGqUlClkEoKZLHQDhQBa6mapaWoFgDorCpMVENjMhGpVmPlYGVFIxACUBgNmKbLAqpttVSpikppmMCCToAsliwpRSCFAAACAkqjyWr3oLQya8ZsxxqiIlgtlJEZ6aRdXVLTCQ1AiaDZOvukYzVptmaTrC5pSFJbKM0mg8x0RqeI0LYlQpnOZEsmlUrtCaxkX93W+Wj1kHZFIICmszUpzVbXp4s7SQ8dGQolUfZ9iwPNvm0XF6d13mRmKQ1Mq8qWuTWLyTrNth1pjyxBHbGIbivRSSVpVqzYg9bldT/zwfm3f2nr0XWW1QZdzSSKZDIXx+NX++ANt6+99OoP/Yl2KdUGdcgKSJK7J+2d+888/OkffvI//l2PM6ZKQ6WN0Mb55c/vTz3Tlz+Vf/sXs861SApbulEiS7JlPXrZ5VVubqN7wcx+PH7l/NL/awAZrS4ZCgmVe1fb/evj7uHnP/RzEhkttBSMVtg2pyvNo0983HEHgIASCnVxfe/e/cvePHry678okGghAFica7935fI6lWZX4jjf7m96y+l3fP1aQRy1IKPN2iLdZNvP//cjjz/7S09dXb37d/3Ge109QiWRZMnato2EsMJpsz1dQVOMpKrRqMl+sb/wS48//ulX7z3zG+593e9fOc/oCptGliwNeyNb1yc+fPuF/9O06d4i6+bhxW/5hus/9vfW45toFSpJ24hmwv2n7977N1/91V/48jdc/fDvu3+1LYtVKkMplUgAX/YGp00rJEJRHTkIPHX6M//45Rc/9rnrr3rbG77v757vbqKFqGpADLNd3X/8r7//9tMfSS7S7G21WybHuQ+/tB4/GktU0lQr1cSxMsPd7ZZoX//S3eXJLSEVR8Gh00pA5/o8p7ZN2oJAmqQEY27uFsk6r0df7N1ttRYUCgVbetfzjSiSgcTCQqOBFJVFo9U1bTsoSNYES1csUCIUEVoaUjQ6VEpaKVXJArMaCE1FEgAhTbqppZp2ulcRSJIWU6LSNoVJIXSJANq2IwEFKZkkutpEUpHVTtJWlAglQJW2bYs2xKoAiYiKCmKaLLvCiiICkgUGgYWYskYjAYRQAkCJVsOKJSlomwRtBQkLOoVGta1WyEqiU6q6himoTssAJQkQWlAEiSpEAwVIoVEACSQSVBeLCIAkQAEZQScRkITQEFQptAULyR5EgJZQokEsKZLpaiAgQAMpUBIkWlKYSbRV0VaoJFUCEEIkSYRKhtCkEWYth2pFUHsDoKSKpEUlhw5TlTVtCqWkEIBKAEraiWRpNESbKImCILRV0KVtQ5UGKdEIhMaCYKBSQBQampQQIpFEKSiiaFuKFmiLKmlTaasVrVBBRAAFkRHQJDGSVgs0kySTZBJVE9AotAURoEOksVApgKi0JW21pW0BkpCYSgMhSQkBSiFKRUBV21qFUG21kqRSmuhOQO0XuXp6ukNWtDZNkKNdsff62ZzuVSMpmkSbRBsIEFoCILSVQImCFAQ0c1y/wX6TnkM6FTmgg2RcPdX9pItW9yTIdlqvfe78wR9bNw+LREWbQJsgvbi6++xHsl02tFldNUnWIiu0oRqhrYmZDdpYktCWTZYaEUR2r7+y/uf7so602rKSpppIsyTne/ePVz+X7SKHyA5t7l3ffPx/PPnQ+0sSWRGpQiWAuri3XV5L1jP37ce+GtB2S9piokWTnO/O280dkqysVCVpOgrSWcdx1On6/NL/efmH/gyrXUmQJGgrOkSOnK7m8v56/HDpngStzGm7N61kWJFKJUloD1rpNo4l+/7gak7nfVVUEmhXlwRg5val19brN8kco4SANgQsT069PWwj3U7Xpg2VFlOoiRTO3YZGsEuwnjx88Nve+czv//N3T15f6TBNk2XTGWddku36qZuf/def/pl/xjOOZavVBl1QJdpMiaNrxLbLJE1JpkUDkDFbevbk4eXb3vH0H/rB3N6RIm1bqGIltssHr/3UP3z9gz+WJrVnAuvcB0/fvPXrb19/fdISaZcsAaSzPXhTn3rBsRLTs1gjhWpjJG3jGFqmbUqoASuhKaRVmNCjF1d3v+lr1/mO1jLt2jjkiFTI6erZXH9Ze145mezbtkHi6Hr8MDevJ0AGKgU02e+t4w4tKtNWK0KatiKqoAUCUAAEiVZpJdaR20c9n6XTtgsJqkmysD103Kokmn0SraIJsBATKaEV07ZdTYOqIJVAiwZVEoQkaRoNjWpEBUBAhlYQtCpJFISoIa0ATTIpkmDRJk0CpHIUNkIaBQgUpQhAIiFVCpa0sYA2SCApVEmPFEhJl1WApjSqAIVp0NAOk0gnNrSN0aE0DBQ0qCoiIUAbhaq0dDSpadJQaCVtUwQIibK0NQZoo8MUCQkp7W4tgMXSxJKGNm3AamgUUWQFJNq2SVaIVFsqoiBEVlRDgLZBYIGtaYmYWDQlE6rStgAky5quEoBESwsRohCaNiiqQoQI2gIUSVCiAYBAkgIUIbQIWkTaklYFtSigLdUdULGREkELVJA2Ie00AgTtigBRS6Joq5EW1UYkbcNqgdKwCkmjAW2RaYNY0q4RbYWk6ci+UiGagwXKSsowLZq0jSxZBQUoEqSVUJRAGCRtpgEUJcqUSgERSdtotEHbWpGJQhU02bsKLZtsaJACXWVajSgkEiKsHalqC20S0RZ0go622EK7gJYYTJJIJAcaslARSbWSYmunGjNtVnegqzPbfnHZ4zJbdKpaghFV3S8fnLeTJJmL681pzwpECgACZS4uz8oWoqiSCGi1Lk/bdtZmZru+3p/cagsQra4WNXNxSg5tE7FD9er+za/+wvEjf7o9R9ITrcVoSXXYcnF+6Vcuru9/8fH6gz/02V3XCj0iM1urWV0FrY7T2Wk5tCRHYJaRUknqcvLhX7u79+DB8WufePRP/mzPZ2s1aXR1LFkFqybb+txH5t5lb1eTXSJmuzi//Om7z3wELUvIAAqCxfVpv3zm9vb8kx/4Na0UIKCAFbO5um/GzUN3txIIgECqtJfX9y+u7h0PX3n48/++pBpAgKGgcnU/F/emj6b2ohzneerZ7S1f156jRSMrlrYlYXO67Jc+fbz6uVxcP/v1377PmEk2VaIokszm5vHjT/3iOj+5+sq3zzNffqxziKDQUJBsd5/55btXP7tdPbu/9bc7Gm0bU4FoGyTddq98yuu/vmKlexW5fTRf/Vy+4/vXkxtDDm2rUjBWy4Nn95//0bsX/uHFs7/pmT/+97Nfr3WQVBWIrLBf3vvCJ2//znfdPn7p4nd/39U3/pHbx68gghJK2sp+9eDJj/65u/f/y/zGd6zv/Bu5fURRaYUSSqr3rk8//fduP/wf2Rp7AOnhdh09brtApZWswNDV3t7uh61pHE+erKTOSbQECc3SdXFst0+6JHO+u729edibh6oNkbZJaCtrJscatL27Oc7nKqFpVQklne202iXRpNkpGtOmbQsxIVaaCohSaSOsHmuqWJmVTrUkM42WipA2bTVE6ihJaq0pk5SsMGRFtdKibZC2jeYcBxthRXcFFZllEdVUJUpboBBJ0zYitBFrk4bSCkmE0k6CrEHTEqokVShttc1qW4WAggSkkTSpadOOjsBCIKVKCQipBApNEhBSSSlJJwmrLVg100GR0giCSqMCbSkUipAkSUDQQbNoqexpFegRVFKVpARJiyZoV1UikJIuDRHRrmRJWXIwqbQJFqEoCUyiLUEsmhIBgIJowCLHRLofKkKCEhWKKEFSqlZTSdoCjcgUaiUSRENiElWJVgCtRCvRIslkIEfTpMoaU6GSAO1aQovErC5U05kGpSEQQlnRAlpBpQqkshLQ6BCSTpSmKgxIEiQBBCA5otpAqgCloDHbtiKLZi4vTloznjyEQKFolAYmAQCBQOughCkEqClEBA2h1VIFDRogEYEYUqBptaFy3D6JtOv+9fV87dvfbq3sl+ulj+X1l7pdVqJZVWppV2c1KgC0GkTCMJRq2tWuqqy2kgLRKkHbFpGWdi1d3SRJyNJFazWVZsqctpsv9nMvzn7qze073vH2eefveed+cXFO+vCl7ef/zeni1NO9NElIJMkIUxNDQBKqaGJb1VqtkCWA0FjZmmm6Ypllmk22JYdtdWtWAufJyqzkmKzJmqxJzYq1X+7Xb5gP/of1yv/rdiH7u971rv2rv+Zrfu+7vuPH/9OPPf3GNx8f+Ym4u/c737Pe8Gwz7cQ52goh+2Q0Msnl9Wm7n54ng65DyNSsrG273Perha49czpta0+0ZCVNRhOU0z7nLjX7tl3c00dtktAWtWW18+il7b//09sPv2+799Rrr3zxm7/5G7/lW35X2r744ovPPff864+fXD91vW4fbpdvyhvfku0CHEoLbSbr4RfOX/q17erB5Vd8U7q3qyptA2nKhG1uHz363x9wfnLx5rduD97cdcjRNmvS2NJCyGw3v/7J40u/7uqZ/Y1vyfmWJEFZmqTntV779PHo5e3e07dPHjmO//yTP/n888+nLd73vvd+93d/z+sPHz71zJuj63yTnpOsDMmChpxnLrpd6tmT13VInVeSBOhaA8zM5f2Y4/xkrXMS0lYhEwCwXWTbrJW7G0ESaFsQ6X6qefjF1+5dnH7kR374e7/3PdC2bdsPfOAD73znO+d0kpjNbGYzm9lkzGbbbbvZZDNjxmy2zbbbd9tmNtvYNjNms222zbbZNttmxowZMzK2zbbZNttm22y7bTOb2cxmNttm2227bbftZkNOp+eff+79L7zQtm3btAWAD37wF/7r+//rx37lYy2VIBAlQK00UlVIVGMIAYBBuqyWTkJXII0godBE2qIIaaRdZbJ95Vf81uee+7Zv/MZvBoD/DyChWZsA3b65AAAAAElFTkSuQmCC"
@@ -799,6 +799,32 @@ class UpdateSupertileRefsForTileSwapCommand(ICommand):
         self.app_ref.clear_all_caches()
         self.app_ref.invalidate_minimap_background_cache()
         self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        self._swap_logic()
+
+    def undo(self):
+        self._swap_logic() # Swap is its own inverse
+
+class UpdateMapRefsForSupertileSwapCommand(ICommand):
+    """An optimized command to update map data when two supertiles are swapped."""
+    def __init__(self, description, app_ref, index_a, index_b):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.index_a = index_a
+        self.index_b = index_b
+
+    def _swap_logic(self):
+        for r in range(map_height):
+            for c in range(map_width):
+                if map_data[r][c] == self.index_a:
+                    map_data[r][c] = self.index_b
+                elif map_data[r][c] == self.index_b:
+                    map_data[r][c] = self.index_a
+        
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
         self.app_ref._request_supertile_usage_refresh()
 
     def execute(self):
@@ -12856,59 +12882,48 @@ class TileEditorApp:
         _debug(f"Added {num_to_add} new tiles.")
 
     def handle_add_many_supertiles(self):
-        global num_supertiles, current_supertile_index, supertiles_data # Globals
-
-        if num_supertiles >= MAX_SUPERTILES: 
+        global num_supertiles, current_supertile_index
+        _debug(f"\n[HANDLE ADD MANY] START. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
+        if num_supertiles >= MAX_SUPERTILES:
             messagebox.showinfo("Add Many Supertiles", "Supertile set is already full.", parent=self.root)
             return
-
         space_available = MAX_SUPERTILES - num_supertiles
+        num_to_add = self._create_add_many_dialog(self.root, "Add Many Supertiles", f"How many supertiles to add? (1-{space_available})", num_supertiles, MAX_SUPERTILES)
+        if num_to_add is None or num_to_add <= 0: return
 
-        num_to_add = self._create_add_many_dialog(
-            parent=self.root,
-            title_text="Add Many Supertiles",
-            prompt_text=f"How many supertiles to add? (1-{space_available})",
-            current_items=num_supertiles,
-            max_items_total=MAX_SUPERTILES
-        )
-
-        if num_to_add is None or num_to_add <= 0:
-            return
-
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass
-
-        self._mark_project_modified()
+        if self._clear_marked_unused(trigger_redraw=False): pass
         
-        first_new_st_idx = num_supertiles 
-        tiles_changed_due_to_new_sts = False # Track if new STs (referencing tile 0) were added
+        first_new_st_idx = num_supertiles
+        commands = []
+        for i in range(num_to_add):
+            new_idx = num_supertiles + i
+            blank_st_definition = [[0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)]
+            commands.append(ModifyListCommand("Add Supertile", supertiles_data, new_idx, blank_st_definition, is_insert=True))
+            _debug(f"[HANDLE ADD MANY] Created ModifyListCommand to insert at index {new_idx}")
 
-        for _ in range(num_to_add):
-            if num_supertiles < MAX_SUPERTILES:
-                if num_supertiles < len(supertiles_data):
-                    supertiles_data[num_supertiles] = [
-                        [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
-                    ]
-                    num_supertiles += 1
-                    tiles_changed_due_to_new_sts = True # New STs reference tile 0
-                else:
-                    _error(f" handle_add_many_supertiles: trying to access beyond list capacity for ST {num_supertiles}")
-                    break
-            else:
-                break
-        
-        current_supertile_index = first_new_st_idx 
+        old_state = (num_supertiles, current_supertile_index)
+        new_state = (num_supertiles + num_to_add, first_new_st_idx)
+        _debug(f"[HANDLE ADD MANY] Created state command. Old state={old_state}, New state={new_state}")
+        def state_setter(state_tuple):
+            global num_supertiles, current_supertile_index
+            _debug(f"  [state_setter] Called. Setting state to {state_tuple}. Previous num_supertiles={num_supertiles}")
+            num_supertiles, current_supertile_index = state_tuple
+            _debug(f"  [state_setter] State SET. New num_supertiles={num_supertiles}")
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+        commands.append(state_command)
 
-        self.supertile_image_cache.clear()
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self.scroll_selectors_to_supertile(current_supertile_index)
-        self._update_editor_button_states()
-        if tiles_changed_due_to_new_sts:
+        def post_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self._update_editor_button_states()
             self._request_tile_usage_refresh()
             self._request_supertile_usage_refresh()
+            self.scroll_selectors_to_supertile(current_supertile_index)
+            _debug("[post_hooks] Executed.")
 
-        _debug(f"Added {num_to_add} new supertiles.")
+        composite = CompositeCommand(f"Add {num_to_add} Supertiles", commands, app_ref=self, post_execute_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
+        _debug(f"[HANDLE ADD MANY] FINISHED. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
 
     def append_tileset_from_file(self):
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set # Using globals
@@ -15008,19 +15023,8 @@ class TileEditorApp:
             commands.append(SetDataCommand("Update App State", self, state_setter_tile, new_state, old_state))
 
         elif item_type == "supertile":
-            # Supertile swap is already fast as it operates on the smaller map_data
             commands.append(ReorderListCommand("Swap Supertiles", supertiles_data, index_a, index_b, is_swap=True))
-            
-            old_map_data = copy.deepcopy(map_data)
-            new_map_data = copy.deepcopy(map_data)
-            for r in range(len(new_map_data)):
-                for c in range(len(new_map_data[r])):
-                    if new_map_data[r][c] == index_a: new_map_data[r][c] = index_b
-                    elif new_map_data[r][c] == index_b: new_map_data[r][c] = index_a
-            def map_setter(data):
-                global map_data
-                map_data = data
-            commands.append(SetDataCommand("Update Map Refs", self, map_setter, new_map_data, old_map_data))
+            commands.append(UpdateMapRefsForSupertileSwapCommand("Update Map Refs", self, index_a, index_b))
 
             old_state = (current_supertile_index, selected_supertile_for_map)
             new_csi = current_supertile_index
