@@ -234,32 +234,39 @@ class UndoManager:
 
     def register(self, command):
         """Registers a command that has already been executed."""
+        _debug("[UndoManager.register] Registering command.")
         self.undo_stack.append(command)
         self.redo_stack.clear()
         self.app_ref._update_edit_menu_state()
 
     def execute(self, command):
         """Executes a new command and registers it for undo."""
+        _debug(f"[UndoManager.execute] Executing command: {command.description}")
         command.execute()
         self.register(command)
-        # The final screen redraw is now handled here
         self.app_ref.update_all_displays(changed_level="all")
 
     def undo(self):
         if not self.undo_stack:
+            _debug("[UndoManager.undo] Stack empty.")
             return
         command = self.undo_stack.pop()
+        _debug(f"[UndoManager.undo] Undoing command: {command.description}")
         command.undo()
         self.redo_stack.append(command)
+        _debug("[UndoManager.undo] Redrawing screen.")
         self.app_ref.update_all_displays(changed_level="all")
         self.app_ref._update_edit_menu_state()
 
     def redo(self):
         if not self.redo_stack:
+            _debug("[UndoManager.redo] Stack empty.")
             return
         command = self.redo_stack.pop()
+        _debug(f"[UndoManager.redo] Redoing command: {command.description}")
         command.execute()
         self.undo_stack.append(command)
+        _debug("[UndoManager.redo] Redrawing screen.")
         self.app_ref.update_all_displays(changed_level="all")
         self.app_ref._update_edit_menu_state()
         
@@ -283,8 +290,10 @@ class PaintPixelCommand(ICommand):
         self.r, self.c = r, c
         self.new_value = new_value
         self.old_value = tileset_patterns[tile_index][r][c]
+        _debug(f"[PaintPixelCommand CREATED] Tile {self.tile_index} ({self.r},{self.c}). Old->New: {self.old_value}->{self.new_value}")
 
     def _apply_and_update(self, value):
+        _debug(f"  [_apply_and_update] Setting pixel ({self.r},{self.c}) to {value}")
         tileset_patterns[self.tile_index][self.r][self.c] = value
         self.app_ref._mark_project_modified()
         self.app_ref.invalidate_tile_cache(self.tile_index)
@@ -293,9 +302,11 @@ class PaintPixelCommand(ICommand):
         self.app_ref._request_supertile_usage_refresh()
 
     def execute(self):
+        _debug(f"  -> EXECUTE PaintPixelCommand for Tile {self.tile_index} ({self.r},{self.c})")
         self._apply_and_update(self.new_value)
 
     def undo(self):
+        _debug(f"  <- UNDO PaintPixelCommand for Tile {self.tile_index} ({self.r},{self.c})")
         self._apply_and_update(self.old_value)
 
 class SetRowColorCommand(ICommand):
@@ -334,8 +345,11 @@ class PlaceTileInSupertileCommand(ICommand):
         self.r, self.c = r, c
         self.new_tile_index = new_tile_index
         self.old_tile_index = supertiles_data[st_index][r][c]
+        _debug(f"[PlaceTileInSupertileCommand CREATED] ST {self.st_index} ({self.r},{self.c}). Old->New: {self.old_tile_index}->{self.new_tile_index}")
+
 
     def _apply_and_update(self, value):
+        _debug(f"  [_apply_and_update] Setting ST {self.st_index} pixel ({self.r},{self.c}) to {value}")
         supertiles_data[self.st_index][self.r][self.c] = value
         self.app_ref._mark_project_modified()
         self.app_ref.invalidate_supertile_cache(self.st_index)
@@ -343,9 +357,11 @@ class PlaceTileInSupertileCommand(ICommand):
         self.app_ref._request_supertile_usage_refresh()
 
     def execute(self):
+        _debug(f"  -> EXECUTE PlaceTileInSupertileCommand for ST {self.st_index} ({self.r},{self.c})")
         self._apply_and_update(self.new_tile_index)
 
     def undo(self):
+        _debug(f"  <- UNDO PlaceTileInSupertileCommand for ST {self.st_index} ({self.r},{self.c})")
         self._apply_and_update(self.old_tile_index)
 
 class PaintMapCellCommand(ICommand):
@@ -377,8 +393,10 @@ class CompositeCommand(ICommand):
         self.app_ref = app_ref
         self.post_execute_hooks = post_execute_hooks if post_execute_hooks else []
         self.post_undo_hooks = post_undo_hooks if post_undo_hooks else self.post_execute_hooks
+        _debug(f"[CompositeCommand CREATED] Desc: '{self.description}', Contains {len(self.commands)} child commands.")
 
     def execute(self):
+        _debug(f"  -> EXECUTE CompositeCommand '{self.description}'")
         for cmd in self.commands:
             cmd.execute()
         if self.app_ref:
@@ -386,9 +404,13 @@ class CompositeCommand(ICommand):
                 func()
 
     def undo(self):
+        _debug(f"  <- UNDO CompositeCommand '{self.description}'")
+        _debug(f"     It contains {len(self.commands)} child commands to undo.")
         for cmd in reversed(self.commands):
+            _debug(f"     -> Calling .undo() on child command: {cmd.description}")
             cmd.undo()
         if self.app_ref:
+            _debug("     -> Calling post_undo_hooks.")
             for func in self.post_undo_hooks:
                 func()
 
@@ -407,7 +429,6 @@ class ClearTileCommand(ICommand):
         self._apply_side_effects()
 
     def undo(self):
-        # --- THIS IS THE FIX ---
         tileset_patterns[self.tile_index] = copy.deepcopy(self.old_pattern)
         tileset_colors[self.tile_index] = copy.deepcopy(self.old_colors)
         self._apply_side_effects()
@@ -434,7 +455,6 @@ class ClearSupertileCommand(ICommand):
         self._apply_side_effects()
 
     def undo(self):
-        # --- THIS IS THE FIX ---
         supertiles_data[self.supertile_index] = copy.deepcopy(self.old_definition)
         self._apply_side_effects()
         
@@ -458,7 +478,6 @@ class ClearMapCommand(ICommand):
 
     def undo(self):
         global map_data
-        # --- THIS IS THE FIX ---
         map_data = copy.deepcopy(self.old_map_data)
         self._apply_side_effects()
 
@@ -624,7 +643,170 @@ class ReplaceRefsCommand(ICommand):
             self.app_ref.clear_all_caches()
             self.app_ref.invalidate_minimap_background_cache()
             self.app_ref._request_supertile_usage_refresh()
-    
+
+class UpdateSupertileRefsForTileCommand(ICommand):
+    """ An optimized command to update supertile definitions when a tile is
+    inserted or deleted. It only operates on the active slice of supertiles. """
+    def __init__(self, description, app_ref, tile_index, is_insert):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.tile_index = tile_index
+        self.is_insert = is_insert
+        # No need to store old_data, as the operations are perfectly reversible.
+
+    def _process_refs(self, is_forward):
+        # is_forward = True for execute, False for undo
+        active_slice = supertiles_data[:num_supertiles]
+        
+        if (self.is_insert and is_forward) or (not self.is_insert and not is_forward):
+            # This is an INSERT action
+            for st_def in active_slice:
+                for r in range(len(st_def)):
+                    for c in range(len(st_def[r])):
+                        if st_def[r][c] >= self.tile_index:
+                            st_def[r][c] += 1
+        else:
+            # This is a DELETE action
+            for st_def in active_slice:
+                for r in range(len(st_def)):
+                    for c in range(len(st_def[r])):
+                        if st_def[r][c] == self.tile_index:
+                            st_def[r][c] = 0
+                        elif st_def[r][c] > self.tile_index:
+                            st_def[r][c] -= 1
+
+    def execute(self):
+        self._process_refs(is_forward=True)
+
+    def undo(self):
+        self._process_refs(is_forward=False)
+
+class ReorderListCommand(ICommand):
+    """Command to handle reordering or swapping items in a list."""
+    def __init__(self, description, list_obj, source_index, target_index, is_swap=False):
+        super().__init__(description)
+        self.list_obj = list_obj
+        self.source_index = source_index
+        self.target_index = target_index
+        self.is_swap = is_swap
+        self.moved_item = None # To store item during move
+
+    def execute(self):
+        if self.is_swap:
+            # Swap the items at the two indices
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # It's a move (reposition)
+            # Remove item from its original position and store it
+            self.moved_item = self.list_obj.pop(self.source_index)
+            # Insert the item at the new target position
+            self.list_obj.insert(self.target_index, self.moved_item)
+
+    def undo(self):
+        if self.is_swap:
+            # A swap is its own inverse
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # Undo a move
+            # Remove the item from its new position
+            item_to_move_back = self.list_obj.pop(self.target_index)
+            # Re-insert it at its original source position
+            self.list_obj.insert(self.source_index, item_to_move_back)
+
+class ReorderListCommand(ICommand):
+    """Command to handle reordering or swapping items in a list."""
+    def __init__(self, description, list_obj, source_index, target_index, is_swap=False):
+        super().__init__(description)
+        self.list_obj = list_obj
+        self.source_index = source_index
+        self.target_index = target_index
+        self.is_swap = is_swap
+        self.moved_item = None # To store item during move
+
+    def execute(self):
+        if self.is_swap:
+            # Swap the items at the two indices
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # It's a move (reposition)
+            # Remove item from its original position and store it
+            self.moved_item = self.list_obj.pop(self.source_index)
+            # Insert the item at the new target position
+            self.list_obj.insert(self.target_index, self.moved_item)
+
+    def undo(self):
+        if self.is_swap:
+            # A swap is its own inverse
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # Undo a move
+            # Remove the item from its new position
+            item_to_move_back = self.list_obj.pop(self.target_index)
+            # Re-insert it at its original source position
+            self.list_obj.insert(self.source_index, item_to_move_back)
+
+class UpdateSupertileRefsForTileReorderCommand(ICommand):
+    """An optimized command to update supertile definitions when a tile is moved."""
+    def __init__(self, description, app_ref, source_index, actual_insert_idx):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.source_index = source_index
+        self.actual_insert_idx = actual_insert_idx
+
+    def _process_refs(self, is_undo):
+        active_slice = supertiles_data[:num_supertiles]
+        source, target = (self.actual_insert_idx, self.source_index) if is_undo else (self.source_index, self.actual_insert_idx)
+
+        for st_def in active_slice:
+            for r in range(len(st_def)):
+                for c in range(len(st_def[r])):
+                    val = st_def[r][c]
+                    if val == source: st_def[r][c] = target
+                    elif source < target: # Moved down
+                        if source < val <= target: st_def[r][c] -= 1
+                    else: # Moved up
+                        if target <= val < source: st_def[r][c] += 1
+        self._apply_side_effects()
+
+    def execute(self):
+        self._process_refs(is_undo=False)
+
+    def undo(self):
+        self._process_refs(is_undo=True)
+
+    def _apply_side_effects(self):
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+class UpdateSupertileRefsForTileSwapCommand(ICommand):
+    """An optimized command to update supertile definitions when two tiles are swapped."""
+    def __init__(self, description, app_ref, index_a, index_b):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.index_a = index_a
+        self.index_b = index_b
+
+    def _swap_logic(self):
+        active_slice = supertiles_data[:num_supertiles]
+        for st_def in active_slice:
+            for r in range(len(st_def)):
+                for c in range(len(st_def[r])):
+                    if st_def[r][c] == self.index_a: st_def[r][c] = self.index_b
+                    elif st_def[r][c] == self.index_b: st_def[r][c] = self.index_a
+        
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        self._swap_logic()
+
+    def undo(self):
+        self._swap_logic() # Swap is its own inverse
+
 # --- Usage Window Classes -----------------------------------------------------------------------------------------------
 class ColorUsageWindow(tk.Toplevel):
     def __init__(self, master_app):
@@ -639,7 +821,6 @@ class ColorUsageWindow(tk.Toplevel):
         self.current_sort_direction_is_asc = True   
         self.refresh_timer_id = None 
         self.style = ttk.Style()
-        # self.underline_font = None # This will be removed
 
         # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
@@ -1086,7 +1267,6 @@ class TileUsageWindow(tk.Toplevel):
         self.current_sort_direction_is_asc = True   
         self.refresh_timer_id = None 
         self.style = ttk.Style()
-        # self.underline_font = None # This will be removed
 
         # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
@@ -3124,12 +3304,9 @@ class TileEditorApp:
         self.selected_slot_rgb_label = ttk.Label(info_frame, text="RGB: #000000")
         self.selected_slot_rgb_label.grid(row=1, column=1, padx=(0, 5), sticky="nw")
         
-        # This label now exists but we are removing its local font creation logic.
         self.selected_color_usage_label = tk.Label(info_frame, text="Usage: N/A", anchor="w", justify=tk.LEFT)
         self.selected_color_usage_label.grid(row=2, column=1, padx=(0, 5), sticky="nw")
         self.selected_color_usage_label.bind("<Button-1>", self._handle_usage_label_click)
-        # The font objects 'self.usage_label_normal_font' and 'self.usage_label_link_font'
-        # will now be removed from this method, as we will use self.normal_font and self.link_font from the app instance.
         
         info_frame.grid_rowconfigure(0, weight=1)
         info_frame.grid_rowconfigure(1, weight=1)
@@ -4153,6 +4330,7 @@ class TileEditorApp:
     def draw_tileset_viewer(self, canvas, highlighted_tile_index):
         """Draws tileset viewer, highlighting selected, dragged, or unused tile."""
         _debug(f"\n--- DRAW: draw_tileset_viewer called for canvas {canvas._name}.")
+        _debug(f"\n--- DRAW: draw_tileset_viewer called. Drawing {num_tiles_in_set} tiles.")
         _debug(f"--- DRAW: AT THIS MOMENT, self.marked_unused_tiles is: {self.marked_unused_tiles}")
 
         is_dragging_tile = self.drag_active and self.drag_item_type == "tile"
@@ -7264,7 +7442,7 @@ class TileEditorApp:
                 "Paste Tile", 
                 [pattern_command, colors_command],
                 app_ref=self,
-                post_execute_hooks=post_paste_hooks
+                post_execute_hooks=[post_paste_hooks]
             )
             self.undo_manager.execute(composite)
 
@@ -7870,7 +8048,7 @@ class TileEditorApp:
 
         # If the action was painting and we have pending commands, create a composite command.
         if action_at_release == "painting" and self.pending_command_list:
-            composite = CompositeCommand("Paint Stroke", self.pending_command_list)
+            composite = CompositeCommand("Paint Stroke", self.pending_command_list[:], self)
             self.undo_manager.register(composite)
             self.pending_command_list.clear()
 
@@ -8723,7 +8901,7 @@ class TileEditorApp:
     def handle_supertile_def_release(self, event):
         """Finalizes a paint stroke in the supertile editor, creating a single undo command."""
         if self.pending_command_list:
-            composite = CompositeCommand("Place Tiles", self.pending_command_list)
+            composite = CompositeCommand("Place Tiles", self.pending_command_list[:], self)
             self.undo_manager.register(composite)
             self.pending_command_list.clear()
 
@@ -9359,38 +9537,41 @@ class TileEditorApp:
         pattern_command = ModifyListCommand("Add Tile", tileset_patterns, new_tile_idx, blank_pattern, is_insert=True)
         color_command = ModifyListCommand("Add Tile", tileset_colors, new_tile_idx, blank_colors, is_insert=True)
         
+        # Command to update application state (counts and selections)
+        old_state = (num_tiles_in_set, current_tile_index)
+        new_state = (num_tiles_in_set + 1, new_tile_idx)
+
+        def state_setter(state_tuple):
+            global num_tiles_in_set, current_tile_index
+            num_tiles_in_set, current_tile_index = state_tuple
+        
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+
+        # Define post-action hooks for UI updates
         def post_add_hooks():
             self._mark_project_modified()
             self.clear_all_caches()  
             self.invalidate_minimap_background_cache()
             self._update_editor_button_states()  
             self._request_color_usage_refresh()
+            self.scroll_viewers_to_tile(current_tile_index)
 
         composite = CompositeCommand(
             "Add Tile", 
-            [pattern_command, color_command],
+            [pattern_command, color_command, state_command],
             app_ref=self,
-            post_execute_hooks=post_add_hooks
+            post_execute_hooks=[post_add_hooks]
         )
         self.undo_manager.execute(composite)
-
-        num_tiles_in_set += 1
-        current_tile_index = new_tile_idx  
-
-        self.scroll_viewers_to_tile(current_tile_index)
+        
+        _debug(f"Added new tile {new_tile_idx}")
 
     def handle_insert_tile(self):
         global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-
         if num_tiles_in_set >= MAX_TILES:
-            messagebox.showwarning(
-                "Insert Tile Failed",
-                f"Could not insert tile. Maximum {MAX_TILES} reached?",
-            )
+            messagebox.showwarning("Insert Tile Failed", f"Could not insert tile. Maximum {MAX_TILES} reached?")
             return
-
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass 
+        if self._clear_marked_unused(trigger_redraw=False): pass 
 
         insert_idx = current_tile_index
         
@@ -9399,17 +9580,7 @@ class TileEditorApp:
         pattern_command = ModifyListCommand("Insert Tile", tileset_patterns, insert_idx, blank_pattern, is_insert=True)
         color_command = ModifyListCommand("Insert Tile", tileset_colors, insert_idx, blank_colors, is_insert=True)
         
-        old_st_data = copy.deepcopy(supertiles_data)
-        new_st_data = copy.deepcopy(supertiles_data)
-        for st_def in new_st_data:
-            for r in range(len(st_def)):
-                for c in range(len(st_def[r])):
-                    if st_def[r][c] >= insert_idx:
-                        st_def[r][c] += 1
-        def st_data_setter(data):
-            global supertiles_data
-            supertiles_data = data
-        st_refs_command = SetDataCommand("Update Supertile Refs", self, st_data_setter, new_st_data, old_st_data)
+        st_refs_command = UpdateSupertileRefsForTileCommand("Update Supertile Refs", self, insert_idx, is_insert=True)
 
         old_state = (num_tiles_in_set, current_tile_index, selected_tile_for_supertile)
         new_num_tiles = num_tiles_in_set + 1
@@ -9417,38 +9588,28 @@ class TileEditorApp:
         new_st_selection = selected_tile_for_supertile + 1 if selected_tile_for_supertile >= insert_idx else selected_tile_for_supertile
         new_st_selection = min(new_st_selection, new_num_tiles - 1)
         new_state = (new_num_tiles, new_selection, new_st_selection)
-
         def state_setter(state_tuple):
             global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
             num_tiles_in_set, current_tile_index, selected_tile_for_supertile = state_tuple
-
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        # Define post-action hooks for UI updates
         def post_insert_hooks():
+            self._mark_project_modified()
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
             self._update_editor_button_states()
             self._request_color_usage_refresh()
             self.scroll_viewers_to_tile(current_tile_index)
 
-        composite = CompositeCommand(
-            "Insert Tile", 
-            [pattern_command, color_command, st_refs_command, state_command],
-            app_ref=self,
-            post_execute_hooks=post_insert_hooks
-        )
+        composite = CompositeCommand("Insert Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_execute_hooks=[post_insert_hooks])
         self.undo_manager.execute(composite)
-        
         _debug(f"Inserted tile at index {insert_idx}")
 
     def handle_delete_tile(self):
         global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-
         if num_tiles_in_set <= 1:
             messagebox.showinfo("Delete Tile", "Cannot delete the last tile.")
             return
-
         delete_idx = current_tile_index
         if not (0 <= delete_idx < num_tiles_in_set):
             messagebox.showerror("Delete Tile Error", "Invalid tile index selected.")
@@ -9457,70 +9618,42 @@ class TileEditorApp:
         usage = self._check_tile_usage(delete_idx)
         confirm_msg = f"Delete Tile {delete_idx}?"
         if usage:
-            confirm_msg += "\n\n*** WARNING! ***\nThis tile is used by the following Supertile(s):\n"
-            confirm_msg += ", ".join(map(str, usage[:10]))  
-            if len(usage) > 10:
-                confirm_msg += "..."
+            confirm_msg += "\n\n*** WARNING! ***\nThis tile is used by the following Supertile(s):\n" + ", ".join(map(str, usage[:10]))
+            if len(usage) > 10: confirm_msg += "..."
             confirm_msg += f"\n\nReferences in these Supertiles will be reset to Tile 0."
-
-        if not messagebox.askokcancel("Confirm Delete", confirm_msg, icon="warning"):
-            return
+        if not messagebox.askokcancel("Confirm Delete", confirm_msg, icon="warning"): return
 
         self._adjust_marked_indices_after_delete(self.marked_unused_tiles, delete_idx)
 
         pattern_command = ModifyListCommand("Delete Tile", tileset_patterns, delete_idx, is_insert=False)
         color_command = ModifyListCommand("Delete Tile", tileset_colors, delete_idx, is_insert=False)
         
-        old_st_data = copy.deepcopy(supertiles_data)
-        new_st_data = copy.deepcopy(supertiles_data)
-        for st_def in new_st_data:
-            for r in range(len(st_def)):
-                for c in range(len(st_def[r])):
-                    if st_def[r][c] == delete_idx:
-                        st_def[r][c] = 0
-                    elif st_def[r][c] > delete_idx:
-                        st_def[r][c] -= 1
-
-        def st_data_setter(data):
-            global supertiles_data
-            supertiles_data = data
-        
-        st_refs_command = SetDataCommand("Update Supertile Refs", self, st_data_setter, new_st_data, old_st_data)
+        # Use the new, optimized command for updating supertile references
+        st_refs_command = UpdateSupertileRefsForTileCommand("Update Supertile Refs", self, delete_idx, is_insert=False)
         
         old_state = (num_tiles_in_set, current_tile_index, selected_tile_for_supertile)
         new_num_tiles = num_tiles_in_set - 1
         new_selection = min(delete_idx, new_num_tiles - 1)
         new_st_selection = selected_tile_for_supertile
-        if selected_tile_for_supertile == delete_idx:
-            new_st_selection = 0
-        elif selected_tile_for_supertile > delete_idx:
-            new_st_selection -= 1
+        if selected_tile_for_supertile == delete_idx: new_st_selection = 0
+        elif selected_tile_for_supertile > delete_idx: new_st_selection -= 1
         new_st_selection = min(new_st_selection, new_num_tiles - 1)
         new_state = (new_num_tiles, new_selection, new_st_selection)
-
         def state_setter(state_tuple):
             global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
             num_tiles_in_set, current_tile_index, selected_tile_for_supertile = state_tuple
-
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        # Define post-action hooks for UI updates
         def post_delete_hooks():
+            self._mark_project_modified()
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
             self._update_editor_button_states()
             self._request_color_usage_refresh()
             self.scroll_viewers_to_tile(current_tile_index)
 
-        # --- Combine all actions into one ---
-        composite = CompositeCommand(
-            "Delete Tile", 
-            [pattern_command, color_command, st_refs_command, state_command],
-            app_ref=self,
-            post_execute_hooks=post_delete_hooks
-        )
+        composite = CompositeCommand("Delete Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_execute_hooks=[post_delete_hooks])
         self.undo_manager.execute(composite)
-
         _debug(f"Deleted tile at index {delete_idx}")
 
     def handle_add_supertile(self):  
@@ -9570,7 +9703,7 @@ class TileEditorApp:
             "Add Supertile", 
             [st_add_command, state_command],
             app_ref=self,
-            post_execute_hooks=post_add_hooks
+            post_execute_hooks=[post_add_hooks]
         )
         self.undo_manager.execute(composite)
         
@@ -9640,7 +9773,7 @@ class TileEditorApp:
             "Insert Supertile",
             [st_insert_command, map_refs_command, state_command],
             app_ref=self,
-            post_execute_hooks=post_insert_hooks
+            post_execute_hooks=[post_insert_hooks]
         )
         self.undo_manager.execute(composite)
 
@@ -9723,104 +9856,60 @@ class TileEditorApp:
             "Delete Supertile",
             [st_delete_command, map_refs_command, state_command],
             app_ref=self,
-            post_execute_hooks=post_delete_hooks
+            post_execute_hooks=[post_delete_hooks]
         )
         self.undo_manager.execute(composite)
 
         _debug(f"Deleted supertile at index {delete_idx}")
 
-    def _reposition_tile(self, source_index_tile, target_index_tile):
+    def _reposition_tile(self, source_index, target_index):
         global num_tiles_in_set, tileset_patterns, tileset_colors
-        global current_tile_index, selected_tile_for_supertile, supertiles_data
+        global current_tile_index, selected_tile_for_supertile
 
-        if not (0 <= source_index_tile < num_tiles_in_set):
-            _error(f"Invalid source index {source_index_tile} for tile move.")
-            return False
+        if not (0 <= source_index < num_tiles_in_set): return False
+        clamped_target = max(0, min(target_index, num_tiles_in_set))
         
-        clamped_target_index_tile = max(0, min(target_index_tile, num_tiles_in_set))
-
-        if source_index_tile == clamped_target_index_tile or \
-           (clamped_target_index_tile == num_tiles_in_set and source_index_tile == num_tiles_in_set -1) :
-             if source_index_tile == clamped_target_index_tile -1 and clamped_target_index_tile == num_tiles_in_set :
-                  pass 
-             elif source_index_tile == clamped_target_index_tile :
-                  return False
-
-        _debug(f"Repositioning Tile: From {source_index_tile} to {clamped_target_index_tile}")
-
-        moved_pattern_data = tileset_patterns.pop(source_index_tile)
-        moved_colors_data = tileset_colors.pop(source_index_tile)
-
-        new_list_len = len(tileset_patterns)
-        actual_insert_idx = min(clamped_target_index_tile, new_list_len)
-
-        tileset_patterns.insert(actual_insert_idx, moved_pattern_data)
-        tileset_colors.insert(actual_insert_idx, moved_colors_data)
-
-        # Update Supertile References
-        for st_idx_refo in range(num_supertiles):
-            definition_refo = supertiles_data[st_idx_refo]
-            if not definition_refo or len(definition_refo) != self.supertile_grid_height or \
-               (self.supertile_grid_height > 0 and (len(definition_refo[0]) != self.supertile_grid_width)):
-                _warning(f"ST {st_idx_refo} dim mismatch in _reposition_tile. Skipping ref update.")
-                continue
-
-            st_def_modified_this_iteration = False
-            for r_refo in range(self.supertile_grid_height):
-                for c_refo in range(self.supertile_grid_width):
-                    current_ref_val = definition_refo[r_refo][c_refo]
-                    new_ref_val = current_ref_val
-
-                    if current_ref_val == source_index_tile:
-                        new_ref_val = actual_insert_idx
-                    elif source_index_tile < actual_insert_idx:
-                        if source_index_tile < current_ref_val <= actual_insert_idx:
-                             new_ref_val = current_ref_val - 1
-                    elif source_index_tile > actual_insert_idx:
-                        if actual_insert_idx <= current_ref_val < source_index_tile:
-                             new_ref_val = current_ref_val + 1
-                    
-                    if new_ref_val != current_ref_val:
-                         supertiles_data[st_idx_refo][r_refo][c_refo] = new_ref_val
-                         st_def_modified_this_iteration = True
+        actual_insert_idx = clamped_target
+        if source_index < clamped_target:
+            actual_insert_idx -= 1
             
-            if st_def_modified_this_iteration:
-                self.invalidate_supertile_cache(st_idx_refo)
+        if source_index == actual_insert_idx: return False
 
-        # Update the set of marked unused tiles.
-        if self.marked_unused_tiles:
-            new_marked_set = set()
-            for idx in self.marked_unused_tiles:
-                if idx == source_index_tile:
-                    new_marked_set.add(actual_insert_idx)
-                elif source_index_tile < actual_insert_idx and source_index_tile < idx <= actual_insert_idx:
-                    new_marked_set.add(idx - 1)
-                elif source_index_tile > actual_insert_idx and actual_insert_idx <= idx < source_index_tile:
-                    new_marked_set.add(idx + 1)
-                else:
-                    new_marked_set.add(idx)
-            self.marked_unused_tiles = new_marked_set
+        pattern_command = ReorderListCommand("Move Tile", tileset_patterns, source_index, actual_insert_idx)
+        color_command = ReorderListCommand("Move Tile", tileset_colors, source_index, actual_insert_idx)
 
-        # Update Selections
-        if current_tile_index == source_index_tile:
-            current_tile_index = actual_insert_idx
-        elif source_index_tile < actual_insert_idx and source_index_tile < current_tile_index <= actual_insert_idx:
-            current_tile_index -= 1
-        elif source_index_tile > actual_insert_idx and actual_insert_idx <= current_tile_index < source_index_tile:
-            current_tile_index += 1
+        # Use the new, fast, procedural command
+        st_refs_command = UpdateSupertileRefsForTileReorderCommand("Update Supertile Refs", self, source_index, actual_insert_idx)
+        
+        old_state = (current_tile_index, selected_tile_for_supertile)
+        new_cti = current_tile_index
+        if current_tile_index == source_index: new_cti = actual_insert_idx
+        elif source_index < actual_insert_idx:
+            if source_index < current_tile_index <= actual_insert_idx: new_cti -= 1
+        else:
+            if actual_insert_idx <= current_tile_index < source_index: new_cti += 1
+        
+        new_sts = selected_tile_for_supertile
+        if selected_tile_for_supertile == source_index: new_sts = actual_insert_idx
+        elif source_index < actual_insert_idx:
+            if source_index < selected_tile_for_supertile <= actual_insert_idx: new_sts -= 1
+        else:
+            if actual_insert_idx <= selected_tile_for_supertile < source_index: new_sts += 1
+        new_state = (new_cti, new_sts)
 
-        if selected_tile_for_supertile == source_index_tile:
-            selected_tile_for_supertile = actual_insert_idx
-        elif source_index_tile < actual_insert_idx and source_index_tile < selected_tile_for_supertile <= actual_insert_idx:
-            selected_tile_for_supertile -= 1
-        elif source_index_tile > actual_insert_idx and actual_insert_idx <= selected_tile_for_supertile < source_index_tile:
-            selected_tile_for_supertile += 1
+        def state_setter(state_tuple):
+            global current_tile_index, selected_tile_for_supertile
+            current_tile_index, selected_tile_for_supertile = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        current_tile_index = max(0, min(current_tile_index, num_tiles_in_set - 1))
-        selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, num_tiles_in_set - 1))
+        def post_hooks():
+            self._mark_project_modified()
+            # Caches and usage are now handled by the specific command, but we keep these
+            # for the state command and final redraw coordination.
+            self.scroll_viewers_to_tile(current_tile_index)
 
-        self._mark_project_modified()
-        _debug(f"  Successfully moved Tile {source_index_tile} to {actual_insert_idx}")
+        composite = CompositeCommand("Move Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_execute_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
         return True
 
     def _reposition_supertile(self, source_index_st, target_index_st):
@@ -9833,73 +9922,66 @@ class TileEditorApp:
         
         clamped_target_index_st = max(0, min(target_index_st, num_supertiles))
 
-        if source_index_st == clamped_target_index_st or \
-           (clamped_target_index_st == num_supertiles and source_index_st == num_supertiles -1) :
-             if source_index_st == clamped_target_index_st -1 and clamped_target_index_st == num_supertiles :
-                  pass
-             elif source_index_st == clamped_target_index_st :
-                  return False
+        if source_index_st == clamped_target_index_st:
+            return False
+        
+        # Adjust target for list.insert() if moving an item down the list
+        actual_insert_idx_st = clamped_target_index_st
+        if source_index_st < clamped_target_index_st:
+            actual_insert_idx_st -= 1
 
-        _debug(f"Repositioning Supertile: From {source_index_st} to {clamped_target_index_st}")
+        # --- Create Commands ---
+        st_reorder_command = ReorderListCommand("Move Supertile", supertiles_data, source_index_st, actual_insert_idx_st)
 
-        moved_st_definition = supertiles_data.pop(source_index_st)
-
-        new_list_len = len(supertiles_data)
-        actual_insert_idx_st = min(clamped_target_index_st, new_list_len)
-
-        supertiles_data.insert(actual_insert_idx_st, moved_st_definition)
-
-        # Update Map References
+        old_map_data = copy.deepcopy(map_data)
+        new_map_data = copy.deepcopy(map_data)
         for r_map_refo in range(map_height):
             for c_map_refo in range(map_width):
-                current_map_ref = map_data[r_map_refo][c_map_refo]
-                new_map_ref = current_map_ref
-
+                current_map_ref = new_map_data[r_map_refo][c_map_refo]
                 if current_map_ref == source_index_st:
-                    new_map_ref = actual_insert_idx_st
+                    new_map_data[r_map_refo][c_map_refo] = actual_insert_idx_st
                 elif source_index_st < actual_insert_idx_st: 
                     if source_index_st < current_map_ref <= actual_insert_idx_st:
-                         new_map_ref = current_map_ref - 1
+                         new_map_data[r_map_refo][c_map_refo] -= 1
                 elif source_index_st > actual_insert_idx_st: 
                     if actual_insert_idx_st <= current_map_ref < source_index_st:
-                         new_map_ref = current_map_ref + 1
-                
-                if new_map_ref != current_map_ref:
-                     map_data[r_map_refo][c_map_refo] = new_map_ref
+                         new_map_data[r_map_refo][c_map_refo] += 1
+        def map_data_setter(data):
+            global map_data
+            map_data = data
+        map_refs_command = SetDataCommand("Update Map Refs", self, map_data_setter, new_map_data, old_map_data)
 
-        # Update the set of marked unused supertiles.
-        if self.marked_unused_supertiles:
-            new_marked_set = set()
-            for idx in self.marked_unused_supertiles:
-                if idx == source_index_st:
-                    new_marked_set.add(actual_insert_idx_st)
-                elif source_index_st < actual_insert_idx_st and source_index_st < idx <= actual_insert_idx_st:
-                    new_marked_set.add(idx - 1)
-                elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= idx < source_index_st:
-                    new_marked_set.add(idx + 1)
-                else:
-                    new_marked_set.add(idx)
-            self.marked_unused_supertiles = new_marked_set
+        old_state = (current_supertile_index, selected_supertile_for_map)
+        new_csi = current_supertile_index
+        if current_supertile_index == source_index_st: new_csi = actual_insert_idx_st
+        elif source_index_st < actual_insert_idx_st:
+            if source_index_st < current_supertile_index <= actual_insert_idx_st: new_csi -= 1
+        else:
+            if actual_insert_idx_st <= current_supertile_index < source_index_st: new_csi += 1
+        
+        new_ssm = selected_supertile_for_map
+        if selected_supertile_for_map == source_index_st: new_ssm = actual_insert_idx_st
+        elif source_index_st < actual_insert_idx_st:
+            if source_index_st < selected_supertile_for_map <= actual_insert_idx_st: new_ssm -= 1
+        else:
+            if actual_insert_idx_st <= selected_supertile_for_map < source_index_st: new_ssm += 1
+        new_state = (new_csi, new_ssm)
 
-        # Update Selections
-        if current_supertile_index == source_index_st:
-            current_supertile_index = actual_insert_idx_st
-        elif source_index_st < actual_insert_idx_st and source_index_st < current_supertile_index <= actual_insert_idx_st:
-            current_supertile_index -= 1
-        elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= current_supertile_index < source_index_st:
-            current_supertile_index += 1
+        def state_setter(state_tuple):
+            global current_supertile_index, selected_supertile_for_map
+            current_supertile_index, selected_supertile_for_map = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        if selected_supertile_for_map == source_index_st:
-            selected_supertile_for_map = actual_insert_idx_st
-        elif source_index_st < actual_insert_idx_st and source_index_st < selected_supertile_for_map <= actual_insert_idx_st:
-            selected_supertile_for_map -= 1
-        elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= selected_supertile_for_map < source_index_st:
-            selected_supertile_for_map += 1
+        def post_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self.invalidate_minimap_background_cache()
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
 
-        current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1))
-        selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
-
-        self._mark_project_modified()
+        composite = CompositeCommand("Move Supertile", [st_reorder_command, map_refs_command, state_command], app_ref=self, post_execute_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
+        
         _debug(f"  Successfully moved Supertile {source_index_st} to {actual_insert_idx_st}")
         return True
 
@@ -12728,14 +12810,11 @@ class TileEditorApp:
         return result["value"]
 
     def handle_add_many_tiles(self):
-        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX 
-
+        global num_tiles_in_set, current_tile_index # Still need global here
         if num_tiles_in_set >= MAX_TILES:
             messagebox.showinfo("Add Many Tiles", "Tileset is already full.", parent=self.root)
             return
-
         space_available = MAX_TILES - num_tiles_in_set
-    
         num_to_add = self._create_add_many_dialog(
             parent=self.root, 
             title_text="Add Many Tiles",
@@ -12743,37 +12822,37 @@ class TileEditorApp:
             current_items=num_tiles_in_set,
             max_items_total=MAX_TILES
         )
+        if num_to_add is None or num_to_add <= 0: return
 
-        if num_to_add is None or num_to_add <= 0: 
-            return
-
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass 
-
-        self._mark_project_modified()
-    
-        first_new_tile_idx = num_tiles_in_set 
-    
-        for _ in range(num_to_add):
-            if num_tiles_in_set < MAX_TILES: 
-                if num_tiles_in_set < len(tileset_patterns) and num_tiles_in_set < len(tileset_colors):
-                    tileset_patterns[num_tiles_in_set] = [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
-                    tileset_colors[num_tiles_in_set] = [(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)]
-                    num_tiles_in_set += 1
-                else:
-                    _error(f" handle_add_many_tiles: trying to access beyond list capacity for tile {num_tiles_in_set}")
-                    break 
-            else:
-                break 
+        if self._clear_marked_unused(trigger_redraw=False): pass
         
-        current_tile_index = first_new_tile_idx 
-    
-        self.clear_all_caches()
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self.scroll_viewers_to_tile(current_tile_index)
-        self._update_editor_button_states()
-        self._request_color_usage_refresh() # Correctly placed
+        first_new_tile_idx = num_tiles_in_set
+        commands = []
+        for i in range(num_to_add):
+            new_idx = num_tiles_in_set + i
+            blank_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+            blank_colors = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
+            commands.append(ModifyListCommand("Add Tile", tileset_patterns, new_idx, blank_pattern, is_insert=True))
+            commands.append(ModifyListCommand("Add Tile", tileset_colors, new_idx, blank_colors, is_insert=True))
+
+        old_state = (num_tiles_in_set, current_tile_index)
+        new_state = (num_tiles_in_set + num_to_add, first_new_tile_idx)
+        def state_setter(state_tuple):
+            global num_tiles_in_set, current_tile_index
+            num_tiles_in_set, current_tile_index = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+        commands.append(state_command)
+
+        def post_add_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self.invalidate_minimap_background_cache()
+            self._update_editor_button_states()
+            self._request_color_usage_refresh()
+            self.scroll_viewers_to_tile(current_tile_index)
+
+        composite = CompositeCommand(f"Add {num_to_add} Tiles", commands, app_ref=self, post_execute_hooks=[post_add_hooks])
+        self.undo_manager.execute(composite)
         _debug(f"Added {num_to_add} new tiles.")
 
     def handle_add_many_supertiles(self):
@@ -13575,7 +13654,7 @@ class TileEditorApp:
         
         if self.pending_command_list:
             # Group all the individual pixel changes into a single undoable action
-            composite = CompositeCommand("Paint Stroke", self.pending_command_list)
+            composite = CompositeCommand("Paint Stroke", self.pending_command_list[:], self)
             self.undo_manager.register(composite) # Use register for pre-executed commands
             self.pending_command_list.clear()
 
@@ -14904,56 +14983,68 @@ class TileEditorApp:
                 _error(f"Error posting menu: {e}")
 
     def _swap_items(self, item_type, index_a, index_b):
-        """Swaps two items (tiles or supertiles) and updates all global references."""
         _debug(f"Attempting to swap {item_type}s at indices {index_a} and {index_b}")
         
-        data_list = None
-        ref_update_func = None
-        max_index = 0
-
-        if item_type == "tile":
-            data_list = tileset_patterns
-            color_list = tileset_colors
-            ref_update_func = self._update_supertile_refs_for_tile_swap
-            max_index = num_tiles_in_set -1
-        elif item_type == "supertile":
-            data_list = supertiles_data
-            ref_update_func = self._update_map_refs_for_supertile_swap
-            max_index = num_supertiles -1
-        else:
-            return False
-
-        if not (0 <= index_a <= max_index and 0 <= index_b <= max_index):
-            _debug("Swap failed: one or both indices are out of bounds.")
-            return False
-
-        # Swap the main data
-        data_list[index_a], data_list[index_b] = data_list[index_b], data_list[index_a]
-        if item_type == "tile":
-            color_list[index_a], color_list[index_b] = color_list[index_b], color_list[index_a]
-
-        # Update all references
-        if ref_update_func:
-            ref_update_func(index_a, index_b)
-        
-        # Update selections
-        global current_tile_index, selected_tile_for_supertile
-        global current_supertile_index, selected_supertile_for_map
+        commands = []
         
         if item_type == "tile":
-            if current_tile_index == index_a: current_tile_index = index_b
-            elif current_tile_index == index_b: current_tile_index = index_a
+            commands.append(ReorderListCommand("Swap Tiles", tileset_patterns, index_a, index_b, is_swap=True))
+            commands.append(ReorderListCommand("Swap Tiles", tileset_colors, index_a, index_b, is_swap=True))
             
-            if selected_tile_for_supertile == index_a: selected_tile_for_supertile = index_b
-            elif selected_tile_for_supertile == index_b: selected_tile_for_supertile = index_a
+            # Use the new, fast, procedural command
+            commands.append(UpdateSupertileRefsForTileSwapCommand("Update Supertile Refs", self, index_a, index_b))
+
+            old_state = (current_tile_index, selected_tile_for_supertile)
+            new_cti = current_tile_index
+            if current_tile_index == index_a: new_cti = index_b
+            elif current_tile_index == index_b: new_cti = index_a
+            new_sts = selected_tile_for_supertile
+            if selected_tile_for_supertile == index_a: new_sts = index_b
+            elif selected_tile_for_supertile == index_b: new_sts = index_a
+            new_state = (new_cti, new_sts)
+            def state_setter_tile(state):
+                global current_tile_index, selected_tile_for_supertile
+                current_tile_index, selected_tile_for_supertile = state
+            commands.append(SetDataCommand("Update App State", self, state_setter_tile, new_state, old_state))
+
         elif item_type == "supertile":
-            if current_supertile_index == index_a: current_supertile_index = index_b
-            elif current_supertile_index == index_b: current_supertile_index = index_a
+            # Supertile swap is already fast as it operates on the smaller map_data
+            commands.append(ReorderListCommand("Swap Supertiles", supertiles_data, index_a, index_b, is_swap=True))
             
-            if selected_supertile_for_map == index_a: selected_supertile_for_map = index_b
-            elif selected_supertile_for_map == index_b: selected_supertile_for_map = index_a
+            old_map_data = copy.deepcopy(map_data)
+            new_map_data = copy.deepcopy(map_data)
+            for r in range(len(new_map_data)):
+                for c in range(len(new_map_data[r])):
+                    if new_map_data[r][c] == index_a: new_map_data[r][c] = index_b
+                    elif new_map_data[r][c] == index_b: new_map_data[r][c] = index_a
+            def map_setter(data):
+                global map_data
+                map_data = data
+            commands.append(SetDataCommand("Update Map Refs", self, map_setter, new_map_data, old_map_data))
+
+            old_state = (current_supertile_index, selected_supertile_for_map)
+            new_csi = current_supertile_index
+            if current_supertile_index == index_a: new_csi = index_b
+            elif current_supertile_index == index_b: new_csi = index_a
+            new_ssm = selected_supertile_for_map
+            if selected_supertile_for_map == index_a: new_ssm = index_b
+            elif selected_supertile_for_map == index_b: new_ssm = index_a
+            new_state = (new_csi, new_ssm)
+            def state_setter_st(state):
+                global current_supertile_index, selected_supertile_for_map
+                current_supertile_index, selected_supertile_for_map = state
+            commands.append(SetDataCommand("Update App State", self, state_setter_st, new_state, old_state))
         
-        self._mark_project_modified()
+        def post_hooks():
+            self._mark_project_modified()
+            # Side effects are now handled by the specific commands
+            if item_type == "tile":
+                self.scroll_viewers_to_tile(current_tile_index)
+            elif item_type == "supertile":
+                self.scroll_selectors_to_supertile(current_supertile_index)
+
+        composite = CompositeCommand(f"Swap {item_type}s", commands, app_ref=self, post_execute_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
         return True
 
     def _update_supertile_refs_for_tile_swap(self, index_a, index_b):
