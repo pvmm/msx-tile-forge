@@ -6836,7 +6836,7 @@ class TileEditorApp:
             if success:
                 _debug(" save_project: All components saved successfully.")
                 self.project_modified = False
-                self.undo_manager.clear() # Clear undo/redo history on successful save
+                # self.undo_manager.clear() # Clear undo/redo history on successful save
                 self._update_window_title()
                 self._add_to_recent_list("projects", base_path)
                 self._save_app_settings()
@@ -6892,7 +6892,7 @@ class TileEditorApp:
             _debug(" save_project_as: All components saved successfully.")
             self.current_project_base_path = true_base_path 
             self.project_modified = False
-            self.undo_manager.clear() # Clear undo/redo history on successful save
+            # self.undo_manager.clear() # Clear undo/redo history on successful save
             self._update_window_title()
             self._add_to_recent_list("projects", self.current_project_base_path)
             self._save_app_settings()
