@@ -843,7 +843,6 @@ class ColorUsageWindow(tk.Toplevel):
         self.refresh_timer_id = None 
         self.style = ttk.Style()
 
-        # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
         saved_config = self.app_ref.get_window_config(self.window_class_name)
         initial_geometry = saved_config.get('geometry')
@@ -853,7 +852,6 @@ class ColorUsageWindow(tk.Toplevel):
         
         self.current_sort_column_id = initial_sort_col
         self.current_sort_direction_is_asc = initial_sort_asc
-        # --- End Load Config ---
 
         self._is_dragging_col_separator = False 
         self._treeview_refresh_timer_id = None 
@@ -1289,7 +1287,6 @@ class TileUsageWindow(tk.Toplevel):
         self.refresh_timer_id = None 
         self.style = ttk.Style()
 
-        # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
         saved_config = self.app_ref.get_window_config(self.window_class_name)
         initial_geometry = saved_config.get('geometry')
@@ -1299,7 +1296,6 @@ class TileUsageWindow(tk.Toplevel):
 
         self.current_sort_column_id = initial_sort_col
         self.current_sort_direction_is_asc = initial_sort_asc
-        # --- End Load Config ---
 
         self._is_dragging_col_separator = False 
         self._treeview_refresh_timer_id = None
@@ -1732,7 +1728,6 @@ class SupertileUsageWindow(tk.Toplevel):
         self.refresh_timer_id = None
         # self.underline_font = None # This is now removed
         
-        # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
         saved_config = self.app_ref.get_window_config(self.window_class_name)
         initial_geometry = saved_config.get('geometry')
@@ -1742,7 +1737,6 @@ class SupertileUsageWindow(tk.Toplevel):
         
         self.current_sort_column_id = initial_sort_col_data_key # Store the data key for sorting logic
         self.current_sort_direction_is_asc = initial_sort_asc
-        # --- End Load Config ---
         
         self._is_dragging_col_separator = False
         self._col0_width_at_drag_start = 0 # For image column specifically
@@ -2716,7 +2710,7 @@ class TileEditorApp:
             _error(f"Failed to set application icon: {e}")
     
         # --- All instance attributes are initialized first ---
-        self.undo_manager = UndoManager(self) # <-- INSERT THIS LINE
+        self.undo_manager = UndoManager(self)
         self.current_project_base_path = None
         self.project_modified = False
         self.scroll_speed_units = 3 
@@ -4031,7 +4025,6 @@ class TileEditorApp:
         canvas.unbind("<MouseWheel>")
         canvas.unbind("<Button-4>")
         canvas.unbind("<Button-5>")
-        # --- End Unbind ---
 
         # --- Mouse Button 1 (Primary) - Checks Shift/Ctrl internally ---
         canvas.bind("<Button-1>", self.handle_map_click_or_drag_start)
@@ -7074,7 +7067,6 @@ class TileEditorApp:
         # --- Re-apply usage window states AFTER project data is loaded and UI is stable ---
         _debug(" Project Load/New: Re-applying initial usage window states.")
         self._restore_window_states() # This will open windows as per config
-        # --- End Re-apply ---
         
         # Request refresh for any windows that were just re-opened by the call above
         self._request_color_usage_refresh()
@@ -7280,7 +7272,7 @@ class TileEditorApp:
                     
                     if data_structure_changed: # If supertile list actually changed
                         self._request_tile_usage_refresh() # STs use tiles, their count/defs changed
-                        self._request_supertile_usage_refresh() # ADD THIS LINE
+                        self._request_supertile_usage_refresh()
 
             except ValueError:
                 messagebox.showerror("Invalid Input", "Please enter a valid whole number.", parent=self.root)
@@ -8529,7 +8521,6 @@ class TileEditorApp:
         if self.is_shift_pressed:
             _debug("Shift pressed, ignoring Ctrl-Button-1 for pan/window drag.")
             return "break"
-        # --- End Shift Check ---
 
         ctrl_pressed_at_click = event.state & 0x0004  # Check state at event time
         if not ctrl_pressed_at_click or self.current_mouse_action is not None:
@@ -8541,7 +8532,6 @@ class TileEditorApp:
 
         # --- Clear previous selection when starting pan/window drag ---
         self._clear_map_selection()  # Clear selection visual and state
-        # --- End Clear Selection ---
 
         if (
             self._is_inside_window_view(canvas_x, canvas_y)
@@ -9392,7 +9382,7 @@ class TileEditorApp:
             self._mark_project_modified() # If map data changed, project is modified
             self.invalidate_minimap_background_cache() # Minimap needs update
             # The map canvas itself will be redrawn by the caller of insert/delete ST usually.
-            self._request_supertile_usage_refresh() # MODIFIED: ADDED THIS LINE
+            self._request_supertile_usage_refresh()
 
     def _insert_tile(self, index):
         global num_tiles_in_set, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX
@@ -16335,7 +16325,7 @@ class TileEditorApp:
             "--supertile-width", str(options["st_width"]),
             "--supertile-height", str(options["st_height"]),
             "--color-metric", options["metric"],
-            "--sort-tileset", options["sort_tiles"] # Add this line
+            "--sort-tileset", options["sort_tiles"]
         ]
         
         palette_rules = options["palette_rules"]
@@ -16463,7 +16453,7 @@ if __name__ == "__main__":
         
         if root.winfo_exists(): # Check if root window still exists
             app = TileEditorApp(root) # Create and show the main application
-            app._cleanup_temp_dirs()  # <-- ADD THIS LINE
+            app._cleanup_temp_dirs()
             root.deiconify()
             if hasattr(app, 'debug'): app._debug(" Main application initialized.")
 
