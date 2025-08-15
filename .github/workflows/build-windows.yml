@@ -51,10 +51,9 @@ jobs:
         shell: bash
         run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
 
-      - name: Build and Package Windows Binary
+      - name: Build Windows Executable
         shell: powershell
         run: |
-          echo "Attempting to build with 'python -m PyInstaller'..."
           python -m PyInstaller --noconsole --onedir --clean `
             --add-data "msxtileexport.py;." `
             --add-data "msxtilemagic.py;." `
@@ -62,15 +61,13 @@ jobs:
             --add-data "superfilerandomizer.py;." `
             msxtileforge.py
           
-          echo "Copying asset files..."
+          # After PyInstaller creates the folder, copy the static files into it
           Copy-Item README.md, LICENSE -Destination dist\msxtileforge
-          
-          echo "Creating archive..."
-          cd dist
-          7z a msxtileforge_windows.zip msxtileforge
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
+          # This will be the name of the final .zip file the user downloads
           name: windows-build-${{ inputs.version_string }}
-          path: dist/msxtileforge_windows.zip
+          # This is the path to the FOLDER that upload-artifact will zip up for us
+          path: dist/msxtileforge/
