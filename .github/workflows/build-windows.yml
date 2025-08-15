@@ -27,14 +27,17 @@ jobs:
         with:
           python-version: '3.10'
 
+      # --- THIS STEP WAS MISSING ---
       - name: Install Dependencies
         run: pip install pyinstaller Pillow numpy scipy platformdirs tqdm
+      # --- END MISSING STEP ---
 
       - name: Update Version in Files
         shell: bash
         run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
 
-      - name: Build Windows Binary
+      # --- THIS STEP IS NOW CORRECTED AND MORE ROBUST ---
+      - name: Build and Package Windows Binary
         shell: cmd
         run: |
           py -m PyInstaller --noconsole --onedir --clean ^
@@ -43,9 +46,9 @@ jobs:
             --add-data "tilerandomizer.py;." ^
             --add-data "superfilerandomizer.py;." ^
             msxtileforge.py
-          copy README.md LICENSE dist\msxtileforge\
-          cd dist
-          7z a msxtileforge_windows.zip msxtileforge
+          copy README.md LICENSE dist\msxtileforge
+          7z a dist/msxtileforge_windows.zip ./dist/msxtileforge/*
+      # --- END CORRECTION ---
 
       - name: Upload Windows Artifact
         id: upload
