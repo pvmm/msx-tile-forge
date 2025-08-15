@@ -1,9 +1,8 @@
 # .github/workflows/release.yml
 
-name: MSX Tile Forge Build & Release
+name: MSX Tile Forge Build Orchestrator
 
 on:
-  # This allows manual triggers from the Actions tab
   workflow_dispatch:
     inputs:
       build_type:
@@ -11,37 +10,28 @@ on:
         required: true
         default: 'dev_build'
         type: choice
-        options:
-        - dev_build
-        - nightly_build
-        - rc_build
-  
-  # This triggers automatically on a schedule for nightly builds
-  schedule:
-    - cron: '0 2 * * *' # Runs at 2:00 AM UTC every day
-
-  # This triggers automatically when you push a new tag
-  push:
-    tags:
-      - 'v*' # Any tag starting with 'v', e.g., v1.0.0, v1.0.1-RC1
+        options: [dev_build] # Add other types like 'rc_build' back in later
 
 jobs:
-  ######################################################################
-  # JOB 1: DEVELOPMENT BUILDS from TKT branches
-  ######################################################################
-  build_dev_artifact:
-    name: Dev Build (TKT Branch)
-    # This job only runs when manually triggered with 'dev_build' type
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'dev_build'
+  ############################################################
+  # JOB 1: Calculate Version and Trigger Worker Workflows
+  ############################################################
+  call_builds:
+    name: Calculate Version & Call Builds
     runs-on: ubuntu-latest
+    # Define outputs that this job will pass to other jobs
+    outputs:
+      version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Needed to get accurate commit count
+          fetch-depth: 0
 
       - name: Construct Dev Version String
         id: versioning
+        if: github.event.inputs.build_type == 'dev_build'
         run: |
           BRANCH_NAME="${{ github.ref_name }}"
           BASE_VERSION=$(echo $BRANCH_NAME | sed -n 's/.*REL_\([0-9.]*\).*/\1/p')
@@ -49,174 +39,23 @@ jobs:
           BRANCH_BUILD_NUM=$(git rev-list --count HEAD)
           GLOBAL_BUILD_NUM="${{ github.run_number }}"
           FINAL_VERSION="v${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_BUILD_NUM}"
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_ENV
-
-      - name: Update Version in Files
-        run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ env.VERSION_STRING }}/g" {} +
-
-      - name: Build Binaries (win/lin)
-        run: make win lin
-
-      - name: Upload Developer Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: dev-build-${{ env.VERSION_STRING }}
-          path: |
-            dist/msxtileforge_windows.zip
-            dist/msxtileforge_linux.tar.gz
-
-  ######################################################################
-  # JOB 2: NIGHTLY BUILDS from a pre-configured branch
-  ######################################################################
-  build_nightly:
-    name: Nightly Build
-    if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'nightly_build')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get Target Branch Name
-        id: get_branch
-        run: |
-          # Fetch the tag that points to our nightly branch
-          git fetch origin refs/tags/nightly-build-branch:refs/tags/nightly-build-branch
-          # Get the commit hash the tag points to
-          COMMIT_HASH=$(git rev-list -n 1 nightly-build-branch)
-          # Find which branch contains that commit hash
-          BRANCH_NAME=$(git branch -r --contains $COMMIT_HASH | grep -v '->' | sed 's/  origin\///' | head -n 1)
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-
-      - name: Check for New Commits
-        id: check_commits
-        uses: jakelewis/git-diff-action@v1.0.1
-        with:
-          base: ${{ github.sha }} # Last run's commit
-          head: origin/${{ steps.get_branch.outputs.BRANCH_NAME }}
+          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
       
-      - name: Build only if changes exist
-        if: steps.check_commits.outputs.changed == 'true'
-        run: echo "Changes detected on ${{ steps.get_branch.outputs.BRANCH_NAME }}. Proceeding with nightly build."
+      # You would add more "Construct Version String" steps here for RC, Final, etc.
 
-      - name: Checkout code (if changes)
-        if: steps.check_commits.outputs.changed == 'true'
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ steps.get_branch.outputs.BRANCH_NAME }}
-
-      - name: Construct Nightly Version String (if changes)
-        if: steps.check_commits.outputs.changed == 'true'
-        run: |
-          BRANCH_NAME="${{ steps.get_branch.outputs.BRANCH_NAME }}"
-          BASE_VERSION=$(echo $BRANCH_NAME | sed -n 's/.*REL_\([0-9.]*\).*/\1/p')
-          DATE_STAMP=$(date +'%y%m%d')
-          GLOBAL_BUILD_NUM="${{ github.run_number }}"
-          FINAL_VERSION="v${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_BUILD_NUM}"
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_ENV
+  ############################################################
+  # JOB 2: Run the actual builds by calling the reusable workflows
+  ############################################################
+  build_binaries:
+    name: Build Binaries
+    needs: call_builds # This job waits for the version calculation to finish
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      version_string: ${{ needs.call_builds.outputs.version_string }}
       
-      - name: Update Version in Files (if changes)
-        if: steps.check_commits.outputs.changed == 'true'
-        run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ env.VERSION_STRING }}/g" {} +
-
-      - name: Build Binaries (if changes)
-        if: steps.check_commits.outputs.changed == 'true'
-        run: make win lin
-      
-      - name: Upload to Transfer.sh (if changes)
-        if: steps.check_commits.outputs.changed == 'true'
-        run: |
-          WINDOWS_LINK=$(curl -s --upload-file dist/msxtileforge_windows.zip https://transfer.sh/msxtileforge-windows-${{ env.VERSION_STRING }}.zip)
-          LINUX_LINK=$(curl -s --upload-file dist/msxtileforge_linux.tar.gz https://transfer.sh/msxtileforge-linux-${{ env.VERSION_STRING }}.tar.gz)
-          echo "WINDOWS_LINK=$WINDOWS_LINK" >> $GITHUB_ENV
-          echo "LINUX_LINK=$LINUX_LINK" >> $GITHUB_ENV
-      
-      - name: Post Links in Commit Comment (if changes)
-        if: steps.check_commits.outputs.changed == 'true'
-        uses: peter-evans/commit-comment@v2
-        with:
-          body: |
-            **Nightly build successful!**
-            Version: `${{ env.VERSION_STRING }}`
-            - [Download Windows Package](${{ env.WINDOWS_LINK }})
-            - [Download Linux Package](${{ env.LINUX_LINK }})
-            (Links expire in 14 days)
-
-  ######################################################################
-  # JOB 3: RC and FINAL RELEASES from tags
-  ######################################################################
-  build_release:
-    name: Build Release (RC or Final)
-    if: (startsWith(github.ref, 'refs/tags/')) || (github.event.inputs.build_type == 'rc_build' && github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Construct Release Version String
-        id: versioning
-        run: |
-          TAG_NAME="${{ github.ref_name }}"
-          FINAL_VERSION=""
-          IS_PRERELEASE="false"
-
-          if [[ $TAG_NAME == *"-RC"* ]]; then # It's an RC tag
-            BASE_VERSION=$(echo $TAG_NAME | sed -n 's/v\([0-9.]*\)-RC.*/\1/p')
-            RC_NUM=$(echo $TAG_NAME | sed -n 's/.*-RC\([0-9]*\)/\1/p')
-            GLOBAL_BUILD_NUM="${{ github.run_number }}"
-            FINAL_VERSION="v${BASE_VERSION}_rc${RC_NUM}_${GLOBAL_BUILD_NUM}"
-            IS_PRERELEASE="true"
-          elif [[ "${{ github.event.inputs.build_type }}" == "rc_build" ]]; then # It's a manual RC build
-              # Logic to find next RC number
-              BASE_VERSION=$(echo ${{ github.ref_name }} | sed -n 's/.*REL_\([0-9.]*\).*/\1/p')
-              git fetch --tags
-              LATEST_RC=$(git tag -l "v${BASE_VERSION}-RC*" | sort -V | tail -n 1 | sed -n 's/.*-RC\([0-9]*\)/\1/p')
-              if [ -z "$LATEST_RC" ]; then LATEST_RC=0; fi
-              NEXT_RC=$((LATEST_RC + 1))
-              GLOBAL_BUILD_NUM="${{ github.run_number }}"
-              FINAL_VERSION="v${BASE_VERSION}_rc${NEXT_RC}_${GLOBAL_BUILD_NUM}"
-              IS_PRERELEASE="true"
-              echo "NEW_TAG=v${BASE_VERSION}-RC${NEXT_RC}" >> $GITHUB_ENV
-          else # It's a Final release tag
-            FINAL_VERSION=$(echo $TAG_NAME | sed -n 's/v\(.*\)/\1/p')
-            IS_PRERELEASE="false"
-          fi
-          
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_ENV
-          echo "IS_PRERELEASE=${IS_PRERELEASE}" >> $GITHUB_ENV
-
-      - name: Update Version in Files
-        run: |
-          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ env.VERSION_STRING }}/g" {} +
-          sed -i "s/<unreleased>/${{ env.VERSION_STRING }}/g" debian/changelog
-          sed -i "s/## \[Unreleased\]/## [${{ env.VERSION_STRING }}] - $(date +'%Y-%m-%d')/g" CHANGELOG.md
-          sed -i '2i ## [Unreleased]\n\n' CHANGELOG.md
-
-      - name: Build All Release Assets
-        run: make all
-
-      - name: Create New RC Tag (if manual RC)
-        if: env.NEW_TAG != ''
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git tag ${{ env.NEW_TAG }}
-          git push origin ${{ env.NEW_TAG }}
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.NEW_TAG || github.ref }}
-          release_name: Release ${{ env.VERSION_STRING }}
-          prerelease: ${{ env.IS_PRERELEASE }}
-          draft: false
-
-      - name: Upload Release Assets
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/msxtileforge_windows.zip
-          asset_name: msxtileforge-windows-${{ env.VERSION_STRING }}.zip
-          asset_content_type: application/zip
-      # Add more upload steps for linux and debian assets here...
+  build_linux_binaries:
+    name: Build Linux Binaries
+    needs: call_builds
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      version_string: ${{ needs.call_builds.outputs.version_string }}
