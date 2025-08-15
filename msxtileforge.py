@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # --- Version info ---
-APP_VERSION = "1.0.0RC15"
+APP_VERSION = "<unreleased>"
 
 # --- Application Icon ---
 ICON_IMAGE = r"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAACxEAAAsRAX9kX5EAABLlSURBVBgZBcFbrLb5XRbg6/49z7vWt9b3TWemLUaMrZWwObAFQdnJTIgWmxgNPZAoUA3GuDswcRMSNcoJxsR4oNEYowIaxd2Bm8RaIAgyVYjEJhTbsdAWbKt2Q6fMTKfzbdZa7/O/va60BYAPfehDP/uzP/fiR1588vjJzKyWJpnMtm+ka7VNkpm2bdsm2bYNbZNs2xbJOI7Vrm3bk6y1utZqkSSTSUjbmahjLYjjfKy12iZJRI61juP8lre+9du+5Vufe/6566trANq2bfvRj370O9/9nfvpks2+2Xenk9PJ6eR0sp+cTk4np92+23anCxcXLk4uTi5OTrvT7nSy7/bdvtt3p93p5LQ7nZxOTienk9PJ6WQ/2Xenk323n+y7fbPvTrvT7rQ77fbdxcnF7uLk4mQLfutXvO1Hf/Sft23bNm3xwgsvvOeP/pHPfPqzD55+YzxxvgttGwjayKFOl7PdW+u8bl4PCACUQNpmc/3UiMcPe75tsmIiFbCiNdHVubx2uuxx5/YRSdISUUJh27NfPXr4+Pzk0Q/+9R/8gb/2A0jbj33sY9/2/HOvvPrqg6eecvtk3vSVx5velkiUIJRycernP37+/KdO95+5+JpvXRIiaIuQZIXZ8vi1xx/7udze3nvbN3jTW7vOK1WTaBuSgpnt+MQv3n3hU556s7f+9jnOkcWKaNY2lay++pnjc780++lYXv/iK//yX/2L7/2e9+z4y3/lr3zhpZeeefaNDtvzf+r4mnedL69KamkMmkbn6unL//YP7j75oYsv/6oHf/hv3eUix1k0qApJVqyLexef//jN3/6uu9uXL779u7dveo/HX1RFS4NEldPV/cf/7C88+eSHt9/8tf2Ov3ycH1praYNmbTFNtnU7H/3p/rd/vMfp3uVf/YEfePd3vnv/Xy+++N73vvepZ59Zd4/3b/uT52/4nruHr6ybV7cOk5xnbUs60mxr1u1Nxznr/ORVveg6N11pEoG2xPneevKlmtrON4/z8It98pqqma44yqKtZOvZ+Sax1jmPXlnrti0FqVXBXWZ/xx+4WMf5/f/o6qkHn/zVT/zUT//U/PhP/MT57i495+nffPfV7zy//rKeN1vNombNGKPSYxYBkklIyWZLJ2tmZczWGTOhq12WSFo6XbSmIZKJrYaEqSQQSUCJSs1ax8PXjq/+9vkNb3N7a+aFn/kv89Ff/mWzOd/mzW9Z965Wj6iFJh2JNe20egwRgK6oAJGoSAe1tClIqYolqyqLpEPoDANZJTS0SEgFIF3ni4u+6a093+bi4uO/8olZXRKt/bKyAoICCowqAMSSZgAqWgAiU5BVS0ppAiBgtUe1EUBaIagQRKQWW3Kimbm7O4YI0pU0W0Ih0SKgKtEQ0TZEo6QqJREKRSUkNUoZHVLThiYVOkwhtZAIAaWoqkRbJdNODMHKdiRiihxRGgor7UBFBEl1LCpN2i6WtADlCJFmirQhrFgJWbV0mCncjQjQaKCxohxDSdGQtGsaoEmQhWFJ01SLRiGoVtB2JQ1UDKMCkhDaopU2ESmgSAxJIDTaVW2Vtg0ESUSoVEobGYJowHJoR9IUSQlTSUQFqEgEqSGqUlClkEoKZLHQDhQBa6mapaWoFgDorCpMVENjMhGpVmPlYGVFIxACUBgNmKbLAqpttVSpikppmMCCToAsliwpRSCFAAACAkqjyWr3oLQya8ZsxxqiIlgtlJEZ6aRdXVLTCQ1AiaDZOvukYzVptmaTrC5pSFJbKM0mg8x0RqeI0LYlQpnOZEsmlUrtCaxkX93W+Wj1kHZFIICmszUpzVbXp4s7SQ8dGQolUfZ9iwPNvm0XF6d13mRmKQ1Mq8qWuTWLyTrNth1pjyxBHbGIbivRSSVpVqzYg9bldT/zwfm3f2nr0XWW1QZdzSSKZDIXx+NX++ANt6+99OoP/Yl2KdUGdcgKSJK7J+2d+888/OkffvI//l2PM6ZKQ6WN0Mb55c/vTz3Tlz+Vf/sXs861SApbulEiS7JlPXrZ5VVubqN7wcx+PH7l/NL/awAZrS4ZCgmVe1fb/evj7uHnP/RzEhkttBSMVtg2pyvNo0983HEHgIASCnVxfe/e/cvePHry678okGghAFica7935fI6lWZX4jjf7m96y+l3fP1aQRy1IKPN2iLdZNvP//cjjz/7S09dXb37d/3Ge109QiWRZMnato2EsMJpsz1dQVOMpKrRqMl+sb/wS48//ulX7z3zG+593e9fOc/oCptGliwNeyNb1yc+fPuF/9O06d4i6+bhxW/5hus/9vfW45toFSpJ24hmwv2n7977N1/91V/48jdc/fDvu3+1LYtVKkMplUgAX/YGp00rJEJRHTkIPHX6M//45Rc/9rnrr3rbG77v757vbqKFqGpADLNd3X/8r7//9tMfSS7S7G21WybHuQ+/tB4/GktU0lQr1cSxMsPd7ZZoX//S3eXJLSEVR8Gh00pA5/o8p7ZN2oJAmqQEY27uFsk6r0df7N1ttRYUCgVbetfzjSiSgcTCQqOBFJVFo9U1bTsoSNYES1csUCIUEVoaUjQ6VEpaKVXJArMaCE1FEgAhTbqppZp2ulcRSJIWU6LSNoVJIXSJANq2IwEFKZkkutpEUpHVTtJWlAglQJW2bYs2xKoAiYiKCmKaLLvCiiICkgUGgYWYskYjAYRQAkCJVsOKJSlomwRtBQkLOoVGta1WyEqiU6q6himoTssAJQkQWlAEiSpEAwVIoVEACSQSVBeLCIAkQAEZQScRkITQEFQptAULyR5EgJZQokEsKZLpaiAgQAMpUBIkWlKYSbRV0VaoJFUCEEIkSYRKhtCkEWYth2pFUHsDoKSKpEUlhw5TlTVtCqWkEIBKAEraiWRpNESbKImCILRV0KVtQ5UGKdEIhMaCYKBSQBQampQQIpFEKSiiaFuKFmiLKmlTaasVrVBBRAAFkRHQJDGSVgs0kySTZBJVE9AotAURoEOksVApgKi0JW21pW0BkpCYSgMhSQkBSiFKRUBV21qFUG21kqRSmuhOQO0XuXp6ukNWtDZNkKNdsff62ZzuVSMpmkSbRBsIEFoCILSVQImCFAQ0c1y/wX6TnkM6FTmgg2RcPdX9pItW9yTIdlqvfe78wR9bNw+LREWbQJsgvbi6++xHsl02tFldNUnWIiu0oRqhrYmZDdpYktCWTZYaEUR2r7+y/uf7so602rKSpppIsyTne/ePVz+X7SKHyA5t7l3ffPx/PPnQ+0sSWRGpQiWAuri3XV5L1jP37ce+GtB2S9piokWTnO/O280dkqysVCVpOgrSWcdx1On6/NL/efmH/gyrXUmQJGgrOkSOnK7m8v56/HDpngStzGm7N61kWJFKJUloD1rpNo4l+/7gak7nfVVUEmhXlwRg5val19brN8kco4SANgQsT069PWwj3U7Xpg2VFlOoiRTO3YZGsEuwnjx88Nve+czv//N3T15f6TBNk2XTGWddku36qZuf/def/pl/xjOOZavVBl1QJdpMiaNrxLbLJE1JpkUDkDFbevbk4eXb3vH0H/rB3N6RIm1bqGIltssHr/3UP3z9gz+WJrVnAuvcB0/fvPXrb19/fdISaZcsAaSzPXhTn3rBsRLTs1gjhWpjJG3jGFqmbUqoASuhKaRVmNCjF1d3v+lr1/mO1jLt2jjkiFTI6erZXH9Ze145mezbtkHi6Hr8MDevJ0AGKgU02e+t4w4tKtNWK0KatiKqoAUCUAAEiVZpJdaR20c9n6XTtgsJqkmysD103Kokmn0SraIJsBATKaEV07ZdTYOqIJVAiwZVEoQkaRoNjWpEBUBAhlYQtCpJFISoIa0ATTIpkmDRJk0CpHIUNkIaBQgUpQhAIiFVCpa0sYA2SCApVEmPFEhJl1WApjSqAIVp0NAOk0gnNrSN0aE0DBQ0qCoiIUAbhaq0dDSpadJQaCVtUwQIibK0NQZoo8MUCQkp7W4tgMXSxJKGNm3AamgUUWQFJNq2SVaIVFsqoiBEVlRDgLZBYIGtaYmYWDQlE6rStgAky5quEoBESwsRohCaNiiqQoQI2gIUSVCiAYBAkgIUIbQIWkTaklYFtSigLdUdULGREkELVJA2Ie00AgTtigBRS6Joq5EW1UYkbcNqgdKwCkmjAW2RaYNY0q4RbYWk6ci+UiGagwXKSsowLZq0jSxZBQUoEqSVUJRAGCRtpgEUJcqUSgERSdtotEHbWpGJQhU02bsKLZtsaJACXWVajSgkEiKsHalqC20S0RZ0go622EK7gJYYTJJIJAcaslARSbWSYmunGjNtVnegqzPbfnHZ4zJbdKpaghFV3S8fnLeTJJmL681pzwpECgACZS4uz8oWoqiSCGi1Lk/bdtZmZru+3p/cagsQra4WNXNxSg5tE7FD9er+za/+wvEjf7o9R9ITrcVoSXXYcnF+6Vcuru9/8fH6gz/02V3XCj0iM1urWV0FrY7T2Wk5tCRHYJaRUknqcvLhX7u79+DB8WufePRP/mzPZ2s1aXR1LFkFqybb+txH5t5lb1eTXSJmuzi//Om7z3wELUvIAAqCxfVpv3zm9vb8kx/4Na0UIKCAFbO5um/GzUN3txIIgECqtJfX9y+u7h0PX3n48/++pBpAgKGgcnU/F/emj6b2ohzneerZ7S1f156jRSMrlrYlYXO67Jc+fbz6uVxcP/v1377PmEk2VaIokszm5vHjT/3iOj+5+sq3zzNffqxziKDQUJBsd5/55btXP7tdPbu/9bc7Gm0bU4FoGyTddq98yuu/vmKlexW5fTRf/Vy+4/vXkxtDDm2rUjBWy4Nn95//0bsX/uHFs7/pmT/+97Nfr3WQVBWIrLBf3vvCJ2//znfdPn7p4nd/39U3/pHbx68gghJK2sp+9eDJj/65u/f/y/zGd6zv/Bu5fURRaYUSSqr3rk8//fduP/wf2Rp7AOnhdh09brtApZWswNDV3t7uh61pHE+erKTOSbQECc3SdXFst0+6JHO+u729edibh6oNkbZJaCtrJscatL27Oc7nKqFpVQklne202iXRpNkpGtOmbQsxIVaaCohSaSOsHmuqWJmVTrUkM42WipA2bTVE6ihJaq0pk5SsMGRFtdKibZC2jeYcBxthRXcFFZllEdVUJUpboBBJ0zYitBFrk4bSCkmE0k6CrEHTEqokVShttc1qW4WAggSkkTSpadOOjsBCIKVKCQipBApNEhBSSSlJJwmrLVg100GR0giCSqMCbSkUipAkSUDQQbNoqexpFegRVFKVpARJiyZoV1UikJIuDRHRrmRJWXIwqbQJFqEoCUyiLUEsmhIBgIJowCLHRLofKkKCEhWKKEFSqlZTSdoCjcgUaiUSRENiElWJVgCtRCvRIslkIEfTpMoaU6GSAO1aQovErC5U05kGpSEQQlnRAlpBpQqkshLQ6BCSTpSmKgxIEiQBBCA5otpAqgCloDHbtiKLZi4vTloznjyEQKFolAYmAQCBQOughCkEqClEBA2h1VIFDRogEYEYUqBptaFy3D6JtOv+9fV87dvfbq3sl+ulj+X1l7pdVqJZVWppV2c1KgC0GkTCMJRq2tWuqqy2kgLRKkHbFpGWdi1d3SRJyNJFazWVZsqctpsv9nMvzn7qze073vH2eefveed+cXFO+vCl7ef/zeni1NO9NElIJMkIUxNDQBKqaGJb1VqtkCWA0FjZmmm6Ypllmk22JYdtdWtWAufJyqzkmKzJmqxJzYq1X+7Xb5gP/of1yv/rdiH7u971rv2rv+Zrfu+7vuPH/9OPPf3GNx8f+Ym4u/c737Pe8Gwz7cQ52goh+2Q0Msnl9Wm7n54ng65DyNSsrG273Perha49czpta0+0ZCVNRhOU0z7nLjX7tl3c00dtktAWtWW18+il7b//09sPv2+799Rrr3zxm7/5G7/lW35X2r744ovPPff864+fXD91vW4fbpdvyhvfku0CHEoLbSbr4RfOX/q17erB5Vd8U7q3qyptA2nKhG1uHz363x9wfnLx5rduD97cdcjRNmvS2NJCyGw3v/7J40u/7uqZ/Y1vyfmWJEFZmqTntV779PHo5e3e07dPHjmO//yTP/n888+nLd73vvd+93d/z+sPHz71zJuj63yTnpOsDMmChpxnLrpd6tmT13VInVeSBOhaA8zM5f2Y4/xkrXMS0lYhEwCwXWTbrJW7G0ESaFsQ6X6qefjF1+5dnH7kR374e7/3PdC2bdsPfOAD73znO+d0kpjNbGYzm9lkzGbbbbvZZDNjxmy2zbbbd9tmNtvYNjNms222zbbZNttmxowZMzK2zbbZNttm22y7bTOb2cxmNttm2227bbftZkNOp+eff+79L7zQtm3btAWAD37wF/7r+//rx37lYy2VIBAlQK00UlVIVGMIAYBBuqyWTkJXII0godBE2qIIaaRdZbJ95Vf81uee+7Zv/MZvBoD/DyChWZsA3b65AAAAAElFTkSuQmCC"
@@ -211,6 +211,623 @@ def _error(message):
 def _critical(message):
     logger.critical(f"{str(message)}")
 
+# --- Undo/Redo Framework Classes ------------------------------------------------------------------------------
+class ICommand:
+    """An interface for an undoable action."""
+    def __init__(self, description=""):
+        self.description = description # For potential UI hints, e.g., "Undo Paint Pixel"
+
+    def execute(self):
+        # Applies the command's action.
+        raise NotImplementedError
+
+    def undo(self):
+        # Reverts the command's action.
+        raise NotImplementedError
+
+class UndoManager:
+    """Manages the undo and redo stacks for the application."""
+    def __init__(self, app_ref):
+        self.app_ref = app_ref
+        self.undo_stack = []
+        self.redo_stack = []
+
+    def register(self, command):
+        """Registers a command that has already been executed."""
+        _debug("[UndoManager.register] Registering command.")
+        self.undo_stack.append(command)
+        self.redo_stack.clear()
+        self.app_ref._update_edit_menu_state()
+
+    def execute(self, command):
+        """Executes a new command and registers it for undo."""
+        _debug(f"[UndoManager.execute] Executing command: {command.description}")
+        command.execute()
+        self.register(command)
+        self.app_ref.update_all_displays(changed_level="all")
+
+    def undo(self):
+        if not self.undo_stack:
+            _debug("[UndoManager.undo] Stack empty.")
+            return
+        command = self.undo_stack.pop()
+        _debug(f"[UndoManager.undo] Undoing command: {command.description}")
+        command.undo()
+        self.redo_stack.append(command)
+        _debug("[UndoManager.undo] Redrawing screen.")
+        self.app_ref.update_all_displays(changed_level="all")
+        self.app_ref._update_edit_menu_state()
+
+    def redo(self):
+        if not self.redo_stack:
+            _debug("[UndoManager.redo] Stack empty.")
+            return
+        command = self.redo_stack.pop()
+        _debug(f"[UndoManager.redo] Redoing command: {command.description}")
+        command.execute()
+        self.undo_stack.append(command)
+        _debug("[UndoManager.redo] Redrawing screen.")
+        self.app_ref.update_all_displays(changed_level="all")
+        self.app_ref._update_edit_menu_state()
+        
+    def clear(self):
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+        self.app_ref._update_edit_menu_state()
+
+    def can_undo(self):
+        return bool(self.undo_stack)
+
+    def can_redo(self):
+        return bool(self.redo_stack)
+
+class PaintPixelCommand(ICommand):
+    """Command for a single pixel paint action in the Tile Editor."""
+    def __init__(self, app_ref, tile_index, r, c, new_value):
+        super().__init__("Paint Pixel")
+        self.app_ref = app_ref
+        self.tile_index = tile_index
+        self.r, self.c = r, c
+        self.new_value = new_value
+        self.old_value = tileset_patterns[tile_index][r][c]
+        _debug(f"[PaintPixelCommand CREATED] Tile {self.tile_index} ({self.r},{self.c}). Old->New: {self.old_value}->{self.new_value}")
+
+    def _apply_and_update(self, value):
+        _debug(f"  [_apply_and_update] Setting pixel ({self.r},{self.c}) to {value}")
+        tileset_patterns[self.tile_index][self.r][self.c] = value
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_tile_cache(self.tile_index)
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        _debug(f"  -> EXECUTE PaintPixelCommand for Tile {self.tile_index} ({self.r},{self.c})")
+        self._apply_and_update(self.new_value)
+
+    def undo(self):
+        _debug(f"  <- UNDO PaintPixelCommand for Tile {self.tile_index} ({self.r},{self.c})")
+        self._apply_and_update(self.old_value)
+
+class SetRowColorCommand(ICommand):
+    """Command to set the foreground or background color of a tile row."""
+    def __init__(self, app_ref, tile_index, row, fg_or_bg, new_color_index):
+        super().__init__("Set Row Color")
+        self.app_ref = app_ref
+        self.tile_index = tile_index
+        self.row = row
+        self.fg_or_bg = fg_or_bg
+        self.new_color_index = new_color_index
+        self.old_colors = tileset_colors[tile_index][row]
+
+    def _apply_and_update(self, colors_tuple):
+        tileset_colors[self.tile_index][self.row] = colors_tuple
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_tile_cache(self.tile_index)
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        current_fg, current_bg = self.old_colors
+        new_colors_tuple = (self.new_color_index, current_bg) if self.fg_or_bg == "fg" else (current_fg, self.new_color_index)
+        self._apply_and_update(new_colors_tuple)
+
+    def undo(self):
+        self._apply_and_update(self.old_colors)
+
+class PlaceTileInSupertileCommand(ICommand):
+    """Command to place a single tile in a supertile definition."""
+    def __init__(self, app_ref, st_index, r, c, new_tile_index):
+        super().__init__("Place Tile")
+        self.app_ref = app_ref
+        self.st_index = st_index
+        self.r, self.c = r, c
+        self.new_tile_index = new_tile_index
+        self.old_tile_index = supertiles_data[st_index][r][c]
+        _debug(f"[PlaceTileInSupertileCommand CREATED] ST {self.st_index} ({self.r},{self.c}). Old->New: {self.old_tile_index}->{self.new_tile_index}")
+
+
+    def _apply_and_update(self, value):
+        _debug(f"  [_apply_and_update] Setting ST {self.st_index} pixel ({self.r},{self.c}) to {value}")
+        supertiles_data[self.st_index][self.r][self.c] = value
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_supertile_cache(self.st_index)
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        _debug(f"  -> EXECUTE PlaceTileInSupertileCommand for ST {self.st_index} ({self.r},{self.c})")
+        self._apply_and_update(self.new_tile_index)
+
+    def undo(self):
+        _debug(f"  <- UNDO PlaceTileInSupertileCommand for ST {self.st_index} ({self.r},{self.c})")
+        self._apply_and_update(self.old_tile_index)
+
+class PaintMapCellCommand(ICommand):
+    """Command to paint a single supertile onto the map."""
+    def __init__(self, app_ref, r, c, new_st_index):
+        super().__init__("Paint Map")
+        self.app_ref = app_ref
+        self.r, self.c = r, c
+        self.new_st_index = new_st_index
+        self.old_st_index = map_data[r][c]
+
+    def _apply_and_update(self, value):
+        map_data[self.r][self.c] = value
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        self._apply_and_update(self.new_st_index)
+
+    def undo(self):
+        self._apply_and_update(self.old_st_index)
+
+class CompositeCommand(ICommand):
+    """A command that groups multiple commands into a single undoable action."""
+    def __init__(self, description, commands_list, app_ref=None, post_hooks=None):
+        super().__init__(description)
+        self.commands = commands_list
+        self.app_ref = app_ref
+        # Always take a copy, and expect the argument to be a list.
+        self.post_hooks = list(post_hooks) if post_hooks else []
+
+    def execute(self):
+        for cmd in self.commands:
+            cmd.execute()
+        if self.app_ref:
+            for func in self.post_hooks:
+                func()
+
+    def undo(self):
+        for cmd in reversed(self.commands):
+            cmd.undo()
+        if self.app_ref:
+            # For undo, we execute the same hooks.
+            for func in self.post_hooks:
+                func()
+
+class ClearTileCommand(ICommand):
+    """Command to clear a single tile's pattern and color data."""
+    def __init__(self, app_ref, tile_index):
+        super().__init__("Clear Tile")
+        self.app_ref = app_ref
+        self.tile_index = tile_index
+        self.old_pattern = copy.deepcopy(tileset_patterns[self.tile_index])
+        self.old_colors = copy.deepcopy(tileset_colors[self.tile_index])
+
+    def execute(self):
+        tileset_patterns[self.tile_index] = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+        tileset_colors[self.tile_index] = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
+        self._apply_side_effects()
+
+    def undo(self):
+        tileset_patterns[self.tile_index] = copy.deepcopy(self.old_pattern)
+        tileset_colors[self.tile_index] = copy.deepcopy(self.old_colors)
+        self._apply_side_effects()
+    
+    def _apply_side_effects(self):
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_tile_cache(self.tile_index)
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+class ClearSupertileCommand(ICommand):
+    """Command to clear a single supertile's definition."""
+    def __init__(self, app_ref, supertile_index):
+        super().__init__("Clear Supertile")
+        self.app_ref = app_ref
+        self.supertile_index = supertile_index
+        self.old_definition = copy.deepcopy(supertiles_data[self.supertile_index])
+
+    def execute(self):
+        supertiles_data[self.supertile_index] = [
+            [0 for _c in range(self.app_ref.supertile_grid_width)] for _r in range(self.app_ref.supertile_grid_height)
+        ]
+        self._apply_side_effects()
+
+    def undo(self):
+        supertiles_data[self.supertile_index] = copy.deepcopy(self.old_definition)
+        self._apply_side_effects()
+        
+    def _apply_side_effects(self):
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_supertile_cache(self.supertile_index)
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+class ClearMapCommand(ICommand):
+    """Command to clear the entire map."""
+    def __init__(self, app_ref):
+        super().__init__("Clear Map")
+        self.app_ref = app_ref
+        self.old_map_data = copy.deepcopy(map_data)
+
+    def execute(self):
+        global map_data, map_width, map_height
+        map_data = [[0 for _ in range(map_width)] for _ in range(map_height)]
+        self._apply_side_effects()
+
+    def undo(self):
+        global map_data
+        map_data = copy.deepcopy(self.old_map_data)
+        self._apply_side_effects()
+
+    def _apply_side_effects(self):
+        self.app_ref._mark_project_modified()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_supertile_usage_refresh()
+
+class TransformCommand(ICommand):
+    """A general command for any transformation on a single data item."""
+    def __init__(self, description, app_ref, data_list, index, invalidate_func):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.data_list = data_list
+        self.index = index
+        self.invalidate_func = invalidate_func
+        self.old_data = copy.deepcopy(self.data_list[self.index])
+        self.new_data = None
+
+    def execute(self):
+        if self.new_data is not None:
+            self.data_list[self.index] = copy.deepcopy(self.new_data)
+        self._apply_side_effects()
+
+    def undo(self):
+        self.data_list[self.index] = copy.deepcopy(self.old_data)
+        self._apply_side_effects()
+    
+    def capture_new_state(self):
+        self.new_data = copy.deepcopy(self.data_list[self.index])
+
+    def _apply_side_effects(self):
+        self.app_ref._mark_project_modified()
+        self.invalidate_func(self.index)
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+class SetPaletteColorCommand(ICommand):
+    """Command to change a single color in the active palette."""
+    def __init__(self, app_ref, slot_index, new_hex_color):
+        super().__init__("Set Palette Color")
+        self.app_ref = app_ref
+        self.slot_index = slot_index
+        self.new_hex = new_hex_color
+        self.old_hex = self.app_ref.active_msx_palette[slot_index]
+    
+    def _apply_and_update(self, hex_color):
+        self.app_ref.active_msx_palette[self.slot_index] = hex_color
+        self.app_ref._mark_project_modified()
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        self._apply_and_update(self.new_hex)
+    
+    def undo(self):
+        self._apply_and_update(self.old_hex)
+
+class SetDataCommand(ICommand):
+    """Generic command to replace a complete data structure."""
+    def __init__(self, description, app_ref, data_setter, new_data, old_data):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.setter = data_setter
+        self.new_data = new_data
+        self.old_data = old_data
+
+    def execute(self):
+        self.setter(copy.deepcopy(self.new_data))
+        self.app_ref._mark_project_modified()
+        
+    def undo(self):
+        self.setter(copy.deepcopy(self.old_data))
+        self.app_ref._mark_project_modified()
+
+class ModifyListCommand(ICommand):
+    """Command to handle insertion or deletion from lists."""
+    def __init__(self, description, list_obj, index, value=None, is_insert=True):
+        super().__init__(description)
+        self.list_obj = list_obj
+        self.index = index
+        self.value = value
+        self.is_insert = is_insert
+
+    def execute(self):
+        if self.is_insert:
+            self.list_obj.insert(self.index, self.value)
+        else:
+            self.value = self.list_obj.pop(self.index)
+
+    def undo(self):
+        if self.is_insert:
+            self.list_obj.pop(self.index)
+        else:
+            self.list_obj.insert(self.index, self.value)
+
+class ReplaceRefsCommand(ICommand):
+    """Command to replace all references of one item with another."""
+    def __init__(self, description, app_ref, item_type, source_index, target_index):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.item_type = item_type
+        self.source_index = source_index
+        self.target_index = target_index
+        
+        if self.item_type == "palette_color":
+            self.old_data = copy.deepcopy(tileset_colors)
+        elif self.item_type == "tile":
+            self.old_data = copy.deepcopy(supertiles_data)
+        elif self.item_type == "supertile":
+            self.old_data = copy.deepcopy(map_data)
+
+    def execute(self):
+        self.app_ref._mark_project_modified()
+        if self.item_type == "palette_color":
+            for tile_color_def in tileset_colors:
+                for i, (fg, bg) in enumerate(tile_color_def):
+                    new_fg, new_bg = fg, bg
+                    if fg == self.target_index: new_fg = self.source_index
+                    if bg == self.target_index: new_bg = self.source_index
+                    if (new_fg, new_bg) != (fg, bg):
+                        tile_color_def[i] = (new_fg, new_bg)
+            self.app_ref._apply_palette_change_updates()
+        elif self.item_type == "tile":
+            for st_def in supertiles_data:
+                for r in range(len(st_def)):
+                    for c in range(len(st_def[r])):
+                        if st_def[r][c] == self.target_index:
+                            st_def[r][c] = self.source_index
+            self.app_ref.clear_all_caches()
+            self.app_ref.invalidate_minimap_background_cache()
+            self.app_ref._request_tile_usage_refresh()
+            self.app_ref._request_supertile_usage_refresh()
+        elif self.item_type == "supertile":
+            for r in range(len(map_data)):
+                for c in range(len(map_data[r])):
+                    if map_data[r][c] == self.target_index:
+                        map_data[r][c] = self.source_index
+            self.app_ref.clear_all_caches()
+            self.app_ref.invalidate_minimap_background_cache()
+            self.app_ref._request_supertile_usage_refresh()
+
+    def undo(self):
+        self.app_ref._mark_project_modified()
+        if self.item_type == "palette_color":
+            global tileset_colors
+            tileset_colors = copy.deepcopy(self.old_data)
+            self.app_ref._apply_palette_change_updates()
+        elif self.item_type == "tile":
+            global supertiles_data
+            supertiles_data = copy.deepcopy(self.old_data)
+            self.app_ref.clear_all_caches()
+            self.app_ref.invalidate_minimap_background_cache()
+            self.app_ref._request_tile_usage_refresh()
+            self.app_ref._request_supertile_usage_refresh()
+        elif self.item_type == "supertile":
+            global map_data
+            map_data = copy.deepcopy(self.old_data)
+            self.app_ref.clear_all_caches()
+            self.app_ref.invalidate_minimap_background_cache()
+            self.app_ref._request_supertile_usage_refresh()
+
+class UpdateSupertileRefsForTileCommand(ICommand):
+    """ An optimized command to update supertile definitions when a tile is
+    inserted or deleted. It only operates on the active slice of supertiles. """
+    def __init__(self, description, app_ref, tile_index, is_insert):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.tile_index = tile_index
+        self.is_insert = is_insert
+        # No need to store old_data, as the operations are perfectly reversible.
+
+    def _process_refs(self, is_forward):
+        # is_forward = True for execute, False for undo
+        active_slice = supertiles_data[:num_supertiles]
+        
+        if (self.is_insert and is_forward) or (not self.is_insert and not is_forward):
+            # This is an INSERT action
+            for st_def in active_slice:
+                for r in range(len(st_def)):
+                    for c in range(len(st_def[r])):
+                        if st_def[r][c] >= self.tile_index:
+                            st_def[r][c] += 1
+        else:
+            # This is a DELETE action
+            for st_def in active_slice:
+                for r in range(len(st_def)):
+                    for c in range(len(st_def[r])):
+                        if st_def[r][c] == self.tile_index:
+                            st_def[r][c] = 0
+                        elif st_def[r][c] > self.tile_index:
+                            st_def[r][c] -= 1
+
+    def execute(self):
+        self._process_refs(is_forward=True)
+
+    def undo(self):
+        self._process_refs(is_forward=False)
+
+class ReorderListCommand(ICommand):
+    """Command to handle reordering or swapping items in a list."""
+    def __init__(self, description, list_obj, source_index, target_index, is_swap=False):
+        super().__init__(description)
+        self.list_obj = list_obj
+        self.source_index = source_index
+        self.target_index = target_index
+        self.is_swap = is_swap
+        self.moved_item = None # To store item during move
+
+    def execute(self):
+        if self.is_swap:
+            # Swap the items at the two indices
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # It's a move (reposition)
+            # Remove item from its original position and store it
+            self.moved_item = self.list_obj.pop(self.source_index)
+            # Insert the item at the new target position
+            self.list_obj.insert(self.target_index, self.moved_item)
+
+    def undo(self):
+        if self.is_swap:
+            # A swap is its own inverse
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # Undo a move
+            # Remove the item from its new position
+            item_to_move_back = self.list_obj.pop(self.target_index)
+            # Re-insert it at its original source position
+            self.list_obj.insert(self.source_index, item_to_move_back)
+
+class ReorderListCommand(ICommand):
+    """Command to handle reordering or swapping items in a list."""
+    def __init__(self, description, list_obj, source_index, target_index, is_swap=False):
+        super().__init__(description)
+        self.list_obj = list_obj
+        self.source_index = source_index
+        self.target_index = target_index
+        self.is_swap = is_swap
+        self.moved_item = None # To store item during move
+
+    def execute(self):
+        if self.is_swap:
+            # Swap the items at the two indices
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # It's a move (reposition)
+            # Remove item from its original position and store it
+            self.moved_item = self.list_obj.pop(self.source_index)
+            # Insert the item at the new target position
+            self.list_obj.insert(self.target_index, self.moved_item)
+
+    def undo(self):
+        if self.is_swap:
+            # A swap is its own inverse
+            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
+                self.list_obj[self.target_index], self.list_obj[self.source_index]
+        else: # Undo a move
+            # Remove the item from its new position
+            item_to_move_back = self.list_obj.pop(self.target_index)
+            # Re-insert it at its original source position
+            self.list_obj.insert(self.source_index, item_to_move_back)
+
+class UpdateSupertileRefsForTileReorderCommand(ICommand):
+    """An optimized command to update supertile definitions when a tile is moved."""
+    def __init__(self, description, app_ref, source_index, actual_insert_idx):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.source_index = source_index
+        self.actual_insert_idx = actual_insert_idx
+
+    def _process_refs(self, is_undo):
+        active_slice = supertiles_data[:num_supertiles]
+        source, target = (self.actual_insert_idx, self.source_index) if is_undo else (self.source_index, self.actual_insert_idx)
+
+        for st_def in active_slice:
+            for r in range(len(st_def)):
+                for c in range(len(st_def[r])):
+                    val = st_def[r][c]
+                    if val == source: st_def[r][c] = target
+                    elif source < target: # Moved down
+                        if source < val <= target: st_def[r][c] -= 1
+                    else: # Moved up
+                        if target <= val < source: st_def[r][c] += 1
+        self._apply_side_effects()
+
+    def execute(self):
+        self._process_refs(is_undo=False)
+
+    def undo(self):
+        self._process_refs(is_undo=True)
+
+    def _apply_side_effects(self):
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+class UpdateSupertileRefsForTileSwapCommand(ICommand):
+    """An optimized command to update supertile definitions when two tiles are swapped."""
+    def __init__(self, description, app_ref, index_a, index_b):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.index_a = index_a
+        self.index_b = index_b
+
+    def _swap_logic(self):
+        active_slice = supertiles_data[:num_supertiles]
+        for st_def in active_slice:
+            for r in range(len(st_def)):
+                for c in range(len(st_def[r])):
+                    if st_def[r][c] == self.index_a: st_def[r][c] = self.index_b
+                    elif st_def[r][c] == self.index_b: st_def[r][c] = self.index_a
+        
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        self._swap_logic()
+
+    def undo(self):
+        self._swap_logic() # Swap is its own inverse
+
+class UpdateMapRefsForSupertileSwapCommand(ICommand):
+    """An optimized command to update map data when two supertiles are swapped."""
+    def __init__(self, description, app_ref, index_a, index_b):
+        super().__init__(description)
+        self.app_ref = app_ref
+        self.index_a = index_a
+        self.index_b = index_b
+
+    def _swap_logic(self):
+        for r in range(map_height):
+            for c in range(map_width):
+                if map_data[r][c] == self.index_a:
+                    map_data[r][c] = self.index_b
+                elif map_data[r][c] == self.index_b:
+                    map_data[r][c] = self.index_a
+        
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        self._swap_logic()
+
+    def undo(self):
+        self._swap_logic() # Swap is its own inverse
+
 # --- Usage Window Classes -----------------------------------------------------------------------------------------------
 class ColorUsageWindow(tk.Toplevel):
     def __init__(self, master_app):
@@ -225,9 +842,7 @@ class ColorUsageWindow(tk.Toplevel):
         self.current_sort_direction_is_asc = True   
         self.refresh_timer_id = None 
         self.style = ttk.Style()
-        # self.underline_font = None # This will be removed
 
-        # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
         saved_config = self.app_ref.get_window_config(self.window_class_name)
         initial_geometry = saved_config.get('geometry')
@@ -237,7 +852,6 @@ class ColorUsageWindow(tk.Toplevel):
         
         self.current_sort_column_id = initial_sort_col
         self.current_sort_direction_is_asc = initial_sort_asc
-        # --- End Load Config ---
 
         self._is_dragging_col_separator = False 
         self._treeview_refresh_timer_id = None 
@@ -672,9 +1286,7 @@ class TileUsageWindow(tk.Toplevel):
         self.current_sort_direction_is_asc = True   
         self.refresh_timer_id = None 
         self.style = ttk.Style()
-        # self.underline_font = None # This will be removed
 
-        # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
         saved_config = self.app_ref.get_window_config(self.window_class_name)
         initial_geometry = saved_config.get('geometry')
@@ -684,7 +1296,6 @@ class TileUsageWindow(tk.Toplevel):
 
         self.current_sort_column_id = initial_sort_col
         self.current_sort_direction_is_asc = initial_sort_asc
-        # --- End Load Config ---
 
         self._is_dragging_col_separator = False 
         self._treeview_refresh_timer_id = None
@@ -1117,7 +1728,6 @@ class SupertileUsageWindow(tk.Toplevel):
         self.refresh_timer_id = None
         # self.underline_font = None # This is now removed
         
-        # --- Load saved configuration for this window ---
         self.window_class_name = self.__class__.__name__
         saved_config = self.app_ref.get_window_config(self.window_class_name)
         initial_geometry = saved_config.get('geometry')
@@ -1127,7 +1737,6 @@ class SupertileUsageWindow(tk.Toplevel):
         
         self.current_sort_column_id = initial_sort_col_data_key # Store the data key for sorting logic
         self.current_sort_direction_is_asc = initial_sort_asc
-        # --- End Load Config ---
         
         self._is_dragging_col_separator = False
         self._col0_width_at_drag_start = 0 # For image column specifically
@@ -2101,10 +2710,12 @@ class TileEditorApp:
             _error(f"Failed to set application icon: {e}")
     
         # --- All instance attributes are initialized first ---
+        self.undo_manager = UndoManager(self)
         self.current_project_base_path = None
         self.project_modified = False
         self.scroll_speed_units = 3 
         self.is_currently_painting_tile = False
+        self.pending_command_list = []
         self.is_changing_projects = False
 
         self.config_app_name = "MSXTileForge" 
@@ -2590,6 +3201,19 @@ class TileEditorApp:
         )
         self.edit_menu.add_separator()
         self.edit_menu.add_command(
+            label="Undo",
+            command=self.undo_manager.undo,
+            state=tk.DISABLED,
+            accelerator="Ctrl+Z"
+        )
+        self.edit_menu.add_command(
+            label="Redo",
+            command=self.undo_manager.redo,
+            state=tk.DISABLED,
+            accelerator="Ctrl+Y"
+        )
+        self.edit_menu.add_separator()
+        self.edit_menu.add_command(
             label="Clear Current Tile", command=self.clear_current_tile
         )
         self.edit_menu.add_command(
@@ -2695,12 +3319,9 @@ class TileEditorApp:
         self.selected_slot_rgb_label = ttk.Label(info_frame, text="RGB: #000000")
         self.selected_slot_rgb_label.grid(row=1, column=1, padx=(0, 5), sticky="nw")
         
-        # This label now exists but we are removing its local font creation logic.
         self.selected_color_usage_label = tk.Label(info_frame, text="Usage: N/A", anchor="w", justify=tk.LEFT)
         self.selected_color_usage_label.grid(row=2, column=1, padx=(0, 5), sticky="nw")
         self.selected_color_usage_label.bind("<Button-1>", self._handle_usage_label_click)
-        # The font objects 'self.usage_label_normal_font' and 'self.usage_label_link_font'
-        # will now be removed from this method, as we will use self.normal_font and self.link_font from the app instance.
         
         info_frame.grid_rowconfigure(0, weight=1)
         info_frame.grid_rowconfigure(1, weight=1)
@@ -3404,7 +4025,6 @@ class TileEditorApp:
         canvas.unbind("<MouseWheel>")
         canvas.unbind("<Button-4>")
         canvas.unbind("<Button-5>")
-        # --- End Unbind ---
 
         # --- Mouse Button 1 (Primary) - Checks Shift/Ctrl internally ---
         canvas.bind("<Button-1>", self.handle_map_click_or_drag_start)
@@ -3724,6 +4344,7 @@ class TileEditorApp:
     def draw_tileset_viewer(self, canvas, highlighted_tile_index):
         """Draws tileset viewer, highlighting selected, dragged, or unused tile."""
         _debug(f"\n--- DRAW: draw_tileset_viewer called for canvas {canvas._name}.")
+        _debug(f"\n--- DRAW: draw_tileset_viewer called. Drawing {num_tiles_in_set} tiles.")
         _debug(f"--- DRAW: AT THIS MOMENT, self.marked_unused_tiles is: {self.marked_unused_tiles}")
 
         is_dragging_tile = self.drag_active and self.drag_item_type == "tile"
@@ -4304,16 +4925,14 @@ class TileEditorApp:
         canvas = self.msx2_picker_canvas
         size = MSX2_PICKER_SQUARE_SIZE
         padding = 1
-        cols = MSX2_PICKER_COLS # Should be 32 as per MSX2_PICKER_COLS
+        cols = MSX2_PICKER_COLS
 
-        # Convert event coordinates to canvas coordinates (handles scrolling)
         canvas_x = canvas.canvasx(event.x)
         canvas_y = canvas.canvasy(event.y)
 
         col = int(canvas_x // (size + padding))
         row = int(canvas_y // (size + padding))
         
-        # Validate calculated col and row against picker dimensions
         if not (0 <= col < MSX2_PICKER_COLS and 0 <= row < MSX2_PICKER_ROWS):
             _debug("512 Picker click outside valid grid.")
             return
@@ -4325,20 +4944,8 @@ class TileEditorApp:
             target_slot_in_active_palette = self.selected_palette_slot
 
             if self.active_msx_palette[target_slot_in_active_palette] != new_color_hex:
-                if self._clear_marked_unused(trigger_redraw=False):
-                    pass # Redraw will be handled by update_all_displays
-                
-                self._mark_project_modified()
-                self.active_msx_palette[target_slot_in_active_palette] = new_color_hex
-                _debug(f"Set Active Palette Slot {target_slot_in_active_palette} to {new_color_hex} from 512 picker.")
-                
-                self.clear_all_caches() # Palette change affects all rendered items
-                self.invalidate_minimap_background_cache()
-                self.update_all_displays(changed_level="all") # "all" because palette affects everything
-                
-                self._request_color_usage_refresh()
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
+                command = SetPaletteColorCommand(self, target_slot_in_active_palette, new_color_hex)
+                self.undo_manager.execute(command)
         else:
             _debug(f"512 Picker clicked_index {clicked_index_in_512_palette} out of 0-511 range.")
 
@@ -4351,7 +4958,7 @@ class TileEditorApp:
             g_val_str = self.rgb_g_var.get()
             b_val_str = self.rgb_b_var.get()
 
-            if not (r_val_str and g_val_str and b_val_str): # Check for empty strings
+            if not (r_val_str and g_val_str and b_val_str):
                 raise ValueError("RGB values cannot be empty.")
 
             r_val = int(r_val_str) 
@@ -4365,24 +4972,12 @@ class TileEditorApp:
             target_slot_in_active_palette = self.selected_palette_slot
             
             if self.active_msx_palette[target_slot_in_active_palette] != new_color_hex:
-                if self._clear_marked_unused(trigger_redraw=False):
-                    pass
-                
-                self._mark_project_modified()
-                self.active_msx_palette[target_slot_in_active_palette] = new_color_hex
-                _debug(f"Set Active Palette Slot {target_slot_in_active_palette} to {new_color_hex} via RGB input.")
-                
-                self.clear_all_caches()
-                self.invalidate_minimap_background_cache()
-                self.update_all_displays(changed_level="all") 
-                
-                self._request_color_usage_refresh()
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
+                command = SetPaletteColorCommand(self, target_slot_in_active_palette, new_color_hex)
+                self.undo_manager.execute(command)
 
         except ValueError as e:
             messagebox.showerror("Invalid RGB Input", f"{e}", parent=self.root)
-        except Exception as e_unexp: # Catch any other unexpected errors
+        except Exception as e_unexp:
             messagebox.showerror("Error Applying RGB", f"An unexpected error occurred: {e_unexp}", parent=self.root)
             _error(f" Unexpected error in handle_rgb_apply: {e_unexp}")
 
@@ -4393,41 +4988,45 @@ class TileEditorApp:
             parent=self.root
         )
         if confirm:
-            new_default_palette_hex = [] # Renamed for clarity
+            new_default_palette_hex = []
             for r_val, g_val, b_val in MSX2_RGB7_VALUES: 
                 new_default_palette_hex.append(self._rgb7_to_hex(r_val, g_val, b_val))
-            
+        
             if self.active_msx_palette != new_default_palette_hex:
-                if self._clear_marked_unused(trigger_redraw=False):
-                    pass
+                
+                # The setter should modify the list's contents, not replace the list object itself.
+                def palette_setter(palette_data):
+                    global selected_color_index
+                    self.active_msx_palette[:] = palette_data
+                    self.selected_palette_slot = 0
+                    selected_color_index = WHITE_IDX
+                    # These side-effects are still needed here because they are
+                    # specific to this high-level "reset" action.
+                    self.clear_all_caches()
+                    self.invalidate_minimap_background_cache()
+                    self._request_color_usage_refresh()
+                    self._request_tile_usage_refresh()
+                    self._request_supertile_usage_refresh()
 
-                self._mark_project_modified()
-                self.active_msx_palette = list(new_default_palette_hex) # Ensure it's a new list copy
-                self.selected_palette_slot = 0 # Reset selection in palette editor
-                
-                global selected_color_index # Access global for tile editor palette
-                selected_color_index = WHITE_IDX # Reset tile editor's color selection
-                
-                self.clear_all_caches()
-                self.invalidate_minimap_background_cache()
-                self.update_all_displays(changed_level="all") # "all" due to palette change
-                
-                self._request_color_usage_refresh()
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
-                
+                command = SetDataCommand(
+                    "Reset Palette",
+                    self,
+                    palette_setter,
+                    new_default_palette_hex,
+                    list(self.active_msx_palette) # Pass a copy of the old data
+                )
+                self.undo_manager.execute(command)
                 _debug("Palette reset to MSX2 defaults.")
             else:
                 _debug("Palette is already set to MSX2 defaults. No changes made.")
-                # No need to show info if no change, but could if desired.
-                # messagebox.showinfo("Palette Reset", "Palette is already the MSX2 default.", parent=self.root)
 
     # --- Tile Editor Handlers ---
     def handle_editor_click(self, event):
-        global last_drawn_pixel, current_tile_index, tileset_patterns
+        global last_drawn_pixel, current_tile_index
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
         
+        self.pending_command_list.clear()
         self.is_currently_painting_tile = True 
         c = event.x // EDITOR_PIXEL_SIZE
         r = event.y // EDITOR_PIXEL_SIZE
@@ -4441,15 +5040,15 @@ class TileEditorApp:
             pixel_value_to_set = 1 if event.num == 1 else 0
             
             if tileset_patterns[current_tile_index][r][c] != pixel_value_to_set:
-                self._mark_project_modified()
-                tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
-                self.invalidate_tile_cache(current_tile_index)
-                self.update_all_displays(changed_level="all")
+                command = PaintPixelCommand(self, current_tile_index, r, c, pixel_value_to_set)
+                command.execute() # Apply change immediately for visual feedback
+                self.pending_command_list.append(command)
+                self.update_all_displays(changed_level="tile_edit")
                 
             last_drawn_pixel = (r, c)
 
     def handle_editor_drag(self, event):
-        global last_drawn_pixel, current_tile_index, tileset_patterns
+        global last_drawn_pixel, current_tile_index
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
         
@@ -4459,23 +5058,24 @@ class TileEditorApp:
 
         if 0 <= r < TILE_HEIGHT and 0 <= c < TILE_WIDTH:
             if (r, c) != last_drawn_pixel:
+                # This critical bounds check is preserved.
                 if r >= len(tileset_patterns[current_tile_index]) or c >= len(tileset_patterns[current_tile_index][r]):
                     _debug(f"Editor drag out of pattern bounds for tile {current_tile_index} at {r},{c}")
                     last_drawn_pixel = (r, c)
                     return
 
                 pixel_value_to_set = -1
-                if event.state & 0x100:
+                if event.state & 0x100: # Left mouse button drag
                     pixel_value_to_set = 1
-                elif event.state & 0x400:
+                elif event.state & 0x400: # Right mouse button drag
                     pixel_value_to_set = 0
                 
                 if (pixel_value_to_set != -1 and
                     tileset_patterns[current_tile_index][r][c] != pixel_value_to_set):
                   
-                    self._mark_project_modified()
-                    tileset_patterns[current_tile_index][r][c] = pixel_value_to_set
-                    self.invalidate_tile_cache(current_tile_index)
+                    command = PaintPixelCommand(self, current_tile_index, r, c, pixel_value_to_set)
+                    command.execute() # Apply change immediately for visual feedback
+                    self.pending_command_list.append(command)
                     self.update_all_displays(changed_level="tile_edit")
 
                 last_drawn_pixel = (r, c)
@@ -4507,10 +5107,10 @@ class TileEditorApp:
             self.single_click_timer = self.root.after(250, lambda: select_color(clicked_index))
 
     def set_row_color(self, row, fg_or_bg):
-        global tileset_colors, current_tile_index, selected_color_index # Using globals
+        global tileset_colors, current_tile_index, selected_color_index
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
-        if not (0 <= selected_color_index < 16): # Validate selected palette index
+        if not (0 <= selected_color_index < 16):
             messagebox.showwarning("Set Row Color", "No valid color selected from palette.", parent=self.root)
             return
             
@@ -4523,25 +5123,13 @@ class TileEditorApp:
             changed = False
             
             if fg_or_bg == "fg" and current_fg_idx != selected_color_index:
-                tileset_colors[current_tile_index][row] = (selected_color_index, current_bg_idx)
                 changed = True
             elif fg_or_bg == "bg" and current_bg_idx != selected_color_index:
-                tileset_colors[current_tile_index][row] = (current_fg_idx, selected_color_index)
                 changed = True
             
             if changed:
-                self._mark_project_modified()
-                self.invalidate_tile_cache(current_tile_index) # This also invalidates dependent STs
-
-                if self.marked_unused_tiles or self.marked_unused_supertiles:
-                    self.update_all_displays(changed_level="all")
-                else:
-                    # A color change requires a 'tile' level update, not a 'live_edit' one
-                    self.update_all_displays(changed_level="tile_edit")
-                    
-                self._request_color_usage_refresh()
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
+                command = SetRowColorCommand(self, current_tile_index, row, fg_or_bg, selected_color_index)
+                self.undo_manager.execute(command)
 
     def handle_tileset_click(self, event):
         canvas = event.widget
@@ -4578,39 +5166,49 @@ class TileEditorApp:
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
 
+        command = TransformCommand("Flip Tile Horizontal", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+
+        # Original flip logic (modifies global state)
         current_pattern = tileset_patterns[current_tile_index]
         new_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
         for r in range(TILE_HEIGHT):
             new_pattern[r] = current_pattern[r][::-1]
         tileset_patterns[current_tile_index] = new_pattern
         
-        self.invalidate_tile_cache(current_tile_index)
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        print(f"Tile {current_tile_index} flipped horizontally.")
+        # Capture the result of the modification
+        command.capture_new_state()
+        self.undo_manager.execute(command)
 
     def flip_tile_vertical(self):
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
 
+        # Create a command for each data list that will be changed
+        pattern_command = TransformCommand("Flip Tile Vertical", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Flip Tile Vertical", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
+
+        # Original flip logic
         tileset_patterns[current_tile_index].reverse()
         tileset_colors[current_tile_index].reverse()
         
-        self.invalidate_tile_cache(current_tile_index)
-        self.update_all_displays(changed_level="all")
-        self._mark_project_modified()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        print(f"Tile {current_tile_index} flipped vertically.")
+        # Capture the new state for both commands
+        pattern_command.capture_new_state()
+        color_command.capture_new_state()
+        
+        # Group them into a single undoable action
+        composite_command = CompositeCommand("Flip Tile Vertical", [pattern_command, color_command])
+        self.undo_manager.execute(composite_command)
 
     def rotate_tile_90cw(self):
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set, WHITE_IDX, BLACK_IDX
         if not (0 <= current_tile_index < num_tiles_in_set):
             return
 
+        pattern_command = TransformCommand("Rotate Tile", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Rotate Tile", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
+
+        # Original rotate logic
         current_pattern = tileset_patterns[current_tile_index]
         new_pattern = [[0 for _ in range(TILE_WIDTH)] for _ in range(TILE_HEIGHT)]
         for r in range(TILE_HEIGHT):
@@ -4621,96 +5219,76 @@ class TileEditorApp:
             (WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)
         ]  
         
-        self._mark_project_modified()
+        pattern_command.capture_new_state()
+        color_command.capture_new_state()
+
+        composite_command = CompositeCommand("Rotate Tile", [pattern_command, color_command])
+        self.undo_manager.execute(composite_command)
+        
         messagebox.showinfo(
             "Rotation Complete", "Tile rotated.\nRow colors have been reset to default."
         )
-        self.invalidate_tile_cache(current_tile_index)
-        self.update_all_displays(changed_level="all")
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        print(f"Tile {current_tile_index} rotated 90 CW (colors reset).")
 
     def shift_tile_up(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set # Using globals
+        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-
         if not (len(tileset_patterns[current_tile_index]) == TILE_HEIGHT and 
                 len(tileset_colors[current_tile_index]) == TILE_HEIGHT):
             _error(f"Tile {current_tile_index} data is malformed. Cannot shift up.")
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
+        pattern_command = TransformCommand("Shift Tile Up", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Shift Tile Up", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
+
         current_pattern = tileset_patterns[current_tile_index]
         current_colors = tileset_colors[current_tile_index]
+        first_pattern_row = current_pattern.pop(0)
+        first_color_row = current_colors.pop(0)
+        current_pattern.append(first_pattern_row)
+        current_colors.append(first_color_row)
         
-        first_pattern_row = current_pattern[0][:]
-        first_color_row = current_colors[0]
-
-        for i in range(TILE_HEIGHT - 1):
-            current_pattern[i] = current_pattern[i + 1]
-            current_colors[i] = current_colors[i + 1]
+        pattern_command.capture_new_state()
+        color_command.capture_new_state()
         
-        current_pattern[TILE_HEIGHT - 1] = first_pattern_row
-        current_colors[TILE_HEIGHT - 1] = first_color_row
+        composite_command = CompositeCommand("Shift Tile Up", [pattern_command, color_command])
+        self.undo_manager.execute(composite_command)
         
-        self._mark_project_modified()
-        self.invalidate_tile_cache(current_tile_index)
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_color_usage_refresh()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        
-        _debug(f"Tile {current_tile_index} shifted up.")
-
     def shift_tile_down(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set # Using globals
+        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-        
         if not (len(tileset_patterns[current_tile_index]) == TILE_HEIGHT and 
                 len(tileset_colors[current_tile_index]) == TILE_HEIGHT):
             _error(f"Tile {current_tile_index} data is malformed. Cannot shift down.")
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
+        pattern_command = TransformCommand("Shift Tile Down", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+        color_command = TransformCommand("Shift Tile Down", self, tileset_colors, current_tile_index, self.invalidate_tile_cache)
+
         current_pattern = tileset_patterns[current_tile_index]
         current_colors = tileset_colors[current_tile_index]
+        last_pattern_row = current_pattern.pop(-1)
+        last_color_row = current_colors.pop(-1)
+        current_pattern.insert(0, last_pattern_row)
+        current_colors.insert(0, last_color_row)
         
-        last_pattern_row = current_pattern[TILE_HEIGHT - 1][:]
-        last_color_row = current_colors[TILE_HEIGHT - 1]
-
-        for i in range(TILE_HEIGHT - 1, 0, -1):
-            current_pattern[i] = current_pattern[i - 1]
-            current_colors[i] = current_colors[i - 1]
-            
-        current_pattern[0] = last_pattern_row
-        current_colors[0] = last_color_row
+        pattern_command.capture_new_state()
+        color_command.capture_new_state()
         
-        self._mark_project_modified()
-        self.invalidate_tile_cache(current_tile_index)
+        composite_command = CompositeCommand("Shift Tile Down", [pattern_command, color_command])
+        self.undo_manager.execute(composite_command)
         
-        self.update_all_displays(changed_level="all")
-            
-        self._request_color_usage_refresh() 
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        
-        _debug(f"Tile {current_tile_index} shifted down.")
-
     def shift_tile_left(self):
-        global tileset_patterns, current_tile_index, num_tiles_in_set # Using globals
+        global tileset_patterns, current_tile_index, num_tiles_in_set
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-        
         current_pattern = tileset_patterns[current_tile_index]
-
         if not (isinstance(current_pattern, list) and 
                 len(current_pattern) == TILE_HEIGHT and
                 all(isinstance(row, list) and len(row) == TILE_WIDTH for row in current_pattern)):
@@ -4718,34 +5296,21 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
         
+        command = TransformCommand("Shift Tile Left", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+
         for r_idx_shift in range(TILE_HEIGHT):
             row_data = current_pattern[r_idx_shift]
-            first_pixel_val = 0 
-            if TILE_WIDTH > 0:
-                first_pixel_val = row_data[0]
-            
-            for c_idx_shift in range(TILE_WIDTH - 1):
-                row_data[c_idx_shift] = row_data[c_idx_shift + 1]
-            
-            if TILE_WIDTH > 0:
-                row_data[TILE_WIDTH - 1] = first_pixel_val
+            first_pixel_val = row_data.pop(0)
+            row_data.append(first_pixel_val)
         
-        self._mark_project_modified()
-        self.invalidate_tile_cache(current_tile_index)
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
-        self.update_all_displays(changed_level="all")
-            
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        
-        _debug(f"Tile {current_tile_index} shifted left.")
-
     def shift_tile_right(self):
-        global tileset_patterns, current_tile_index, num_tiles_in_set # Using globals
+        global tileset_patterns, current_tile_index, num_tiles_in_set
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
-        
         current_pattern = tileset_patterns[current_tile_index]
         if not (isinstance(current_pattern, list) and 
                 len(current_pattern) == TILE_HEIGHT and
@@ -4754,28 +5319,16 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Tile {current_tile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
         
+        command = TransformCommand("Shift Tile Right", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
+
         for r_idx_shift_r in range(TILE_HEIGHT):
             row_data = current_pattern[r_idx_shift_r]
-            last_pixel_val = 0
-            if TILE_WIDTH > 0:
-                last_pixel_val = row_data[TILE_WIDTH - 1]
-            
-            for c_idx_shift_r in range(TILE_WIDTH - 1, 0, -1):
-                row_data[c_idx_shift_r] = row_data[c_idx_shift_r - 1]
-            
-            if TILE_WIDTH > 0:
-                row_data[0] = last_pixel_val
+            last_pixel_val = row_data.pop(-1)
+            row_data.insert(0, last_pixel_val)
         
-        self._mark_project_modified()
-        self.invalidate_tile_cache(current_tile_index)
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
-        self.update_all_displays(changed_level="all")
-            
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
-        
-        _debug(f"Tile {current_tile_index} shifted right.")
-
     # --- Supertile Editor Handlers ---
     def handle_st_tileset_click(self, event):
         # Cancel any pending single-click action from a previous click
@@ -4824,10 +5377,6 @@ class TileEditorApp:
             self.single_click_timer = self.root.after(250, lambda: select_tile_for_supertile(clicked_index))
 
     def handle_supertile_def_click(self, event):
-        if self.single_click_timer is not None:
-            self.root.after_cancel(self.single_click_timer)
-            self.single_click_timer = None
-
         if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
             messagebox.showwarning("Place Tile", "Please select a valid tile first.")
             return
@@ -4837,10 +5386,11 @@ class TileEditorApp:
         if mini_tile_display_size <= 0: return
         col = event.x // mini_tile_display_size
         row = event.y // mini_tile_display_size
-        self.last_placed_supertile_cell = None
-        place_action = lambda r=row, c=col: self._place_tile_in_supertile_and_set_drag_state(r, c)
         
-        self.single_click_timer = self.root.after(250, place_action)
+        self.pending_command_list.clear()
+        
+        if self._place_tile_in_supertile(row, col): # This now returns True if a change was made
+            self.last_placed_supertile_cell = (row, col)
 
     def handle_supertile_selector_click(self, event):
         canvas = event.widget
@@ -4926,14 +5476,16 @@ class TileEditorApp:
         if current_cell_id != last_painted_map_cell: 
             if current_data_val != selected_supertile_for_map:
                 if self._clear_marked_unused(trigger_redraw=False):
-                    pass # Redraw will happen via update_all_displays if needed by other factors
+                    pass 
 
-                self._mark_project_modified()
-                map_data[r_map][c_map] = selected_supertile_for_map 
+                command = PaintMapCellCommand(self, r_map, c_map, selected_supertile_for_map)
+                command.execute() # Apply change immediately
+                self.pending_command_list.append(command)
                 
+                self._mark_project_modified()
                 self.draw_map_canvas() 
                 self.draw_minimap()    
-                self._request_supertile_usage_refresh() # ADD THIS LINE
+                self._request_supertile_usage_refresh()
 
             last_painted_map_cell = current_cell_id
 
@@ -5517,11 +6069,9 @@ class TileEditorApp:
                         raise struct.error("Not enough bytes in color data block for unpacking.")
                     r_val, g_val, b_val = struct.unpack_from("BBB", palette_data_bytes, offset)
 
-                    # --- New logic for handling blocked slots ---
                     if preserved_palette and (r_val, g_val, b_val) == (128, 0, 0):
                         new_palette_hex_from_file.append(preserved_palette[i])
                         continue
-                    # --- End of new logic ---
 
                     if not (0 <= r_val <= 7 and 0 <= g_val <= 7 and 0 <= b_val <= 7):
                         _warning(f"Invalid RGB ({r_val},{g_val},{b_val}) at slot {i} in '{os.path.basename(load_path)}'. Clamping.")
@@ -6279,6 +6829,7 @@ class TileEditorApp:
             if success:
                 _debug(" save_project: All components saved successfully.")
                 self.project_modified = False
+                # self.undo_manager.clear() # Clear undo/redo history on successful save
                 self._update_window_title()
                 self._add_to_recent_list("projects", base_path)
                 self._save_app_settings()
@@ -6334,6 +6885,7 @@ class TileEditorApp:
             _debug(" save_project_as: All components saved successfully.")
             self.current_project_base_path = true_base_path 
             self.project_modified = False
+            # self.undo_manager.clear() # Clear undo/redo history on successful save
             self._update_window_title()
             self._add_to_recent_list("projects", self.current_project_base_path)
             self._save_app_settings()
@@ -6515,7 +7067,6 @@ class TileEditorApp:
         # --- Re-apply usage window states AFTER project data is loaded and UI is stable ---
         _debug(" Project Load/New: Re-applying initial usage window states.")
         self._restore_window_states() # This will open windows as per config
-        # --- End Re-apply ---
         
         # Request refresh for any windows that were just re-opened by the call above
         self._request_color_usage_refresh()
@@ -6721,7 +7272,7 @@ class TileEditorApp:
                     
                     if data_structure_changed: # If supertile list actually changed
                         self._request_tile_usage_refresh() # STs use tiles, their count/defs changed
-                        self._request_supertile_usage_refresh() # ADD THIS LINE
+                        self._request_supertile_usage_refresh()
 
             except ValueError:
                 messagebox.showerror("Invalid Input", "Please enter a valid whole number.", parent=self.root)
@@ -6765,47 +7316,28 @@ class TileEditorApp:
                 if confirmed:
                     if self._clear_marked_unused(trigger_redraw=False):
                         pass
-                    self._mark_project_modified()
+
+                    old_map_tuple = (map_width, map_height, copy.deepcopy(map_data))
                     
                     new_map_data_temp = [[0 for _ in range(new_w)] for _ in range(new_h)]
-                    
                     rows_to_copy = min(map_height, new_h)
                     cols_to_copy = min(map_width, new_w)
+                    for r_idx in range(rows_to_copy): 
+                        for c_idx in range(cols_to_copy): 
+                            new_map_data_temp[r_idx][c_idx] = map_data[r_idx][c_idx]
                     
-                    for r_idx_map_dim in range(rows_to_copy): 
-                        for c_idx_map_dim in range(cols_to_copy): 
-                            if r_idx_map_dim < len(map_data) and c_idx_map_dim < len(map_data[r_idx_map_dim]):
-                                new_map_data_temp[r_idx_map_dim][c_idx_map_dim] = map_data[r_idx_map_dim][c_idx_map_dim]
+                    new_map_tuple = (new_w, new_h, new_map_data_temp)
 
-                    map_width = new_w
-                    map_height = new_h
-                    map_data = new_map_data_temp
+                    def map_setter(data_tuple):
+                        global map_width, map_height, map_data
+                        map_width, map_height, map_data = data_tuple
+                        
+                        self._clamp_window_view_position()
+                        self._trigger_minimap_reconfigure()
+                        self._request_supertile_usage_refresh()
 
-                    # <<< START OF ADDED LOGIC
-                    # First, ensure the Window View's SIZE is not larger than the new map.
-                    total_map_tiles_w = map_width * self.supertile_grid_width
-                    total_map_tiles_h = map_height * self.supertile_grid_height
-
-                    if self.window_view_tile_w.get() > total_map_tiles_w:
-                        self.window_view_tile_w.set(total_map_tiles_w)
-                    
-                    if self.window_view_tile_h.get() > total_map_tiles_h:
-                        self.window_view_tile_h.set(total_map_tiles_h)
-                    # <<< END OF ADDED LOGIC
-
-                    # Now, clamp the window view position to the new map boundaries.
-                    self._clamp_window_view_position()
-
-                    self.map_render_cache.clear()
-                    self.invalidate_minimap_background_cache()
-                    
-                    if self.marked_unused_tiles or self.marked_unused_supertiles:
-                        self.update_all_displays(changed_level="all")
-                    else:
-                        self.update_all_displays(changed_level="map")
-                    
-                    self._trigger_minimap_reconfigure()
-                    self._request_supertile_usage_refresh()
+                    command = SetDataCommand("Set Map Dimensions", self, map_setter, new_map_tuple, old_map_tuple)
+                    self.undo_manager.execute(command)
 
             except ValueError as e:
                 messagebox.showerror("Invalid Input", f"Error setting dimensions: {e}", parent=self.root)
@@ -6815,65 +7347,34 @@ class TileEditorApp:
                 )
 
     def clear_current_tile(self):
-        global tileset_patterns, tileset_colors, current_tile_index, WHITE_IDX, BLACK_IDX, num_tiles_in_set # Globals
+        global current_tile_index, num_tiles_in_set 
         if not (0 <= current_tile_index < num_tiles_in_set):
             messagebox.showwarning("Clear Tile", "No valid tile selected to clear.", parent=self.root)
             return
             
         prompt = f"Clear pattern and reset colors for Tile {current_tile_index}?"
         if messagebox.askokcancel("Clear Tile", prompt, parent=self.root):
-            self._mark_project_modified()
-            tileset_patterns[current_tile_index] = [
-                [0] * TILE_WIDTH for _ in range(TILE_HEIGHT)
-            ]
-            tileset_colors[current_tile_index] = [
-                (WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)
-            ]
-            self.invalidate_tile_cache(current_tile_index)
-
-            self.update_all_displays(changed_level="all")
-                
-            self._request_color_usage_refresh()
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
-            
-            _debug(f"Cleared Tile {current_tile_index}.")
+            command = ClearTileCommand(self, current_tile_index)
+            self.undo_manager.execute(command)
+            _debug(f"Cleared Tile {current_tile_index} via command.")
 
     def clear_current_supertile(self):
-        global supertiles_data, current_supertile_index # supertiles_data is global
+        global current_supertile_index, num_supertiles 
         if not (0 <= current_supertile_index < num_supertiles):
             return
         prompt = f"Clear definition (set all to tile 0) for supertile {current_supertile_index}?"
         if messagebox.askokcancel("Clear Supertile", prompt):
-            self._mark_project_modified()
-            supertiles_data[current_supertile_index] = [
-                [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
-            ]
-            self.invalidate_supertile_cache(current_supertile_index)
-            self.update_all_displays(changed_level="all")
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
+            command = ClearSupertileCommand(self, current_supertile_index)
+            self.undo_manager.execute(command)
 
     def clear_map(self):
-        global map_data, map_width, map_height # map_data is global
         prompt = "Clear entire map (set all to supertile 0)?"
         if messagebox.askokcancel("Clear Map", prompt):
             if self._clear_marked_unused(trigger_redraw=False):
-                # If marks were cleared, a more general redraw might be needed
-                # update_all_displays will handle this if called
                 pass
 
-            self._mark_project_modified()
-            map_data = [[0 for _ in range(map_width)] for _ in range(map_height)] # map_data is global
-            self.invalidate_minimap_background_cache() # Map content changed
-
-            # Determine appropriate refresh level
-            if self.marked_unused_tiles or self.marked_unused_supertiles: # If marks were present (now cleared)
-                self.update_all_displays(changed_level="all")
-            else: # No marks involved, just map changed
-                self.update_all_displays(changed_level="map")
-            
-            self._request_supertile_usage_refresh()
+            command = ClearMapCommand(self)
+            self.undo_manager.execute(command)
 
     def copy_current_tile(self):
         global current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
@@ -6911,48 +7412,57 @@ class TileEditorApp:
             return
 
         try:
-            # Get content from the system clipboard.
             json_string = self.root.clipboard_get()
             clipboard_data = json.loads(json_string)
 
-            # Validate clipboard data format.
             if not isinstance(clipboard_data, dict) or \
                clipboard_data.get("app_id") != "MSXTileForge" or \
                clipboard_data.get("data_type") != "tile":
                 messagebox.showinfo("Paste Tile", "The clipboard does not contain valid MSX Tile Forge tile data.")
                 return
 
-            # Extract payload data.
             payload = clipboard_data.get("payload", {})
             pasted_pattern = payload.get("pattern")
             pasted_colors = payload.get("colors")
             source_palette_hex = payload.get("source_palette_hex")
 
-            # Check for complete payload.
             if not all([pasted_pattern, pasted_colors, source_palette_hex]):
                 raise ValueError("Clipboard data payload is missing pattern, colors, or palette information.")
             
-            # Create a color remap table and apply it.
             remap_table = self._create_color_remap_table(source_palette_hex, self.active_msx_palette)
             remapped_colors = []
             for src_fg, src_bg in pasted_colors:
-                dest_fg = remap_table.get(src_fg, 0) # Default to 0 on error
-                dest_bg = remap_table.get(src_bg, 0) # Default to 0 on error
+                dest_fg = remap_table.get(src_fg, 0)
+                dest_bg = remap_table.get(src_bg, 0)
                 remapped_colors.append((dest_fg, dest_bg))
 
-            # Apply the pasted and remapped data.
-            self._mark_project_modified()
-            tileset_patterns[current_tile_index] = copy.deepcopy(pasted_pattern)
-            tileset_colors[current_tile_index] = remapped_colors
+            # Capture the index at the time of command creation.
+            target_tile_index = current_tile_index
+
+            def pattern_setter(data):
+                tileset_patterns[target_tile_index] = data
+            def colors_setter(data):
+                tileset_colors[target_tile_index] = data
+
+            pattern_command = SetDataCommand("Paste Tile (Pattern)", self, pattern_setter, pasted_pattern, tileset_patterns[target_tile_index])
+            colors_command = SetDataCommand("Paste Tile (Colors)", self, colors_setter, remapped_colors, tileset_colors[target_tile_index])
             
-            self.invalidate_tile_cache(current_tile_index)
-            self.update_all_displays(changed_level="all")
+            post_paste_hooks = [
+                lambda: self.invalidate_tile_cache(target_tile_index),
+                self._request_color_usage_refresh,
+                self._request_tile_usage_refresh,
+                self._request_supertile_usage_refresh
+            ]
+
+            composite = CompositeCommand(
+                "Paste Tile", 
+                [pattern_command, colors_command],
+                app_ref=self,
+                post_hooks=post_paste_hooks
+            )
+            self.undo_manager.execute(composite)
             
-            self._request_color_usage_refresh()
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
-            
-            _info(f"Pasted from system clipboard onto Tile {current_tile_index} with color remapping.")
+            _info(f"Pasted from system clipboard onto Tile {target_tile_index} with color remapping.")
 
         except tk.TclError:
             messagebox.showinfo("Paste Tile", "Clipboard is empty or does not contain text data.")
@@ -7018,7 +7528,6 @@ class TileEditorApp:
             return
 
         try:
-            # 1. Get and validate the clipboard data.
             json_string = self.root.clipboard_get()
             clipboard_data = json.loads(json_string)
 
@@ -7028,7 +7537,6 @@ class TileEditorApp:
                 messagebox.showinfo("Paste Supertile", "The clipboard does not contain valid MSX Tile Forge supertile data.")
                 return
 
-            # 2. Extract the payload.
             payload = clipboard_data.get("payload", {})
             pasted_definition = payload.get("definition")
             source_tiles = payload.get("source_tiles", {})
@@ -7037,8 +7545,6 @@ class TileEditorApp:
             if not all([pasted_definition, source_tiles, source_palette_hex]):
                 raise ValueError("Clipboard data payload is missing definition, tiles, or palette information.")
             
-            # 3. Pre-calculate the LAB "fingerprints" for the entire destination tileset.
-            #    This is an optimization to avoid recalculating for every source tile.
             dest_tileset_fingerprints = {}
             for i in range(num_tiles_in_set):
                 fingerprint = self._render_tile_to_lab_pixels(
@@ -7047,10 +7553,9 @@ class TileEditorApp:
                 if fingerprint:
                     dest_tileset_fingerprints[i] = fingerprint
             
-            # 4. Create the tile remap table using the greedy approach.
             tile_remap_table = {}
             for src_idx_str, src_tile_data in source_tiles.items():
-                src_idx = int(src_idx_str) # JSON keys are strings
+                src_idx = int(src_idx_str)
                 source_lab_pixels = self._render_tile_to_lab_pixels(
                     src_tile_data["pattern"], src_tile_data["colors"], source_palette_hex
                 )
@@ -7058,37 +7563,89 @@ class TileEditorApp:
                     best_match_dest_idx = self._find_best_tile_match(source_lab_pixels, dest_tileset_fingerprints)
                     tile_remap_table[src_idx] = best_match_dest_idx
 
-            _debug(f"Supertile Remap Table created: {tile_remap_table}")
-
-            # 5. Build the new supertile definition using the remapped tile indices.
             new_definition = copy.deepcopy(pasted_definition)
             for r in range(len(new_definition)):
                 for c in range(len(new_definition[r])):
                     original_tile_idx = new_definition[r][c]
                     new_definition[r][c] = tile_remap_table.get(original_tile_idx, 0)
 
-            # 6. Apply the remapped definition.
-            # Check dimensions against current project settings.
             if len(new_definition) != self.supertile_grid_height or \
                len(new_definition[0]) != self.supertile_grid_width:
                 messagebox.showerror("Paste Error", "Supertile clipboard dimensions do not match current project dimensions. Paste aborted.")
                 return
 
-            supertiles_data[current_supertile_index] = new_definition
-            self._mark_project_modified()
-            self.invalidate_supertile_cache(current_supertile_index)
-            self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all")
+            # Capture the index at the time of command creation.
+            target_st_index = current_supertile_index
 
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
-            _info(f"Pasted from system clipboard onto Supertile {current_supertile_index} with tile remapping.")
+            def st_data_setter(data):
+                supertiles_data[target_st_index] = data
+                # Move side-effects that depend on the index into the setter
+                self.invalidate_supertile_cache(target_st_index)
+                self.invalidate_minimap_background_cache()
+                self._request_tile_usage_refresh()
+                self._request_supertile_usage_refresh()
+            
+            command = SetDataCommand("Paste Supertile", self, st_data_setter, new_definition, supertiles_data[target_st_index])
+            # The CompositeCommand is not needed for a single command
+            self.undo_manager.execute(command)
+
+            _info(f"Pasted from system clipboard onto Supertile {target_st_index} with tile remapping.")
 
         except tk.TclError:
             messagebox.showinfo("Paste Supertile", "Clipboard is empty or does not contain text data.")
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             _error(f"Error pasting supertile from clipboard: {e}")
             messagebox.showinfo("Paste Supertile", "The clipboard does not contain valid MSX Tile Forge supertile data.")
+
+    def paste_map(self):
+        """Pastes the map clipboard data to the current cursor location."""
+        if not self.map_clipboard_data:
+            messagebox.showinfo("Paste Map Region", "Map clipboard is empty.", parent=self.root)
+            return
+
+        canvas = self.map_canvas
+        try:
+            pointer_x = canvas.winfo_pointerx() - canvas.winfo_rootx()
+            pointer_y = canvas.winfo_pointery() - canvas.winfo_rooty()
+            canvas_x = canvas.canvasx(pointer_x)
+            canvas_y = canvas.canvasy(pointer_y)
+        except tk.TclError:
+            messagebox.showerror("Paste Error", "Could not get mouse position for map paste.", parent=self.root)
+            return
+
+        paste_coords = self._get_supertile_coords_from_canvas(canvas_x, canvas_y)
+        if paste_coords is None:
+            messagebox.showinfo("Paste Map Region", "Cannot paste here: Current mouse position is outside the map boundaries.", parent=self.root)
+            return
+
+        old_map_data = copy.deepcopy(map_data)
+        new_map_data = copy.deepcopy(map_data)
+        paste_st_col, paste_st_row = paste_coords
+        clip_w = self.map_clipboard_data["width"]
+        clip_h = self.map_clipboard_data["height"]
+        clip_data = self.map_clipboard_data["data"]
+        
+        for r_offset in range(clip_h):
+            for c_offset in range(clip_w):
+                target_map_row = paste_st_row + r_offset
+                target_map_col = paste_st_col + c_offset
+                if (0 <= target_map_row < map_height and 0 <= target_map_col < map_width):
+                    if r_offset < len(clip_data) and c_offset < len(clip_data[r_offset]):
+                        st_index_to_paste = clip_data[r_offset][c_offset]
+                        if 0 <= st_index_to_paste < num_supertiles:
+                            new_map_data[target_map_row][target_map_col] = st_index_to_paste
+                        else:
+                            new_map_data[target_map_row][target_map_col] = 0
+        
+        if new_map_data != old_map_data:
+            def map_data_setter(data):
+                global map_data
+                map_data = data
+
+            command = SetDataCommand("Paste Map Region", self, map_data_setter, new_map_data, old_map_data)
+            self.undo_manager.execute(command)
+        else:
+            messagebox.showinfo("Paste Map Region", "No changes made to the map by paste operation (content might be identical or outside bounds).", parent=self.root)
 
     # --- Zoom Methods ---
     def change_map_zoom_mult(self, factor):  # Renamed from change_map_zoom
@@ -7433,16 +7990,14 @@ class TileEditorApp:
 
     def handle_map_click_or_drag_start(self, event):
         """
-        Handles initial NON-CTRL click. On single-click, it now schedules a paint
-        action, allowing a double-click to cancel it and trigger a deep dive.
-        Also handles starting a drag for the window view.
+        Handles initial NON-CTRL click to start a paint stroke or window view drag.
         """
         # --- Cancel any pending single-click paint from a previous click ---
         if self.single_click_timer is not None:
             self.root.after_cancel(self.single_click_timer)
             self.single_click_timer = None
 
-        # --- Standard modifier and action checks (same as before) ---
+        # --- Standard modifier and action checks ---
         if self.is_shift_pressed or (event.state & 0x0004) or self.current_mouse_action is not None:
             return "break"
 
@@ -7452,11 +8007,10 @@ class TileEditorApp:
         canvas_x = canvas.canvasx(event.x)
         canvas_y = canvas.canvasy(event.y)
 
-        # --- Window view drag/resize logic (same as before) ---
+        # --- Window view drag/resize logic ---
         handle = self._get_handle_at(canvas_x, canvas_y)
         if handle and self.show_window_view.get():
             self.current_mouse_action = "window_resizing"
-            # (rest of window resize start logic is unchanged)
             self.window_view_resize_handle = handle
             self.drag_start_x, self.drag_start_y = canvas_x, canvas_y
             self.drag_start_win_tx, self.drag_start_win_ty = self.window_view_tile_x, self.window_view_tile_y
@@ -7465,23 +8019,15 @@ class TileEditorApp:
             return "break"
         elif self._is_inside_window_view(canvas_x, canvas_y) and self.show_window_view.get():
             self.current_mouse_action = "window_dragging"
-            # (rest of window drag start logic is unchanged)
             self.drag_start_x, self.drag_start_y = canvas_x, canvas_y
             self.drag_start_win_tx, self.drag_start_win_ty = self.window_view_tile_x, self.window_view_tile_y
             self._update_map_cursor()
             return "break"
         
-        # --- NEW: Schedule the paint action instead of calling it directly ---
-        self.current_mouse_action = "painting" # Set state immediately for drag handling
-        
-        # This lambda captures the coordinates at the time of the click
-        paint_action = lambda cx=canvas_x, cy=canvas_y: self._paint_map_cell(cx, cy)
-        
-        # Schedule it to run after 250ms
-        self.single_click_timer = self.root.after(250, paint_action)
-
-        # We don't return "break" here, allowing drag to still work.
-        # The logic in handle_map_drag will use self.current_mouse_action.
+        # --- Start a paint action ---
+        self.current_mouse_action = "painting"
+        self.pending_command_list.clear() # Clear list for new stroke
+        self._paint_map_cell(canvas_x, canvas_y)
 
     def handle_map_drag(self, event):
         """Handles motion for non-panning actions (paint, window drag/resize)."""
@@ -7510,31 +8056,26 @@ class TileEditorApp:
         return "break"  # Prevent other B1-Motion bindings
 
     def handle_map_drag_release(self, event):
-        """Handles mouse button release: ends the current action (paint, pan, window ops)."""
+        """Handles mouse button release: ends paint, pan, or window ops, committing commands."""
         global last_painted_map_cell
         action_at_release = self.current_mouse_action
 
-        last_painted_map_cell = None
+        # If the action was painting and we have pending commands, create a composite command.
+        if action_at_release == "painting" and self.pending_command_list:
+            composite = CompositeCommand("Paint Stroke", self.pending_command_list[:], self)
+            self.undo_manager.register(composite)
+            self.pending_command_list.clear()
 
-        # Reset the current action state FIRST.
+        last_painted_map_cell = None
         self.current_mouse_action = None
 
-        # Perform any finalization based on the action that just finished.
         if action_at_release == "panning":
-            # After a pan, perform a single redraw to ensure content is crisp.
             self.draw_map_canvas()
-
-        elif action_at_release == "window_dragging":
-            pass
-
         elif action_at_release == "window_resizing":
             self._clamp_window_view_position()
             self._update_window_size_vars_from_state()
             self.window_view_resize_handle = None
             self.draw_map_canvas()
-
-        elif action_at_release == "painting":
-            pass
 
         self._update_map_cursor()
         self.draw_minimap()
@@ -7980,7 +8521,6 @@ class TileEditorApp:
         if self.is_shift_pressed:
             _debug("Shift pressed, ignoring Ctrl-Button-1 for pan/window drag.")
             return "break"
-        # --- End Shift Check ---
 
         ctrl_pressed_at_click = event.state & 0x0004  # Check state at event time
         if not ctrl_pressed_at_click or self.current_mouse_action is not None:
@@ -7992,7 +8532,6 @@ class TileEditorApp:
 
         # --- Clear previous selection when starting pan/window drag ---
         self._clear_map_selection()  # Clear selection visual and state
-        # --- End Clear Selection ---
 
         if (
             self._is_inside_window_view(canvas_x, canvas_y)
@@ -8077,36 +8616,11 @@ class TileEditorApp:
             _debug(" _update_edit_menu_state: self.edit_menu widget no longer exists. Aborting.")
             return
 
-        _debug(f" _update_edit_menu_state: Attempting to update. Copy index: {self.copy_menu_item_index}, Paste index: {self.paste_menu_item_index}")
-
-        if self.copy_menu_item_index == -1 or self.paste_menu_item_index == -1:
-            _debug(" _update_edit_menu_state: Stored menu item indices are -1. Aborting.")
-            return
-
-        if root.app_debug_mode: 
-            try:
-                actual_copy_type = self.edit_menu.type(self.copy_menu_item_index)
-                actual_paste_type = self.edit_menu.type(self.paste_menu_item_index)
-                _debug(f" _update_edit_menu_state: Actual type of item at copy_menu_item_index ({self.copy_menu_item_index}) is '{actual_copy_type}'")
-                _debug(f" _update_edit_menu_state: Actual type of item at paste_menu_item_index ({self.paste_menu_item_index}) is '{actual_paste_type}'")
-
-                num_items_now = self.edit_menu.index(tk.END)
-                if num_items_now is not None:
-                    _debug(f" _update_edit_menu_state: Total items in edit_menu NOW: {num_items_now + 1}")
-                    for i in range(num_items_now + 1):
-                        item_type_str = self.edit_menu.type(i)
-                        item_label_str = 'N/A'
-                        if item_type_str == 'command':
-                            item_label_str = self.edit_menu.entrycget(i, 'label')
-                        elif item_type_str == 'cascade':
-                             item_label_str = self.edit_menu.entrycget(i, 'label') + " (Cascade)"
-                        _debug(f"   _update_edit_menu_state: Item {i}: Type='{item_type_str}', Label='{item_label_str}'")
-                else:
-                    _debug(" _update_edit_menu_state: edit_menu.index(tk.END) is None (menu might be empty or not fully formed).")
-
-
-            except tk.TclError as e_debug_update:
-                _debug(f" _update_edit_menu_state: TclError during debug print: {e_debug_update}")
+        # Correct indices after adding Undo/Redo
+        copy_item_index = 0
+        paste_item_index = 1
+        undo_item_index = 3
+        redo_item_index = 4
 
         selected_tab_index = 0 
         try:
@@ -8127,7 +8641,6 @@ class TileEditorApp:
             paste_label = "Paste Tile"
             can_copy = 0 <= current_tile_index < num_tiles_in_set
             
-            # Check system clipboard for valid tile data.
             can_paste = False
             if 0 <= current_tile_index < num_tiles_in_set:
                 try:
@@ -8137,14 +8650,13 @@ class TileEditorApp:
                        clipboard_data.get("app_id") == "MSXTileForge":
                         can_paste = True
                 except (tk.TclError, json.JSONDecodeError):
-                    pass # Clipboard empty or has invalid data.
+                    pass 
 
         elif selected_tab_index == 2: 
             copy_label = "Copy Supertile"
             paste_label = "Paste Supertile"
             can_copy = 0 <= current_supertile_index < num_supertiles
             
-            # Check system clipboard for valid supertile data.
             can_paste = False
             if 0 <= current_supertile_index < num_supertiles:
                 try:
@@ -8154,7 +8666,7 @@ class TileEditorApp:
                        clipboard_data.get("app_id") == "MSXTileForge":
                         can_paste = True
                 except (tk.TclError, json.JSONDecodeError):
-                    pass # Clipboard empty or has invalid data.
+                    pass 
 
         elif selected_tab_index == 3: 
             copy_label = "Copy Map Region"
@@ -8166,7 +8678,6 @@ class TileEditorApp:
             can_paste = self.map_clipboard_data is not None
 
         else: 
-            _debug(f" _update_edit_menu_state: Tab index is {selected_tab_index}. Setting Copy/Paste disabled.")
             copy_label = "Copy"
             paste_label = "Paste"
             can_copy = False
@@ -8174,33 +8685,24 @@ class TileEditorApp:
 
         copy_state = tk.NORMAL if can_copy else tk.DISABLED
         paste_state = tk.NORMAL if can_paste else tk.DISABLED
+        undo_state = tk.NORMAL if self.undo_manager.can_undo() else tk.DISABLED
+        redo_state = tk.NORMAL if self.undo_manager.can_redo() else tk.DISABLED
+        
+        undo_label = "Undo"
+        if self.undo_manager.can_undo():
+            undo_label = f"Undo {self.undo_manager.undo_stack[-1].description}"
+
+        redo_label = "Redo"
+        if self.undo_manager.can_redo():
+            redo_label = f"Redo {self.undo_manager.redo_stack[-1].description}"
 
         try:
-            current_copy_type_final_check = self.edit_menu.type(self.copy_menu_item_index)
-            current_paste_type_final_check = self.edit_menu.type(self.paste_menu_item_index)
-
-            if current_copy_type_final_check == "command":
-                self.edit_menu.entryconfig(
-                    self.copy_menu_item_index, state=copy_state, label=copy_label
-                )
-            else:
-                _error(f" _update_edit_menu_state FINAL CHECK ERROR: Item at copy index {self.copy_menu_item_index} is type '{current_copy_type_final_check}', not 'command'.")
-
-
-            if current_paste_type_final_check == "command":
-                self.edit_menu.entryconfig(
-                    self.paste_menu_item_index, state=paste_state, label=paste_label
-                )
-            else:
-                _error(f" _update_edit_menu_state FINAL CHECK ERROR: Item at paste index {self.paste_menu_item_index} is type '{current_paste_type_final_check}', not 'command'.")
-
-
+            self.edit_menu.entryconfig(copy_item_index, state=copy_state, label=copy_label)
+            self.edit_menu.entryconfig(paste_item_index, state=paste_state, label=paste_label)
+            self.edit_menu.entryconfig(undo_item_index, state=undo_state, label=undo_label)
+            self.edit_menu.entryconfig(redo_item_index, state=redo_state, label=redo_label)
         except tk.TclError as e:
             _error(f" _update_edit_menu_state: TclError during entryconfig: {e}")
-            pass
-        except Exception as e:
-            _error(f" _update_edit_menu_state: UNEXPECTED ERROR during menu update: {e}")
-            pass
 
     def handle_generic_copy(self):
         """Handles the generic 'Copy' menu command based on the active tab."""
@@ -8279,80 +8781,26 @@ class TileEditorApp:
         except tk.TclError:
             return 
 
+        # 1. Check if marks were present BEFORE any action is taken.
         marks_were_cleared = self._clear_marked_unused(trigger_redraw=False)
+        # 2. Get the length of the undo stack BEFORE the action.
+        undo_stack_size_before = len(self.undo_manager.undo_stack)
 
-        if active_tab_index == 1:  # Tile Editor Tab
+        if active_tab_index == 1:
             self.paste_tile() 
-        elif active_tab_index == 2:  # Supertile Editor Tab
+        elif active_tab_index == 2:
             self.paste_supertile() 
-        elif active_tab_index == 3:  # Map Editor Tab 
-            if self.map_clipboard_data:
-                canvas = self.map_canvas
-                try:
-                    pointer_x = canvas.winfo_pointerx()
-                    pointer_y = canvas.winfo_pointery()
-                    root_x = canvas.winfo_rootx()
-                    root_y = canvas.winfo_rooty()
-                    canvas_x = canvas.canvasx(pointer_x - root_x)
-                    canvas_y = canvas.canvasy(pointer_y - root_y)
-                except tk.TclError:
-                    messagebox.showerror("Paste Error", "Could not get mouse position for map paste.", parent=self.root)
-                    if marks_were_cleared: self.update_all_displays(changed_level="all")
-                    return
+        elif active_tab_index == 3:
+            self.paste_map()
+        
+        # 3. Get the length of the undo stack AFTER the action.
+        undo_stack_size_after = len(self.undo_manager.undo_stack)
+        action_was_performed = (undo_stack_size_after > undo_stack_size_before)
 
-                paste_coords = self._get_supertile_coords_from_canvas(canvas_x, canvas_y)
-                if paste_coords is None:
-                    messagebox.showinfo("Paste Map Region", "Cannot paste here: Current mouse position is outside the map boundaries.", parent=self.root)
-                    if marks_were_cleared: self.update_all_displays(changed_level="all")
-                    return
-
-                paste_st_col, paste_st_row = paste_coords
-                clip_w = self.map_clipboard_data["width"]
-                clip_h = self.map_clipboard_data["height"]
-                clip_data = self.map_clipboard_data["data"]
-                modified = False
-
-                for r_offset in range(clip_h):
-                    for c_offset in range(clip_w):
-                        target_map_row = paste_st_row + r_offset
-                        target_map_col = paste_st_col + c_offset
-
-                        if (0 <= target_map_row < map_height and 0 <= target_map_col < map_width):
-                            if r_offset < len(clip_data) and c_offset < len(clip_data[r_offset]):
-                                st_index_to_paste = clip_data[r_offset][c_offset]
-                                # Ensure pasted ST index is valid for current num_supertiles
-                                if 0 <= st_index_to_paste < num_supertiles:
-                                    if map_data[target_map_row][target_map_col] != st_index_to_paste:
-                                        map_data[target_map_row][target_map_col] = st_index_to_paste
-                                        modified = True
-                                else:
-                                    # Handle case where clipboard ST index is out of bounds
-                                    # (e.g. paste from a project with more STs)
-                                    # Option: Paste as ST 0, or skip this cell
-                                    if map_data[target_map_row][target_map_col] != 0: # Default to ST 0
-                                        map_data[target_map_row][target_map_col] = 0
-                                        modified = True
-                                    _warning(f"ST index {st_index_to_paste} from clipboard out of bounds. Pasted ST 0 at map ({target_map_row},{target_map_col}).")
-
-
-                if modified:
-                    self._mark_project_modified()
-                    self.invalidate_minimap_background_cache()
-                    self.draw_map_canvas()  
-                    self.draw_minimap()  
-                    self._request_supertile_usage_refresh() # MODIFIED: ADDED THIS LINE
-                else:
-                    if not marks_were_cleared: # Only show if no other action (like mark clearing) happened
-                         messagebox.showinfo("Paste Map Region", "No changes made to the map by paste operation (content might be identical or outside bounds).", parent=self.root)
-
-
-            else: # No map_clipboard_data
-                messagebox.showinfo("Paste Map Region", "Map clipboard is empty.", parent=self.root)
-                if marks_were_cleared: self.update_all_displays(changed_level="all")
-
-        if marks_were_cleared and not (active_tab_index == 1 or active_tab_index == 2 or (active_tab_index == 3 and modified)):
-            # If marks were cleared but no specific paste action happened that would redraw,
-            # ensure a redraw occurs.
+        # 4. If marks were cleared BUT no new undoable action was actually performed,
+        #    we must manually trigger a redraw to clear the old highlights from the screen.
+        if marks_were_cleared and not action_was_performed:
+            _debug("handle_generic_paste: Marks were cleared but no data was modified. Forcing a redraw.")
             self.update_all_displays(changed_level="all")
 
     def _setup_global_key_bindings(self):
@@ -8367,6 +8815,8 @@ class TileEditorApp:
         self.root.bind_all("<Control-q>", lambda event: self.confirm_quit())
         self.root.bind_all("<Control-c>", lambda event: self.handle_generic_copy())
         self.root.bind_all("<Control-v>", lambda event: self.handle_generic_paste())
+        self.root.bind_all("<Control-z>", lambda event: self.undo_manager.undo())
+        self.root.bind_all("<Control-y>", lambda event: self.undo_manager.redo())
         self.root.bind_all("<Control-m>", lambda event: self.toggle_minimap())
 
         self.root.bind_all("<F1>", lambda event: self.toggle_color_usage_window())
@@ -8421,9 +8871,10 @@ class TileEditorApp:
             if self._clear_marked_unused(trigger_redraw=False):
                 self.update_all_displays(changed_level="all")
 
-            supertiles_data[current_supertile_index][r_place][c_place] = selected_tile_for_supertile
+            command = PlaceTileInSupertileCommand(self, current_supertile_index, r_place, c_place, selected_tile_for_supertile)
+            command.execute() # Apply change immediately for visual feedback
+            self.pending_command_list.append(command)
             
-            self.invalidate_supertile_cache(current_supertile_index)
             if not (self.marked_unused_tiles or self.marked_unused_supertiles):
                 self.update_all_displays(changed_level="supertile")
             else:
@@ -8456,13 +8907,16 @@ class TileEditorApp:
             0 <= col_drag < self.supertile_grid_width and \
             current_cell_drag != self.last_placed_supertile_cell):
 
-            placed_drag = self._place_tile_in_supertile(row_drag, col_drag)
-
-            if placed_drag:
+            if self._place_tile_in_supertile(row_drag, col_drag):
                 self.last_placed_supertile_cell = current_cell_drag
 
     def handle_supertile_def_release(self, event):
-        """Resets the drag state and triggers usage window refreshes when the mouse button is released over the supertile definition canvas."""
+        """Finalizes a paint stroke in the supertile editor, creating a single undo command."""
+        if self.pending_command_list:
+            composite = CompositeCommand("Place Tiles", self.pending_command_list[:], self)
+            self.undo_manager.register(composite)
+            self.pending_command_list.clear()
+
         if self.last_placed_supertile_cell is not None:
             _debug("Supertile paint finished, requesting final usage window refresh.")
             self._request_tile_usage_refresh()
@@ -8511,13 +8965,11 @@ class TileEditorApp:
             self._update_window_title()  # Update title when first marked as modified
 
     def flip_supertile_horizontal(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
+        global supertiles_data, current_supertile_index, num_supertiles
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Flip Supertile", "No valid supertile selected.", parent=self.root)
             return
-
         current_definition = supertiles_data[current_supertile_index]
-        
         if not (current_definition and 
                 len(current_definition) == self.supertile_grid_height and
                 (self.supertile_grid_height == 0 or (self.supertile_grid_width > 0 and len(current_definition[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
@@ -8525,34 +8977,27 @@ class TileEditorApp:
             messagebox.showerror("Flip Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot flip.", parent=self.root)
             return
 
+        command = TransformCommand("Flip Supertile Horizontal", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+
         new_definition_flipped_h_st = []
         for r_flip_st_h in range(self.supertile_grid_height):
             if r_flip_st_h < len(current_definition) and isinstance(current_definition[r_flip_st_h], list):
                  new_definition_flipped_h_st.append(current_definition[r_flip_st_h][::-1]) 
             else: 
                  new_definition_flipped_h_st.append([0] * self.supertile_grid_width)
-
-
         supertiles_data[current_supertile_index] = new_definition_flipped_h_st
 
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} flipped horizontally.")
 
     def flip_supertile_vertical(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
+        global supertiles_data, current_supertile_index, num_supertiles
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Flip Supertile", "No valid supertile selected.", parent=self.root)
             return
-
         current_definition_to_flip_st = supertiles_data[current_supertile_index]
-        
         if not (current_definition_to_flip_st and 
                 len(current_definition_to_flip_st) == self.supertile_grid_height and
                 (self.supertile_grid_height == 0 or (self.supertile_grid_width > 0 and len(current_definition_to_flip_st[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
@@ -8560,32 +9005,26 @@ class TileEditorApp:
             messagebox.showerror("Flip Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot flip.", parent=self.root)
             return
             
+        command = TransformCommand("Flip Supertile Vertical", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+        
         current_definition_to_flip_st.reverse()
 
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} flipped vertically.")
 
     def rotate_supertile_90cw(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
-        
+        global supertiles_data, current_supertile_index, num_supertiles
         if not (0 <= current_supertile_index < num_supertiles):
             messagebox.showwarning("Rotate Supertile", "No valid supertile selected.", parent=self.root)
             return
-
         if self.supertile_grid_width != self.supertile_grid_height:
             messagebox.showinfo("Rotate Supertile", "Rotation is only enabled for square supertiles.", parent=self.root)
             return
 
         current_definition_rotate_st = supertiles_data[current_supertile_index]
         dim_st_rotate = self.supertile_grid_width
-        
         if not (current_definition_rotate_st and 
                 len(current_definition_rotate_st) == dim_st_rotate and
                 (dim_st_rotate == 0 or all(len(row) == dim_st_rotate for row in current_definition_rotate_st))):
@@ -8593,28 +9032,22 @@ class TileEditorApp:
             messagebox.showerror("Rotate Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot rotate.", parent=self.root)
             return
 
-        new_definition_rotated_st = [[0 for _c in range(dim_st_rotate)] for _r in range(dim_st_rotate)]
+        command = TransformCommand("Rotate Supertile", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
+        new_definition_rotated_st = [[0 for _c in range(dim_st_rotate)] for _r in range(dim_st_rotate)]
         for r_rot_st_val in range(dim_st_rotate):
             for c_rot_st_val in range(dim_st_rotate):
                 if r_rot_st_val < len(current_definition_rotate_st) and c_rot_st_val < len(current_definition_rotate_st[r_rot_st_val]):
                     new_definition_rotated_st[c_rot_st_val][(dim_st_rotate - 1) - r_rot_st_val] = current_definition_rotate_st[r_rot_st_val][c_rot_st_val]
-
         supertiles_data[current_supertile_index] = new_definition_rotated_st
 
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} rotated 90 CW.")
 
     def shift_supertile_up(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
-        
+        global supertiles_data, current_supertile_index, num_supertiles
         current_st_h_for_shift = self.supertile_grid_height
         if not (0 <= current_supertile_index < num_supertiles) or current_st_h_for_shift <= 0:
             if current_st_h_for_shift <=1 and 0 <= current_supertile_index < num_supertiles :
@@ -8622,9 +9055,7 @@ class TileEditorApp:
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_up = supertiles_data[current_supertile_index]
-        
         if not (current_definition_shift_st_up and 
                 len(current_definition_shift_st_up) == current_st_h_for_shift and
                 (current_st_h_for_shift == 0 or (self.supertile_grid_width > 0 and len(current_definition_shift_st_up[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
@@ -8632,26 +9063,18 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
             
-        first_row_data_st = current_definition_shift_st_up[0][:]
+        command = TransformCommand("Shift Supertile Up", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        for r_shift_st_up_val in range(current_st_h_for_shift - 1):
-            current_definition_shift_st_up[r_shift_st_up_val] = current_definition_shift_st_up[r_shift_st_up_val + 1]
-
-        current_definition_shift_st_up[current_st_h_for_shift - 1] = first_row_data_st
+        first_row_data_st = current_definition_shift_st_up.pop(0)
+        current_definition_shift_st_up.append(first_row_data_st)
         
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} shifted up.")
 
     def shift_supertile_down(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
-        
+        global supertiles_data, current_supertile_index, num_supertiles
         current_st_h_for_shift_d = self.supertile_grid_height
         if not (0 <= current_supertile_index < num_supertiles) or current_st_h_for_shift_d <= 0:
             if current_st_h_for_shift_d <=1 and 0 <= current_supertile_index < num_supertiles:
@@ -8659,9 +9082,7 @@ class TileEditorApp:
                 return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_d = supertiles_data[current_supertile_index]
-
         if not (current_definition_shift_st_d and 
                 len(current_definition_shift_st_d) == current_st_h_for_shift_d and
                 (current_st_h_for_shift_d == 0 or (self.supertile_grid_width > 0 and len(current_definition_shift_st_d[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0)):
@@ -8669,38 +9090,27 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
             
-        last_row_data_st = current_definition_shift_st_d[current_st_h_for_shift_d - 1][:] 
+        command = TransformCommand("Shift Supertile Down", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
 
-        for r_shift_st_d_val in range(current_st_h_for_shift_d - 1, 0, -1):
-            current_definition_shift_st_d[r_shift_st_d_val] = current_definition_shift_st_d[r_shift_st_d_val - 1]
+        last_row_data_st = current_definition_shift_st_d.pop(-1)
+        current_definition_shift_st_d.insert(0, last_row_data_st)
 
-        current_definition_shift_st_d[0] = last_row_data_st
-
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} shifted down.")
 
     def shift_supertile_left(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
-        
+        global supertiles_data, current_supertile_index, num_supertiles
         current_st_w_for_shift_l = self.supertile_grid_width
         current_st_h_for_shift_l = self.supertile_grid_height
-        
         if not (0 <= current_supertile_index < num_supertiles) or current_st_w_for_shift_l <= 0 or current_st_h_for_shift_l <= 0:
             if current_st_w_for_shift_l <=1 and 0 <= current_supertile_index < num_supertiles :
                  _debug(f"Supertile {current_supertile_index} is {current_st_w_for_shift_l} unit(s) wide, cannot shift left.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_l = supertiles_data[current_supertile_index]
-
         if not (current_definition_shift_st_l and 
                 len(current_definition_shift_st_l) == current_st_h_for_shift_l and
                 (current_st_h_for_shift_l == 0 or (current_st_w_for_shift_l > 0 and len(current_definition_shift_st_l[0]) == current_st_w_for_shift_l) or current_st_w_for_shift_l == 0)):
@@ -8708,40 +9118,31 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
+        command = TransformCommand("Shift Supertile Left", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+
         for r_shift_st_l_val in range(current_st_h_for_shift_l):
             if r_shift_st_l_val < len(current_definition_shift_st_l):
                 row_data_list_st_l = current_definition_shift_st_l[r_shift_st_l_val]
                 if len(row_data_list_st_l) == current_st_w_for_shift_l and current_st_w_for_shift_l > 0:
-                    first_tile_in_row_st = row_data_list_st_l[0]
-                    for c_shift_st_l_val in range(current_st_w_for_shift_l - 1):
-                        row_data_list_st_l[c_shift_st_l_val] = row_data_list_st_l[c_shift_st_l_val + 1]
-                    row_data_list_st_l[current_st_w_for_shift_l - 1] = first_tile_in_row_st
+                    first_tile_in_row_st = row_data_list_st_l.pop(0)
+                    row_data_list_st_l.append(first_tile_in_row_st)
 
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} shifted left.")
 
     def shift_supertile_right(self):
-        global supertiles_data, current_supertile_index, num_supertiles # Using globals
-
+        global supertiles_data, current_supertile_index, num_supertiles
         current_st_w_for_shift_r = self.supertile_grid_width
         current_st_h_for_shift_r = self.supertile_grid_height
-        
         if not (0 <= current_supertile_index < num_supertiles) or current_st_w_for_shift_r <= 0 or current_st_h_for_shift_r <= 0:
             if current_st_w_for_shift_r <= 1 and 0 <= current_supertile_index < num_supertiles :
                  _debug(f"Supertile {current_supertile_index} is {current_st_w_for_shift_r} unit(s) wide, cannot shift right.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
             return
-
         current_definition_shift_st_r = supertiles_data[current_supertile_index]
-
         if not (current_definition_shift_st_r and 
                 len(current_definition_shift_st_r) == current_st_h_for_shift_r and
                 (current_st_h_for_shift_r == 0 or (current_st_w_for_shift_r > 0 and len(current_definition_shift_st_r[0]) == current_st_w_for_shift_r) or current_st_w_for_shift_r == 0)):
@@ -8749,22 +9150,17 @@ class TileEditorApp:
             messagebox.showerror("Shift Error", f"Supertile {current_supertile_index} data is inconsistent. Cannot shift.", parent=self.root)
             return
 
+        command = TransformCommand("Shift Supertile Right", self, supertiles_data, current_supertile_index, self.invalidate_supertile_cache)
+
         for r_shift_st_r_val in range(current_st_h_for_shift_r):
             if r_shift_st_r_val < len(current_definition_shift_st_r):
                 row_data_list_st_r = current_definition_shift_st_r[r_shift_st_r_val]
                 if len(row_data_list_st_r) == current_st_w_for_shift_r and current_st_w_for_shift_r > 0:
-                    last_tile_in_row_st = row_data_list_st_r[current_st_w_for_shift_r - 1]
-                    for c_shift_st_r_val in range(current_st_w_for_shift_r - 1, 0, -1):
-                        row_data_list_st_r[c_shift_st_r_val] = row_data_list_st_r[c_shift_st_r_val - 1]
-                    row_data_list_st_r[0] = last_tile_in_row_st
+                    last_tile_in_row_st = row_data_list_st_r.pop(-1)
+                    row_data_list_st_r.insert(0, last_tile_in_row_st)
         
-        self._mark_project_modified()
-        self.invalidate_supertile_cache(current_supertile_index)
-        self.invalidate_minimap_background_cache()
-        
-        self.update_all_displays(changed_level="all")
-            
-        self._request_supertile_usage_refresh()
+        command.capture_new_state()
+        self.undo_manager.execute(command)
         
         _debug(f"Supertile {current_supertile_index} shifted right.")
 
@@ -8986,7 +9382,7 @@ class TileEditorApp:
             self._mark_project_modified() # If map data changed, project is modified
             self.invalidate_minimap_background_cache() # Minimap needs update
             # The map canvas itself will be redrawn by the caller of insert/delete ST usually.
-            self._request_supertile_usage_refresh() # MODIFIED: ADDED THIS LINE
+            self._request_supertile_usage_refresh()
 
     def _insert_tile(self, index):
         global num_tiles_in_set, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX
@@ -9138,67 +9534,94 @@ class TileEditorApp:
 
     def handle_add_tile(self):  
         global num_tiles_in_set, current_tile_index
+
+        if num_tiles_in_set >= MAX_TILES:
+            messagebox.showwarning("Add Tile Failed", f"Could not add tile. Maximum {MAX_TILES} reached?")
+            return
     
         if self._clear_marked_unused(trigger_redraw=False):
             pass
 
-        success = self._insert_tile(num_tiles_in_set)  
+        new_tile_idx = num_tiles_in_set
+        blank_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+        blank_colors = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
 
-        if success:
-            num_tiles_in_set += 1
-            new_tile_idx = num_tiles_in_set - 1
-            current_tile_index = new_tile_idx  
+        pattern_command = ModifyListCommand("Add Tile", tileset_patterns, new_tile_idx, blank_pattern, is_insert=True)
+        color_command = ModifyListCommand("Add Tile", tileset_colors, new_tile_idx, blank_colors, is_insert=True)
+        
+        # Command to update application state (counts and selections)
+        old_state = (num_tiles_in_set, current_tile_index)
+        new_state = (num_tiles_in_set + 1, new_tile_idx)
 
+        def state_setter(state_tuple):
+            global num_tiles_in_set, current_tile_index
+            num_tiles_in_set, current_tile_index = state_tuple
+        
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+
+        # Define post-action hooks for UI updates
+        def post_add_hooks():
+            self._mark_project_modified()
             self.clear_all_caches()  
             self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all")  
-            self.scroll_viewers_to_tile(current_tile_index)
             self._update_editor_button_states()  
-            self._request_color_usage_refresh() # Correctly placed
-            print(f"Added new tile {new_tile_idx}")
-        else:
-            messagebox.showwarning(
-                "Add Tile Failed", f"Could not add tile. Maximum {MAX_TILES} reached?"
-            )
+            self._request_color_usage_refresh()
+            self.scroll_viewers_to_tile(current_tile_index)
+
+        composite = CompositeCommand(
+            "Add Tile", 
+            [pattern_command, color_command, state_command],
+            app_ref=self,
+            post_hooks=[post_add_hooks]
+    )
+        self.undo_manager.execute(composite)
+        
+        _debug(f"Added new tile {new_tile_idx}")
 
     def handle_insert_tile(self):
         global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass 
+        if num_tiles_in_set >= MAX_TILES:
+            messagebox.showwarning("Insert Tile Failed", f"Could not insert tile. Maximum {MAX_TILES} reached?")
+            return
+        if self._clear_marked_unused(trigger_redraw=False): pass 
 
         insert_idx = current_tile_index
-        success = self._insert_tile(insert_idx)
+        
+        blank_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+        blank_colors = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
+        pattern_command = ModifyListCommand("Insert Tile", tileset_patterns, insert_idx, blank_pattern, is_insert=True)
+        color_command = ModifyListCommand("Insert Tile", tileset_colors, insert_idx, blank_colors, is_insert=True)
+        
+        st_refs_command = UpdateSupertileRefsForTileCommand("Update Supertile Refs", self, insert_idx, is_insert=True)
 
-        if success:
-            num_tiles_in_set += 1
-            current_tile_index = insert_idx 
+        old_state = (num_tiles_in_set, current_tile_index, selected_tile_for_supertile)
+        new_num_tiles = num_tiles_in_set + 1
+        new_selection = insert_idx
+        new_st_selection = selected_tile_for_supertile + 1 if selected_tile_for_supertile >= insert_idx else selected_tile_for_supertile
+        new_st_selection = min(new_st_selection, new_num_tiles - 1)
+        new_state = (new_num_tiles, new_selection, new_st_selection)
+        def state_setter(state_tuple):
+            global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
+            num_tiles_in_set, current_tile_index, selected_tile_for_supertile = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-            if selected_tile_for_supertile >= insert_idx:
-                selected_tile_for_supertile += 1
-            selected_tile_for_supertile = min(selected_tile_for_supertile, num_tiles_in_set -1)
-
-
+        def post_insert_hooks():
+            self._mark_project_modified()
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all")
-            self.scroll_viewers_to_tile(current_tile_index)
             self._update_editor_button_states()
-            self._request_color_usage_refresh() # Added
-            print(f"Inserted tile at index {insert_idx}")
-        else:
-            messagebox.showwarning(
-                "Insert Tile Failed",
-                f"Could not insert tile. Maximum {MAX_TILES} reached?",
-            )
+            self._request_color_usage_refresh()
+            self.scroll_viewers_to_tile(current_tile_index)
+
+        composite = CompositeCommand("Insert Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_hooks=[post_insert_hooks])
+        self.undo_manager.execute(composite)
+        _debug(f"Inserted tile at index {insert_idx}")
 
     def handle_delete_tile(self):
         global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-
         if num_tiles_in_set <= 1:
             messagebox.showinfo("Delete Tile", "Cannot delete the last tile.")
             return
-
         delete_idx = current_tile_index
         if not (0 <= delete_idx < num_tiles_in_set):
             messagebox.showerror("Delete Tile Error", "Invalid tile index selected.")
@@ -9207,123 +9630,164 @@ class TileEditorApp:
         usage = self._check_tile_usage(delete_idx)
         confirm_msg = f"Delete Tile {delete_idx}?"
         if usage:
-            confirm_msg += "\n\n*** WARNING! ***\nThis tile is used by the following Supertile(s):\n"
-            confirm_msg += ", ".join(map(str, usage[:10]))  
-            if len(usage) > 10:
-                confirm_msg += "..."
-            confirm_msg += (
-                f"\n\nReferences in these Supertiles will be reset to Tile 0."
-            )
-
-        if not messagebox.askokcancel("Confirm Delete", confirm_msg, icon="warning"):
-            return
+            confirm_msg += "\n\n*** WARNING! ***\nThis tile is used by the following Supertile(s):\n" + ", ".join(map(str, usage[:10]))
+            if len(usage) > 10: confirm_msg += "..."
+            confirm_msg += f"\n\nReferences in these Supertiles will be reset to Tile 0."
+        if not messagebox.askokcancel("Confirm Delete", confirm_msg, icon="warning"): return
 
         self._adjust_marked_indices_after_delete(self.marked_unused_tiles, delete_idx)
 
-        success = self._delete_tile(delete_idx) # Core logic does NOT clear marks
+        pattern_command = ModifyListCommand("Delete Tile", tileset_patterns, delete_idx, is_insert=False)
+        color_command = ModifyListCommand("Delete Tile", tileset_colors, delete_idx, is_insert=False)
+        
+        # Use the new, optimized command for updating supertile references
+        st_refs_command = UpdateSupertileRefsForTileCommand("Update Supertile Refs", self, delete_idx, is_insert=False)
+        
+        old_state = (num_tiles_in_set, current_tile_index, selected_tile_for_supertile)
+        new_num_tiles = num_tiles_in_set - 1
+        new_selection = min(delete_idx, new_num_tiles - 1)
+        new_st_selection = selected_tile_for_supertile
+        if selected_tile_for_supertile == delete_idx: new_st_selection = 0
+        elif selected_tile_for_supertile > delete_idx: new_st_selection -= 1
+        new_st_selection = min(new_st_selection, new_num_tiles - 1)
+        new_state = (new_num_tiles, new_selection, new_st_selection)
+        def state_setter(state_tuple):
+            global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
+            num_tiles_in_set, current_tile_index, selected_tile_for_supertile = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        if success:
-            num_tiles_in_set -= 1
-            # Adjust selection: stay at index if possible, else clamp to new max
-            current_tile_index = min(delete_idx, num_tiles_in_set - 1)
-            current_tile_index = max(0, current_tile_index) # Ensure not -1 if last tile deleted
-
-            # Adjust other selections if they pointed to deleted or higher index
-            if selected_tile_for_supertile == delete_idx:
-                selected_tile_for_supertile = 0 # Default to 0 if deleted
-            elif selected_tile_for_supertile > delete_idx:
-                selected_tile_for_supertile -= 1
-            selected_tile_for_supertile = min(selected_tile_for_supertile, num_tiles_in_set -1)
-            selected_tile_for_supertile = max(0, selected_tile_for_supertile)
-
-
+        def post_delete_hooks():
+            self._mark_project_modified()
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all") # This will redraw with adjusted marks
-            self.scroll_viewers_to_tile(current_tile_index)  
             self._update_editor_button_states()
             self._request_color_usage_refresh()
-            # self._mark_project_modified() is called within _delete_tile
-            print(f"Deleted tile at index {delete_idx}")
-        else:
-            messagebox.showerror("Delete Tile Failed", "An error occurred during tile deletion.")
+            self.scroll_viewers_to_tile(current_tile_index)
+
+        composite = CompositeCommand("Delete Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_hooks=[post_delete_hooks])
+        self.undo_manager.execute(composite)
+        _debug(f"Deleted tile at index {delete_idx}")
 
     def handle_add_supertile(self):  
-        global num_supertiles, current_supertile_index # Using globals
+        global num_supertiles, current_supertile_index
 
-        if self._clear_marked_unused(trigger_redraw=False):
-            # If marks were cleared, update_all_displays later will handle redraw
-            pass
-
-        success = self._insert_supertile(num_supertiles) # Insert at the end
-
-        if success:
-            num_supertiles += 1 # Update count *after* successful insertion
-            new_st_idx = num_supertiles - 1
-            current_supertile_index = new_st_idx  
-
-            self.supertile_image_cache.clear()  
-            self.invalidate_minimap_background_cache() # Map not directly changed, but ST count did
-            
-            self.update_all_displays(changed_level="all") 
-            self.scroll_selectors_to_supertile(current_supertile_index)
-            self._update_editor_button_states()
-            # self._mark_project_modified() is called within _insert_supertile
-            
-            # Refresh usage windows as num_supertiles changed
-            self._request_tile_usage_refresh()
-            self._request_supertile_usage_refresh()
-            
-            _debug(f"Added new supertile {new_st_idx}")
-        else:
+        if num_supertiles >= MAX_SUPERTILES:
             messagebox.showwarning(
                 "Add Supertile Failed",
                 f"Could not add supertile. Maximum {MAX_SUPERTILES} reached?",
                 parent=self.root
             )
-
-    def handle_insert_supertile(self):
-        global num_supertiles, current_supertile_index, selected_supertile_for_map # Using globals
+            return
 
         if self._clear_marked_unused(trigger_redraw=False):
             pass
 
-        insert_idx = current_supertile_index # Insert at current selection
-        success = self._insert_supertile(insert_idx)
+        new_st_idx = num_supertiles
+        blank_st_definition = [
+            [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
+        ]
 
-        if success:
-            num_supertiles += 1 # Update count after successful insertion
-            # current_supertile_index remains insert_idx, which is correct
-            
-            # Adjust selected_supertile_for_map if it was at or after the insert point
-            if selected_supertile_for_map >= insert_idx:
-                if selected_supertile_for_map < MAX_SUPERTILES -1: # Prevent overflow if already at max
-                    selected_supertile_for_map += 1
-            # Ensure it's clamped within new valid range
-            selected_supertile_for_map = min(selected_supertile_for_map, num_supertiles - 1 if num_supertiles > 0 else 0)
+        st_add_command = ModifyListCommand("Add Supertile", supertiles_data, new_st_idx, blank_st_definition, is_insert=True)
+        
+        # Command to update application state
+        old_state = (num_supertiles, current_supertile_index)
+        new_state = (num_supertiles + 1, new_st_idx)
+        
+        def state_setter(state_tuple):
+            global num_supertiles, current_supertile_index
+            num_supertiles, current_supertile_index = state_tuple
 
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
+        # Define post-action hooks for UI updates
+        def post_add_hooks():
+            self._mark_project_modified()
             self.supertile_image_cache.clear()
-            self.invalidate_minimap_background_cache() # Map refs changed by _update_map_refs...
-            self.update_all_displays(changed_level="all") 
-            self.scroll_selectors_to_supertile(current_supertile_index)
+            self.map_render_cache.clear()
+            self.invalidate_minimap_background_cache()
             self._update_editor_button_states()
-            # self._mark_project_modified() is in _insert_supertile
-            
-            # Refresh usage windows
             self._request_tile_usage_refresh()
             self._request_supertile_usage_refresh()
+            self.scroll_selectors_to_supertile(current_supertile_index)
 
-            _debug(f"Inserted supertile at index {insert_idx}")
-        else:
+        # Combine actions into one command
+        composite = CompositeCommand(
+            "Add Supertile", 
+            [st_add_command, state_command],
+            app_ref=self,
+            post_hooks=[post_add_hooks]
+        )
+        self.undo_manager.execute(composite)
+        
+        _debug(f"Added new supertile {new_st_idx}")
+
+    def handle_insert_supertile(self):
+        global num_supertiles, current_supertile_index, selected_supertile_for_map
+
+        if num_supertiles >= MAX_SUPERTILES:
             messagebox.showwarning(
                 "Insert Supertile Failed",
                 f"Could not insert supertile. Maximum {MAX_SUPERTILES} reached or error.",
                 parent=self.root
             )
+            return
+
+        if self._clear_marked_unused(trigger_redraw=False):
+            pass
+
+        insert_idx = current_supertile_index
+        
+        blank_st_definition = [
+            [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
+        ]
+        st_insert_command = ModifyListCommand("Insert Supertile", supertiles_data, insert_idx, blank_st_definition, is_insert=True)
+        
+        old_map_data = copy.deepcopy(map_data)
+        new_map_data = copy.deepcopy(map_data)
+        for r in range(map_height - 1, -1, -1):
+            for c in range(map_width - 1, -1, -1):
+                if new_map_data[r][c] >= insert_idx:
+                    new_map_data[r][c] += 1
+        
+        def map_data_setter(data):
+            global map_data
+            map_data = data
+        
+        map_refs_command = SetDataCommand("Update Map Refs", self, map_data_setter, new_map_data, old_map_data)
+        
+        # Command to update application state
+        old_state = (num_supertiles, current_supertile_index, selected_supertile_for_map)
+        new_num_supertiles = num_supertiles + 1
+        new_selection = insert_idx # current_supertile_index does not change
+        new_map_selection = selected_supertile_for_map + 1 if selected_supertile_for_map >= insert_idx else selected_supertile_for_map
+        new_map_selection = min(new_map_selection, new_num_supertiles - 1)
+        new_state = (new_num_supertiles, new_selection, new_map_selection)
+
+        def state_setter(state_tuple):
+            global num_supertiles, current_supertile_index, selected_supertile_for_map
+            num_supertiles, current_supertile_index, selected_supertile_for_map = state_tuple
+
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+
+        # Define post-action hooks for UI updates
+        def post_insert_hooks():
+            self._mark_project_modified()
+            self.supertile_image_cache.clear()
+            self.map_render_cache.clear()
+            self.invalidate_minimap_background_cache()
+            self._update_editor_button_states()
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
+            self.scroll_selectors_to_supertile(current_supertile_index)
+
+        # --- Combine all actions into one ---
+        composite = CompositeCommand("Insert Supertile", [st_insert_command, map_refs_command, state_command], app_ref=self, post_hooks=[post_insert_hooks])
+        self.undo_manager.execute(composite)
+
+        _debug(f"Inserted supertile at index {insert_idx}")
 
     def handle_delete_supertile(self):
-        global num_supertiles, current_supertile_index, selected_supertile_for_map # Using globals
+        global num_supertiles, current_supertile_index, selected_supertile_for_map
 
         if num_supertiles <= 1:
             messagebox.showinfo("Delete Supertile", "Cannot delete the last supertile.", parent=self.root)
@@ -9340,9 +9804,7 @@ class TileEditorApp:
             map_coords_str = ", ".join(
                 [f"({r_idx},{c_idx})" for r_idx, c_idx in usage[:10]] 
             )  
-            confirm_msg += (
-                "\n\n*** WARNING! ***\nThis supertile is used on the Map at:\n"
-            )
+            confirm_msg += "\n\n*** WARNING! ***\nThis supertile is used on the Map at:\n"
             confirm_msg += map_coords_str
             if len(usage) > 10:
                 confirm_msg += "..."
@@ -9351,143 +9813,105 @@ class TileEditorApp:
         if not messagebox.askokcancel("Confirm Delete", confirm_msg, icon="warning", parent=self.root):
             return
         
-        # Clear marks before data modification, but _delete_supertile itself doesn't redraw
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass # Redraw will be handled by update_all_displays below
-
         self._adjust_marked_indices_after_delete(self.marked_unused_supertiles, delete_idx)
+        
+        st_delete_command = ModifyListCommand("Delete Supertile", supertiles_data, delete_idx, is_insert=False)
+        
+        old_map_data = copy.deepcopy(map_data)
+        new_map_data = copy.deepcopy(map_data)
+        for r in range(map_height - 1, -1, -1):
+            for c in range(map_width - 1, -1, -1):
+                if new_map_data[r][c] == delete_idx:
+                    new_map_data[r][c] = 0
+                elif new_map_data[r][c] > delete_idx:
+                    new_map_data[r][c] -= 1
 
-        success = self._delete_supertile(delete_idx) # Core data deletion
+        def map_data_setter(data):
+            global map_data
+            map_data = data
+        
+        map_refs_command = SetDataCommand("Update Map Refs", self, map_data_setter, new_map_data, old_map_data)
+        
+        old_state = (num_supertiles, current_supertile_index, selected_supertile_for_map)
+        new_num_supertiles = num_supertiles - 1
+        new_selection = min(delete_idx, new_num_supertiles - 1)
+        new_map_selection = selected_supertile_for_map
+        if selected_supertile_for_map == delete_idx:
+            new_map_selection = 0
+        elif selected_supertile_for_map > delete_idx:
+            new_map_selection -= 1
+        new_map_selection = min(new_map_selection, new_num_supertiles - 1)
+        new_state = (new_num_supertiles, new_selection, new_map_selection)
 
-        if success:
-            num_supertiles -= 1 # Update count *after* successful deletion
-            
-            # Adjust current_supertile_index
-            current_supertile_index = min(delete_idx, num_supertiles - 1 if num_supertiles > 0 else 0)
-            current_supertile_index = max(0, current_supertile_index) 
+        def state_setter(state_tuple):
+            global num_supertiles, current_supertile_index, selected_supertile_for_map
+            num_supertiles, current_supertile_index, selected_supertile_for_map = state_tuple
 
-            # Adjust selected_supertile_for_map
-            if selected_supertile_for_map == delete_idx:
-                selected_supertile_for_map = 0 # Default to 0 if deleted
-            elif selected_supertile_for_map > delete_idx:
-                selected_supertile_for_map -= 1
-            selected_supertile_for_map = min(selected_supertile_for_map, num_supertiles - 1 if num_supertiles > 0 else 0)
-            selected_supertile_for_map = max(0, selected_supertile_for_map)
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-
+        def post_delete_hooks():
+            self._mark_project_modified()
             self.supertile_image_cache.clear()
-            self.map_render_cache.clear() # Map refs changed
-            self.invalidate_minimap_background_cache() # Map refs changed
-            
-            self.update_all_displays(changed_level="all") 
-            self.scroll_selectors_to_supertile(current_supertile_index)
+            self.map_render_cache.clear()
+            self.invalidate_minimap_background_cache()
             self._update_editor_button_states()
-            # self._mark_project_modified() is in _delete_supertile
-            
-            # Refresh usage windows
             self._request_tile_usage_refresh()
             self._request_supertile_usage_refresh()
-            
-            _debug(f"Deleted supertile at index {delete_idx}")
-        else:
-            messagebox.showerror(
-                "Delete Supertile Failed",
-                "An error occurred during supertile deletion.",
-                parent=self.root
-            )
+            self.scroll_selectors_to_supertile(current_supertile_index)
 
-    def _reposition_tile(self, source_index_tile, target_index_tile):
+        composite = CompositeCommand("Delete Supertile", [st_delete_command, map_refs_command, state_command], app_ref=self, post_hooks=[post_delete_hooks])
+        self.undo_manager.execute(composite)
+
+        _debug(f"Deleted supertile at index {delete_idx}")
+
+    def _reposition_tile(self, source_index, target_index):
         global num_tiles_in_set, tileset_patterns, tileset_colors
-        global current_tile_index, selected_tile_for_supertile, supertiles_data
+        global current_tile_index, selected_tile_for_supertile
 
-        if not (0 <= source_index_tile < num_tiles_in_set):
-            _error(f"Invalid source index {source_index_tile} for tile move.")
-            return False
+        if not (0 <= source_index < num_tiles_in_set): return False
+        clamped_target = max(0, min(target_index, num_tiles_in_set))
         
-        clamped_target_index_tile = max(0, min(target_index_tile, num_tiles_in_set))
-
-        if source_index_tile == clamped_target_index_tile or \
-           (clamped_target_index_tile == num_tiles_in_set and source_index_tile == num_tiles_in_set -1) :
-             if source_index_tile == clamped_target_index_tile -1 and clamped_target_index_tile == num_tiles_in_set :
-                  pass 
-             elif source_index_tile == clamped_target_index_tile :
-                  return False
-
-        _debug(f"Repositioning Tile: From {source_index_tile} to {clamped_target_index_tile}")
-
-        moved_pattern_data = tileset_patterns.pop(source_index_tile)
-        moved_colors_data = tileset_colors.pop(source_index_tile)
-
-        new_list_len = len(tileset_patterns)
-        actual_insert_idx = min(clamped_target_index_tile, new_list_len)
-
-        tileset_patterns.insert(actual_insert_idx, moved_pattern_data)
-        tileset_colors.insert(actual_insert_idx, moved_colors_data)
-
-        # Update Supertile References
-        for st_idx_refo in range(num_supertiles):
-            definition_refo = supertiles_data[st_idx_refo]
-            if not definition_refo or len(definition_refo) != self.supertile_grid_height or \
-               (self.supertile_grid_height > 0 and (len(definition_refo[0]) != self.supertile_grid_width)):
-                _warning(f"ST {st_idx_refo} dim mismatch in _reposition_tile. Skipping ref update.")
-                continue
-
-            st_def_modified_this_iteration = False
-            for r_refo in range(self.supertile_grid_height):
-                for c_refo in range(self.supertile_grid_width):
-                    current_ref_val = definition_refo[r_refo][c_refo]
-                    new_ref_val = current_ref_val
-
-                    if current_ref_val == source_index_tile:
-                        new_ref_val = actual_insert_idx
-                    elif source_index_tile < actual_insert_idx:
-                        if source_index_tile < current_ref_val <= actual_insert_idx:
-                             new_ref_val = current_ref_val - 1
-                    elif source_index_tile > actual_insert_idx:
-                        if actual_insert_idx <= current_ref_val < source_index_tile:
-                             new_ref_val = current_ref_val + 1
-                    
-                    if new_ref_val != current_ref_val:
-                         supertiles_data[st_idx_refo][r_refo][c_refo] = new_ref_val
-                         st_def_modified_this_iteration = True
+        actual_insert_idx = clamped_target
+        if source_index < clamped_target:
+            actual_insert_idx -= 1
             
-            if st_def_modified_this_iteration:
-                self.invalidate_supertile_cache(st_idx_refo)
+        if source_index == actual_insert_idx: return False
 
-        # Update the set of marked unused tiles.
-        if self.marked_unused_tiles:
-            new_marked_set = set()
-            for idx in self.marked_unused_tiles:
-                if idx == source_index_tile:
-                    new_marked_set.add(actual_insert_idx)
-                elif source_index_tile < actual_insert_idx and source_index_tile < idx <= actual_insert_idx:
-                    new_marked_set.add(idx - 1)
-                elif source_index_tile > actual_insert_idx and actual_insert_idx <= idx < source_index_tile:
-                    new_marked_set.add(idx + 1)
-                else:
-                    new_marked_set.add(idx)
-            self.marked_unused_tiles = new_marked_set
+        pattern_command = ReorderListCommand("Move Tile", tileset_patterns, source_index, actual_insert_idx)
+        color_command = ReorderListCommand("Move Tile", tileset_colors, source_index, actual_insert_idx)
 
-        # Update Selections
-        if current_tile_index == source_index_tile:
-            current_tile_index = actual_insert_idx
-        elif source_index_tile < actual_insert_idx and source_index_tile < current_tile_index <= actual_insert_idx:
-            current_tile_index -= 1
-        elif source_index_tile > actual_insert_idx and actual_insert_idx <= current_tile_index < source_index_tile:
-            current_tile_index += 1
+        # Use the new, fast, procedural command
+        st_refs_command = UpdateSupertileRefsForTileReorderCommand("Update Supertile Refs", self, source_index, actual_insert_idx)
+        
+        old_state = (current_tile_index, selected_tile_for_supertile)
+        new_cti = current_tile_index
+        if current_tile_index == source_index: new_cti = actual_insert_idx
+        elif source_index < actual_insert_idx:
+            if source_index < current_tile_index <= actual_insert_idx: new_cti -= 1
+        else:
+            if actual_insert_idx <= current_tile_index < source_index: new_cti += 1
+        
+        new_sts = selected_tile_for_supertile
+        if selected_tile_for_supertile == source_index: new_sts = actual_insert_idx
+        elif source_index < actual_insert_idx:
+            if source_index < selected_tile_for_supertile <= actual_insert_idx: new_sts -= 1
+        else:
+            if actual_insert_idx <= selected_tile_for_supertile < source_index: new_sts += 1 
+        new_state = (new_cti, new_sts)
 
-        if selected_tile_for_supertile == source_index_tile:
-            selected_tile_for_supertile = actual_insert_idx
-        elif source_index_tile < actual_insert_idx and source_index_tile < selected_tile_for_supertile <= actual_insert_idx:
-            selected_tile_for_supertile -= 1
-        elif source_index_tile > actual_insert_idx and actual_insert_idx <= selected_tile_for_supertile < source_index_tile:
-            selected_tile_for_supertile += 1
+        def state_setter(state_tuple):
+            global current_tile_index, selected_tile_for_supertile
+            current_tile_index, selected_tile_for_supertile = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        current_tile_index = max(0, min(current_tile_index, num_tiles_in_set - 1))
-        selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, num_tiles_in_set - 1))
+        def post_hooks():
+            self._mark_project_modified()
+            # Caches and usage are now handled by the specific command, but we keep these
+            # for the state command and final redraw coordination.
+            self.scroll_viewers_to_tile(current_tile_index)
 
-        self._mark_project_modified()
-        _debug(f"  Successfully moved Tile {source_index_tile} to {actual_insert_idx}")
+        composite = CompositeCommand("Move Tile", [pattern_command, color_command, st_refs_command, state_command], app_ref=self, post_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
         return True
 
     def _reposition_supertile(self, source_index_st, target_index_st):
@@ -9500,73 +9924,66 @@ class TileEditorApp:
         
         clamped_target_index_st = max(0, min(target_index_st, num_supertiles))
 
-        if source_index_st == clamped_target_index_st or \
-           (clamped_target_index_st == num_supertiles and source_index_st == num_supertiles -1) :
-             if source_index_st == clamped_target_index_st -1 and clamped_target_index_st == num_supertiles :
-                  pass
-             elif source_index_st == clamped_target_index_st :
-                  return False
+        if source_index_st == clamped_target_index_st:
+            return False
+        
+        # Adjust target for list.insert() if moving an item down the list
+        actual_insert_idx_st = clamped_target_index_st
+        if source_index_st < clamped_target_index_st:
+            actual_insert_idx_st -= 1
 
-        _debug(f"Repositioning Supertile: From {source_index_st} to {clamped_target_index_st}")
+        # --- Create Commands ---
+        st_reorder_command = ReorderListCommand("Move Supertile", supertiles_data, source_index_st, actual_insert_idx_st)
 
-        moved_st_definition = supertiles_data.pop(source_index_st)
-
-        new_list_len = len(supertiles_data)
-        actual_insert_idx_st = min(clamped_target_index_st, new_list_len)
-
-        supertiles_data.insert(actual_insert_idx_st, moved_st_definition)
-
-        # Update Map References
+        old_map_data = copy.deepcopy(map_data)
+        new_map_data = copy.deepcopy(map_data)
         for r_map_refo in range(map_height):
             for c_map_refo in range(map_width):
-                current_map_ref = map_data[r_map_refo][c_map_refo]
-                new_map_ref = current_map_ref
-
+                current_map_ref = new_map_data[r_map_refo][c_map_refo]
                 if current_map_ref == source_index_st:
-                    new_map_ref = actual_insert_idx_st
+                    new_map_data[r_map_refo][c_map_refo] = actual_insert_idx_st
                 elif source_index_st < actual_insert_idx_st: 
                     if source_index_st < current_map_ref <= actual_insert_idx_st:
-                         new_map_ref = current_map_ref - 1
+                         new_map_data[r_map_refo][c_map_refo] -= 1
                 elif source_index_st > actual_insert_idx_st: 
                     if actual_insert_idx_st <= current_map_ref < source_index_st:
-                         new_map_ref = current_map_ref + 1
-                
-                if new_map_ref != current_map_ref:
-                     map_data[r_map_refo][c_map_refo] = new_map_ref
+                         new_map_data[r_map_refo][c_map_refo] += 1
+        def map_data_setter(data):
+            global map_data
+            map_data = data
+        map_refs_command = SetDataCommand("Update Map Refs", self, map_data_setter, new_map_data, old_map_data)
 
-        # Update the set of marked unused supertiles.
-        if self.marked_unused_supertiles:
-            new_marked_set = set()
-            for idx in self.marked_unused_supertiles:
-                if idx == source_index_st:
-                    new_marked_set.add(actual_insert_idx_st)
-                elif source_index_st < actual_insert_idx_st and source_index_st < idx <= actual_insert_idx_st:
-                    new_marked_set.add(idx - 1)
-                elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= idx < source_index_st:
-                    new_marked_set.add(idx + 1)
-                else:
-                    new_marked_set.add(idx)
-            self.marked_unused_supertiles = new_marked_set
+        old_state = (current_supertile_index, selected_supertile_for_map)
+        new_csi = current_supertile_index
+        if current_supertile_index == source_index_st: new_csi = actual_insert_idx_st
+        elif source_index_st < actual_insert_idx_st:
+            if source_index_st < current_supertile_index <= actual_insert_idx_st: new_csi -= 1
+        else:
+            if actual_insert_idx_st <= current_supertile_index < source_index_st: new_csi += 1
+        
+        new_ssm = selected_supertile_for_map
+        if selected_supertile_for_map == source_index_st: new_ssm = actual_insert_idx_st
+        elif source_index_st < actual_insert_idx_st:
+            if source_index_st < selected_supertile_for_map <= actual_insert_idx_st: new_ssm -= 1
+        else:
+            if actual_insert_idx_st <= selected_supertile_for_map < source_index_st: new_ssm += 1
+        new_state = (new_csi, new_ssm)
 
-        # Update Selections
-        if current_supertile_index == source_index_st:
-            current_supertile_index = actual_insert_idx_st
-        elif source_index_st < actual_insert_idx_st and source_index_st < current_supertile_index <= actual_insert_idx_st:
-            current_supertile_index -= 1
-        elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= current_supertile_index < source_index_st:
-            current_supertile_index += 1
+        def state_setter(state_tuple):
+            global current_supertile_index, selected_supertile_for_map
+            current_supertile_index, selected_supertile_for_map = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
-        if selected_supertile_for_map == source_index_st:
-            selected_supertile_for_map = actual_insert_idx_st
-        elif source_index_st < actual_insert_idx_st and source_index_st < selected_supertile_for_map <= actual_insert_idx_st:
-            selected_supertile_for_map -= 1
-        elif source_index_st > actual_insert_idx_st and actual_insert_idx_st <= selected_supertile_for_map < source_index_st:
-            selected_supertile_for_map += 1
+        def post_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self.invalidate_minimap_background_cache()
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
 
-        current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1))
-        selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
-
-        self._mark_project_modified()
+        composite = CompositeCommand("Move Supertile", [st_reorder_command, map_refs_command, state_command], app_ref=self, post_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
+        
         _debug(f"  Successfully moved Supertile {source_index_st} to {actual_insert_idx_st}")
         return True
 
@@ -11148,7 +11565,6 @@ class TileEditorApp:
         if not canvas or not canvas.winfo_exists():
             return
 
-        # --- Start of existing logic to determine clicked_rom_tile_absolute_idx ---
         rom_data = dialog.rom_data
         current_global_fine_offset = dialog.fine_offset_var.get() 
         tile_display_size = VIEWER_TILE_SIZE
@@ -11178,7 +11594,6 @@ class TileEditorApp:
         if not (0 <= clicked_rom_tile_absolute_idx < total_potential_tiles):
             _debug(f" Click outside valid tile area. Clicked index: {clicked_rom_tile_absolute_idx}, Total potential: {total_potential_tiles}")
             return
-        # --- End of logic to determine clicked_rom_tile_absolute_idx ---
 
 
         is_shift_pressed = (event.state & 0x0001) != 0
@@ -12397,14 +12812,11 @@ class TileEditorApp:
         return result["value"]
 
     def handle_add_many_tiles(self):
-        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX 
-
+        global num_tiles_in_set, current_tile_index # Still need global here
         if num_tiles_in_set >= MAX_TILES:
             messagebox.showinfo("Add Many Tiles", "Tileset is already full.", parent=self.root)
             return
-
         space_available = MAX_TILES - num_tiles_in_set
-    
         num_to_add = self._create_add_many_dialog(
             parent=self.root, 
             title_text="Add Many Tiles",
@@ -12412,93 +12824,82 @@ class TileEditorApp:
             current_items=num_tiles_in_set,
             max_items_total=MAX_TILES
         )
+        if num_to_add is None or num_to_add <= 0: return
 
-        if num_to_add is None or num_to_add <= 0: 
-            return
-
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass 
-
-        self._mark_project_modified()
-    
-        first_new_tile_idx = num_tiles_in_set 
-    
-        for _ in range(num_to_add):
-            if num_tiles_in_set < MAX_TILES: 
-                if num_tiles_in_set < len(tileset_patterns) and num_tiles_in_set < len(tileset_colors):
-                    tileset_patterns[num_tiles_in_set] = [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
-                    tileset_colors[num_tiles_in_set] = [(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)]
-                    num_tiles_in_set += 1
-                else:
-                    _error(f" handle_add_many_tiles: trying to access beyond list capacity for tile {num_tiles_in_set}")
-                    break 
-            else:
-                break 
+        if self._clear_marked_unused(trigger_redraw=False): pass
         
-        current_tile_index = first_new_tile_idx 
-    
-        self.clear_all_caches()
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self.scroll_viewers_to_tile(current_tile_index)
-        self._update_editor_button_states()
-        self._request_color_usage_refresh() # Correctly placed
+        first_new_tile_idx = num_tiles_in_set
+        commands = []
+        for i in range(num_to_add):
+            new_idx = num_tiles_in_set + i
+            blank_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+            blank_colors = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
+            commands.append(ModifyListCommand("Add Tile", tileset_patterns, new_idx, blank_pattern, is_insert=True))
+            commands.append(ModifyListCommand("Add Tile", tileset_colors, new_idx, blank_colors, is_insert=True))
+
+        old_state = (num_tiles_in_set, current_tile_index)
+        new_state = (num_tiles_in_set + num_to_add, first_new_tile_idx)
+        def state_setter(state_tuple):
+            global num_tiles_in_set, current_tile_index
+            num_tiles_in_set, current_tile_index = state_tuple
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+        commands.append(state_command)
+
+        def post_add_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self.invalidate_minimap_background_cache()
+            self._update_editor_button_states()
+            self._request_color_usage_refresh()
+            self.scroll_viewers_to_tile(current_tile_index)
+
+        composite = CompositeCommand(f"Add {num_to_add} Tiles", commands, app_ref=self, post_hooks=[post_add_hooks])
+        self.undo_manager.execute(composite)
         _debug(f"Added {num_to_add} new tiles.")
 
     def handle_add_many_supertiles(self):
-        global num_supertiles, current_supertile_index, supertiles_data # Globals
-
-        if num_supertiles >= MAX_SUPERTILES: 
+        global num_supertiles, current_supertile_index
+        _debug(f"\n[HANDLE ADD MANY] START. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
+        if num_supertiles >= MAX_SUPERTILES:
             messagebox.showinfo("Add Many Supertiles", "Supertile set is already full.", parent=self.root)
             return
-
         space_available = MAX_SUPERTILES - num_supertiles
+        num_to_add = self._create_add_many_dialog(self.root, "Add Many Supertiles", f"How many supertiles to add? (1-{space_available})", num_supertiles, MAX_SUPERTILES)
+        if num_to_add is None or num_to_add <= 0: return
 
-        num_to_add = self._create_add_many_dialog(
-            parent=self.root,
-            title_text="Add Many Supertiles",
-            prompt_text=f"How many supertiles to add? (1-{space_available})",
-            current_items=num_supertiles,
-            max_items_total=MAX_SUPERTILES
-        )
-
-        if num_to_add is None or num_to_add <= 0:
-            return
-
-        if self._clear_marked_unused(trigger_redraw=False):
-            pass
-
-        self._mark_project_modified()
+        if self._clear_marked_unused(trigger_redraw=False): pass
         
-        first_new_st_idx = num_supertiles 
-        tiles_changed_due_to_new_sts = False # Track if new STs (referencing tile 0) were added
+        first_new_st_idx = num_supertiles
+        commands = []
+        for i in range(num_to_add):
+            new_idx = num_supertiles + i
+            blank_st_definition = [[0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)]
+            commands.append(ModifyListCommand("Add Supertile", supertiles_data, new_idx, blank_st_definition, is_insert=True))
+            _debug(f"[HANDLE ADD MANY] Created ModifyListCommand to insert at index {new_idx}")
 
-        for _ in range(num_to_add):
-            if num_supertiles < MAX_SUPERTILES:
-                if num_supertiles < len(supertiles_data):
-                    supertiles_data[num_supertiles] = [
-                        [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
-                    ]
-                    num_supertiles += 1
-                    tiles_changed_due_to_new_sts = True # New STs reference tile 0
-                else:
-                    _error(f" handle_add_many_supertiles: trying to access beyond list capacity for ST {num_supertiles}")
-                    break
-            else:
-                break
-        
-        current_supertile_index = first_new_st_idx 
+        old_state = (num_supertiles, current_supertile_index)
+        new_state = (num_supertiles + num_to_add, first_new_st_idx)
+        _debug(f"[HANDLE ADD MANY] Created state command. Old state={old_state}, New state={new_state}")
+        def state_setter(state_tuple):
+            global num_supertiles, current_supertile_index
+            _debug(f"  [state_setter] Called. Setting state to {state_tuple}. Previous num_supertiles={num_supertiles}")
+            num_supertiles, current_supertile_index = state_tuple
+            _debug(f"  [state_setter] State SET. New num_supertiles={num_supertiles}")
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+        commands.append(state_command)
 
-        self.supertile_image_cache.clear()
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self.scroll_selectors_to_supertile(current_supertile_index)
-        self._update_editor_button_states()
-        if tiles_changed_due_to_new_sts:
+        def post_add_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self._update_editor_button_states()
             self._request_tile_usage_refresh()
             self._request_supertile_usage_refresh()
+            self.scroll_selectors_to_supertile(current_supertile_index)
+            _debug("[post_hooks] Executed.")
 
-        _debug(f"Added {num_to_add} new supertiles.")
+        composite = CompositeCommand(f"Add {num_to_add} Supertiles", commands, app_ref=self, post_hooks=[post_add_hooks])
+        self.undo_manager.execute(composite)
+        _debug(f"[HANDLE ADD MANY] FINISHED. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
 
     def append_tileset_from_file(self):
         global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set # Using globals
@@ -13242,6 +13643,12 @@ class TileEditorApp:
     def _handle_editor_paint_release(self, event):
         global last_drawn_pixel
         
+        if self.pending_command_list:
+            # Group all the individual pixel changes into a single undoable action
+            composite = CompositeCommand("Paint Stroke", self.pending_command_list[:], self)
+            self.undo_manager.register(composite) # Use register for pre-executed commands
+            self.pending_command_list.clear()
+
         if self.is_currently_painting_tile:
             # Refresh all usage windows once at the end of the drawing action.
             self._request_color_usage_refresh()
@@ -13349,7 +13756,6 @@ class TileEditorApp:
             return ph_photo
 
         # --- Part 3: Render supertile content onto temp_full_photo ---
-        # (This extensive rendering logic remains the same as in Step 12/ your last working version of it)
         if not (0 <= supertile_index < num_supertiles):
             temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, temp_full_photo_w, temp_full_photo_h))
         else:
@@ -13402,7 +13808,6 @@ class TileEditorApp:
                                             except tk.TclError: break 
                                     else: continue
                                     break 
-        # --- End of rendering onto temp_full_photo ---
 
         # --- Part 4: Determine final_photo_width and create final_photo ---
         # final_photo_width is the minimum of the actual scaled content width and the available column area
@@ -14440,6 +14845,7 @@ class TileEditorApp:
     def _finalize_project_change(self):
         # Updates UI and restores windows after a project change.
         _debug(" Finalizing project change: updating UI and settings.")
+        self.undo_manager.clear() # Clear undo/redo history for the new project state
         self._update_window_title()
         
         self.clear_all_caches()
@@ -14568,56 +14974,57 @@ class TileEditorApp:
                 _error(f"Error posting menu: {e}")
 
     def _swap_items(self, item_type, index_a, index_b):
-        """Swaps two items (tiles or supertiles) and updates all global references."""
         _debug(f"Attempting to swap {item_type}s at indices {index_a} and {index_b}")
         
-        data_list = None
-        ref_update_func = None
-        max_index = 0
-
-        if item_type == "tile":
-            data_list = tileset_patterns
-            color_list = tileset_colors
-            ref_update_func = self._update_supertile_refs_for_tile_swap
-            max_index = num_tiles_in_set -1
-        elif item_type == "supertile":
-            data_list = supertiles_data
-            ref_update_func = self._update_map_refs_for_supertile_swap
-            max_index = num_supertiles -1
-        else:
-            return False
-
-        if not (0 <= index_a <= max_index and 0 <= index_b <= max_index):
-            _debug("Swap failed: one or both indices are out of bounds.")
-            return False
-
-        # Swap the main data
-        data_list[index_a], data_list[index_b] = data_list[index_b], data_list[index_a]
-        if item_type == "tile":
-            color_list[index_a], color_list[index_b] = color_list[index_b], color_list[index_a]
-
-        # Update all references
-        if ref_update_func:
-            ref_update_func(index_a, index_b)
-        
-        # Update selections
-        global current_tile_index, selected_tile_for_supertile
-        global current_supertile_index, selected_supertile_for_map
+        commands = []
         
         if item_type == "tile":
-            if current_tile_index == index_a: current_tile_index = index_b
-            elif current_tile_index == index_b: current_tile_index = index_a
+            commands.append(ReorderListCommand("Swap Tiles", tileset_patterns, index_a, index_b, is_swap=True))
+            commands.append(ReorderListCommand("Swap Tiles", tileset_colors, index_a, index_b, is_swap=True))
             
-            if selected_tile_for_supertile == index_a: selected_tile_for_supertile = index_b
-            elif selected_tile_for_supertile == index_b: selected_tile_for_supertile = index_a
+            # Use the new, fast, procedural command
+            commands.append(UpdateSupertileRefsForTileSwapCommand("Update Supertile Refs", self, index_a, index_b))
+
+            old_state = (current_tile_index, selected_tile_for_supertile)
+            new_cti = current_tile_index
+            if current_tile_index == index_a: new_cti = index_b
+            elif current_tile_index == index_b: new_cti = index_a
+            new_sts = selected_tile_for_supertile
+            if selected_tile_for_supertile == index_a: new_sts = index_b
+            elif selected_tile_for_supertile == index_b: new_sts = index_a
+            new_state = (new_cti, new_sts)
+            def state_setter_tile(state):
+                global current_tile_index, selected_tile_for_supertile
+                current_tile_index, selected_tile_for_supertile = state
+            commands.append(SetDataCommand("Update App State", self, state_setter_tile, new_state, old_state))
+
         elif item_type == "supertile":
-            if current_supertile_index == index_a: current_supertile_index = index_b
-            elif current_supertile_index == index_b: current_supertile_index = index_a
-            
-            if selected_supertile_for_map == index_a: selected_supertile_for_map = index_b
-            elif selected_supertile_for_map == index_b: selected_supertile_for_map = index_a
+            commands.append(ReorderListCommand("Swap Supertiles", supertiles_data, index_a, index_b, is_swap=True))
+            commands.append(UpdateMapRefsForSupertileSwapCommand("Update Map Refs", self, index_a, index_b))
+
+            old_state = (current_supertile_index, selected_supertile_for_map)
+            new_csi = current_supertile_index
+            if current_supertile_index == index_a: new_csi = index_b
+            elif current_supertile_index == index_b: new_csi = index_a
+            new_ssm = selected_supertile_for_map
+            if selected_supertile_for_map == index_a: new_ssm = index_b
+            elif selected_supertile_for_map == index_b: new_ssm = index_a
+            new_state = (new_csi, new_ssm)
+            def state_setter_st(state):
+                global current_supertile_index, selected_supertile_for_map
+                current_supertile_index, selected_supertile_for_map = state
+            commands.append(SetDataCommand("Update App State", self, state_setter_st, new_state, old_state))
         
-        self._mark_project_modified()
+        def post_hooks():
+            self._mark_project_modified()
+            # Side effects are now handled by the specific commands
+            if item_type == "tile":
+                self.scroll_viewers_to_tile(current_tile_index)
+            elif item_type == "supertile":
+                self.scroll_selectors_to_supertile(current_supertile_index)
+
+        composite = CompositeCommand(f"Swap {item_type}s", commands, app_ref=self, post_hooks=[post_hooks])
+        self.undo_manager.execute(composite)
         return True
 
     def _update_supertile_refs_for_tile_swap(self, index_a, index_b):
@@ -15103,24 +15510,37 @@ class TileEditorApp:
         if index_a == index_b:
             return False
 
-        # Swap the hex color values in the active palette list
-        self.active_msx_palette[index_a], self.active_msx_palette[index_b] = \
-            self.active_msx_palette[index_b], self.active_msx_palette[index_a]
+        # --- Command for swapping palette hex values ---
+        old_palette = list(self.active_msx_palette)
+        new_palette = list(self.active_msx_palette)
+        new_palette[index_a], new_palette[index_b] = new_palette[index_b], new_palette[index_a]
+        
+        def palette_setter(p):
+            self.active_msx_palette[:] = p # Modify list in-place
+        
+        palette_swap_command = SetDataCommand("Swap Palette Colors", self, palette_setter, new_palette, old_palette)
 
-        # Iterate through the entire tileset to update color references
-        for tile_color_definition in tileset_colors:
-            for i, (fg, bg) in enumerate(tile_color_definition):
+        # --- Command for swapping color references in tileset ---
+        old_tileset_colors = copy.deepcopy(tileset_colors)
+        new_tileset_colors = copy.deepcopy(tileset_colors)
+        for tile_color_def in new_tileset_colors:
+            for i, (fg, bg) in enumerate(tile_color_def):
                 new_fg, new_bg = fg, bg
                 if fg == index_a: new_fg = index_b
                 elif fg == index_b: new_fg = index_a
-                
                 if bg == index_a: new_bg = index_b
                 elif bg == index_b: new_bg = index_a
-                
-                if new_fg != fg or new_bg != bg:
-                    tile_color_definition[i] = (new_fg, new_bg)
+                if (new_fg, new_bg) != (fg, bg):
+                    tile_color_def[i] = (new_fg, new_bg)
+
+        def tileset_colors_setter(c):
+            global tileset_colors
+            tileset_colors = c
+
+        tileset_refs_command = SetDataCommand("Update Tile Color Refs", self, tileset_colors_setter, new_tileset_colors, old_tileset_colors)
+        composite = CompositeCommand("Swap Palette Colors", [palette_swap_command, tileset_refs_command])
+        self.undo_manager.execute(composite)
         
-        self._mark_project_modified()
         return True
 
     def handle_palette_drag_motion(self, event):
@@ -15170,15 +15590,18 @@ class TileEditorApp:
                     is_alt_down_at_release = (event.state & 0x20000) != 0
 
                     if is_alt_down_at_release:
-                        self._execute_replace_all_references("palette_color", source_index, target_index)
+                        _debug("[Drag Release] Alt key is down. Attempting 'Replace All'.")
+                        if self._execute_replace_all_references("palette_color", source_index, target_index):
+                            _debug("[Drag Release] Confirmation was True. Creating and executing command.")
+                            command = ReplaceRefsCommand("Replace All Colors", self, "palette_color", source_index, target_index)
+                            self.undo_manager.execute(command)
+                        else:
+                            _debug("[Drag Release] Confirmation was False. No command created.")
                     else:
+                        _debug("[Drag Release] Alt key is NOT down. Attempting 'Swap'.")
                         success = self._swap_palette_indices(source_index, target_index)
                         if success:
                             self.selected_palette_slot = target_index
-                            self.clear_all_caches()
-                            self.invalidate_minimap_background_cache()
-                            self.update_all_displays(changed_level="all")
-                            self._request_color_usage_refresh()
         finally:
             _debug(" --- PALETTE DRAG RELEASE: FINALLY BLOCK ---")
             
@@ -15322,8 +15745,10 @@ class TileEditorApp:
         return result["confirmed"]
 
     def _execute_replace_all_references(self, item_type, source_index, target_index):
+        _debug(f"[Replace Refs] PRE-CONFIRM: Attempting replace '{item_type}' from {source_index} to {target_index}")
         if source_index == target_index:
-            return
+            _debug("[Replace Refs] Aborted: source and target are the same.")
+            return False
 
         source_image, target_image = None, None
         img_size = 64
@@ -15342,44 +15767,128 @@ class TileEditorApp:
 
         if not source_image or not target_image:
             messagebox.showerror("Replace Error", "Could not generate preview images for confirmation.")
-            return
+            _debug("[Replace Refs] Aborted: Could not generate preview images.")
+            return False
 
         message = (f"This will replace all uses of {item_type.replace('_', ' ')} {target_index} "
                    f"with {item_type.replace('_', ' ')} {source_index} throughout the entire project.\n\n"
-                   "This action cannot be undone.")
+                   "This action is undoable.")
         
-        if not self._show_visual_confirm_dialog("Confirm Replace All", message, source_image, target_image):
-            return
+        confirmed = self._show_visual_confirm_dialog("Confirm Replace All", message, source_image, target_image)
+        _debug(f"[Replace Refs] POST-CONFIRM: User confirmation dialog returned: {confirmed}")
+        return confirmed
 
-        self._clear_marked_unused(trigger_redraw=False)
+    def handle_viewer_drag_release(self, event):
+        global current_tile_index, selected_tile_for_supertile
+        global current_supertile_index, selected_supertile_for_map
+
+        canvas = event.widget
+        was_dragging = self.drag_active
         
-        if item_type == "palette_color":
-            for tile_color_def in tileset_colors:
-                for i, (fg, bg) in enumerate(tile_color_def):
-                    new_fg, new_bg = fg, bg
-                    if fg == target_index: new_fg = source_index
-                    if bg == target_index: new_bg = source_index
-                    if (new_fg, new_bg) != (fg, bg):
-                        tile_color_def[i] = (new_fg, new_bg)
-        elif item_type == "tile":
-            for st_def in supertiles_data:
-                for r in range(len(st_def)):
-                    for c in range(len(st_def[r])):
-                        if st_def[r][c] == target_index:
-                            st_def[r][c] = source_index
-        elif item_type == "supertile":
-            for r in range(len(map_data)):
-                for c in range(len(map_data[r])):
-                    if map_data[r][c] == target_index:
-                        map_data[r][c] = source_index
-        
-        self._mark_project_modified()
-        self.clear_all_caches()
-        self.invalidate_minimap_background_cache()
-        self.update_all_displays(changed_level="all")
-        self._request_color_usage_refresh()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
+        try:
+            if not was_dragging:
+                item_type_for_click = self.drag_item_type
+                if item_type_for_click is None: return
+
+                max_items = 0
+                if item_type_for_click == "tile": max_items = num_tiles_in_set
+                elif item_type_for_click == "supertile": max_items = num_supertiles
+
+                index_at_release = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type_for_click)
+                if 0 <= index_at_release < max_items:
+                    source_canvas_type = None
+                    if canvas == self.tileset_canvas: source_canvas_type = "tile_editor_main"
+                    elif canvas == self.st_tileset_canvas: source_canvas_type = "supertile_editor_tile"
+                    elif canvas == self.supertile_selector_canvas: source_canvas_type = "supertile_editor_main"
+                    elif canvas == self.map_supertile_selector_canvas: source_canvas_type = "map_editor_palette"
+
+                    if item_type_for_click == "tile":
+                        if source_canvas_type == "tile_editor_main":
+                            if current_tile_index != index_at_release:
+                                current_tile_index = index_at_release
+                                self.update_all_displays(changed_level="tile_select")
+                                self.scroll_viewers_to_tile(current_tile_index)
+                        elif source_canvas_type == "supertile_editor_tile":
+                            if selected_tile_for_supertile != index_at_release:
+                                selected_tile_for_supertile = index_at_release
+                                self.draw_tileset_viewer(canvas, selected_tile_for_supertile)
+                                self._update_st_tab_selected_tile_info_panel()
+                                self.scroll_viewers_to_tile(selected_tile_for_supertile)
+                    elif item_type_for_click == "supertile":
+                        if source_canvas_type == "supertile_editor_main":
+                            if current_supertile_index != index_at_release:
+                                current_supertile_index = index_at_release
+                                self.update_all_displays(changed_level="supertile")
+                                self.scroll_selectors_to_supertile(current_supertile_index)
+                        elif source_canvas_type == "map_editor_palette":
+                            if selected_supertile_for_map != index_at_release:
+                                selected_supertile_for_map = index_at_release
+                                self.update_all_displays(changed_level="map")
+                                self.scroll_selectors_to_supertile(selected_supertile_for_map)
+            
+            elif self.drag_item_type is not None:
+                item_type = self.drag_item_type
+                max_items = 0
+                if item_type == "tile": max_items = num_tiles_in_set
+                elif item_type == "supertile": max_items = num_supertiles
+                
+                is_alt_down = (event.state & 0x20000) != 0
+                is_ctrl_down = (event.state & 0x0004) != 0
+                source_index = self.drag_start_index
+                target_index = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type)
+
+                if is_alt_down and 0 <= target_index < max_items and target_index != source_index:
+                    if self._execute_replace_all_references(item_type, source_index, target_index):
+                        command = ReplaceRefsCommand(f"Replace All {item_type.replace('_',' ')}s", self, item_type, source_index, target_index)
+                        self.undo_manager.execute(command)
+                
+                elif is_ctrl_down and 0 <= target_index < max_items and target_index != source_index:
+                    success = self._swap_items(item_type, source_index, target_index)
+                    if success:
+                        self.clear_all_caches()
+                        self.invalidate_minimap_background_cache()
+                        self.update_all_displays(changed_level="all")
+                        if item_type == "tile":
+                            self.scroll_viewers_to_tile(current_tile_index)
+                        elif item_type == "supertile":
+                            self.scroll_selectors_to_supertile(current_supertile_index)
+                
+                elif not is_ctrl_down and not is_alt_down:
+                    valid_drop_target = (0 <= target_index <= max_items)
+                    if valid_drop_target and target_index != source_index:
+                        success = False
+                        if item_type == "tile": success = self._reposition_tile(source_index, target_index)
+                        elif item_type == "supertile": success = self._reposition_supertile(source_index, target_index)
+                        
+                        if success:
+                            self.clear_all_caches()
+                            self.invalidate_minimap_background_cache()
+                            self.update_all_displays(changed_level="all")
+                            if item_type == "tile":
+                                self.scroll_viewers_to_tile(current_tile_index)
+                            elif item_type == "supertile":
+                                self.scroll_selectors_to_supertile(current_supertile_index)
+                        else:
+                            messagebox.showerror("Reposition Error", f"Failed to move {item_type} from {source_index} to {target_index}.")
+                            self.update_all_displays(changed_level="all")
+                    else:
+                        self.update_all_displays(changed_level="all")
+        finally:
+            if self.drag_indicator_id:
+                try:
+                    if self.drag_canvas and self.drag_canvas.winfo_exists():
+                        self.drag_canvas.delete(self.drag_indicator_id)
+                except (tk.TclError, AttributeError): pass
+                self.drag_indicator_id = None
+            if hasattr(self, 'drag_canvas') and self.drag_canvas and self.drag_canvas.winfo_exists():
+                try:
+                    self.drag_canvas.config(cursor="")
+                except tk.TclError: pass
+            self.drag_active = False
+            self.drag_item_type = None
+            self.drag_start_index = -1
+            self.drag_canvas = None
+            self.is_alt_pressed = False
 
     def _capture_sash_position(self, event):
         """
@@ -15816,7 +16325,7 @@ class TileEditorApp:
             "--supertile-width", str(options["st_width"]),
             "--supertile-height", str(options["st_height"]),
             "--color-metric", options["metric"],
-            "--sort-tileset", options["sort_tiles"] # Add this line
+            "--sort-tileset", options["sort_tiles"]
         ]
         
         palette_rules = options["palette_rules"]
@@ -15895,6 +16404,16 @@ class TileEditorApp:
         except Exception as e:
             _error(f"Could not clean up temporary directory on startup: {e}")
 
+    def _apply_palette_change_updates(self):
+        """Helper to perform all necessary UI updates after a palette color change."""
+        self._mark_project_modified()
+        self.clear_all_caches()
+        self.invalidate_minimap_background_cache()
+        self.update_all_displays(changed_level="all")
+        self._request_color_usage_refresh()
+        self._request_tile_usage_refresh()
+        self._request_supertile_usage_refresh()
+
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
 
@@ -15934,7 +16453,7 @@ if __name__ == "__main__":
         
         if root.winfo_exists(): # Check if root window still exists
             app = TileEditorApp(root) # Create and show the main application
-            app._cleanup_temp_dirs()  # <-- ADD THIS LINE
+            app._cleanup_temp_dirs()
             root.deiconify()
             if hasattr(app, 'debug'): app._debug(" Main application initialized.")
 
@@ -15959,15 +16478,12 @@ if __name__ == "__main__":
     splash_image_label.pack(side=tk.TOP, padx=0, pady=0)
     splash_image_label.image = splash_photo_ref # Keep reference on label
 
-    # --- START of MODIFIED/NEW CODE ---
     # Create a frame for the contribution links
     contrib_splash_frame = ttk.Frame(content_frame)
     contrib_splash_frame.pack(side=tk.BOTTOM, fill='x', pady=(2, 2))
 
-    # Link font
     splash_link_font = font.Font(family="Segoe UI", size=8, underline=True)
 
-    # Clickable "Buy Me a Coffee" link
     bmac_url = "https://www.buymeacoffee.com/DamnedAngel"
     bmac_splash_label = tk.Label(
         contrib_splash_frame, 
@@ -15979,13 +16495,11 @@ if __name__ == "__main__":
     bmac_splash_label.pack(side=tk.LEFT, padx=(5, 5))
     bmac_splash_label.bind("<Button-1>", lambda e: webbrowser.open_new(bmac_url))
 
-    # Non-clickable text labels for PayPal and Pix
     ttk.Label(
         contrib_splash_frame, 
         text="| PayPal / Pix: danilo@angelo.eng.br",
         font=("Segoe UI", 8)
     ).pack(side=tk.LEFT, padx=(0, 5))
-    # --- END of MODIFIED/NEW CODE ---
 
     version_text_label = ttk.Label(
         content_frame, 

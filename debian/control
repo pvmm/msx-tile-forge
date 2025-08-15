@@ -1,0 +1,16 @@
+Source: msxtileforge
+Section: graphics
+Priority: optional
+Maintainer: Damned Angel <damned.angel@angelo.eng.br>
+Build-Depends: debhelper-compat (= 13), dh-python, python3-all
+Standards-Version: 4.5.0
+Homepage: https://github.com/DamnedAngel/msx-tile-forge
+
+Package: msxtileforge
+Architecture: all
+Depends: python3, python3-tk, python3-pil, python3-numpy, python3-scipy, python3-platformdirs, python3-tqdm, ${misc:Depends}, ${python3:Depends}
+Description: A tile and map editor for MSX2 game development.
+ MSX Tile Forge is a comprehensive graphical application for creating and
+ editing game assets for the MSX2 computer system. It allows users to
+ manage color palettes, create 8x8 tiles with row-specific colors,
+ build larger composite supertiles, and design full game maps.
