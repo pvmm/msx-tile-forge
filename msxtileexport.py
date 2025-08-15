@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# --- Version info ---
+APP_VERSION = "<unreleased>"
+
 import os
 import sys
 import struct
@@ -11,8 +14,8 @@ import argparse
 sys.stdout.reconfigure(encoding='utf-8')
 
 # --- Constants ---
-MSXTILEFORGE_VERSION = "1.0.0RC15"
-EXPORTER_VERSION = "0.0.2"
+MSXTILEFORGE_VERSION = APP_VERSION
+EXPORTER_VERSION = APP_VERSION
 RESERVED_BYTES_COUNT = 4
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
