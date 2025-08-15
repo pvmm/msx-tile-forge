@@ -1,0 +1,55 @@
+# .github/workflows/build-linux.yml
+
+name: Reusable Linux & Debian Build
+
+on:
+  workflow_call:
+    inputs:
+      version_string:
+        required: true
+        type: string
+    outputs:
+      artifact_name_linux:
+        description: "The name of the Linux artifact"
+        value: ${{ jobs.build.outputs.artifact_name_linux }}
+      artifact_name_deb:
+        description: "The name of the Debian artifact"
+        value: ${{ jobs.build.outputs.artifact_name_deb }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name_linux: ${{ steps.upload_linux.outputs.artifact-name }}
+      artifact_name_deb: ${{ steps.upload_deb.outputs.artifact-name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
+          pip3 install pyinstaller Pillow numpy scipy platformdirs tqdm
+
+      - name: Update Version in Files
+        run: |
+          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
+          sed -i "s/<unreleased>/${{ inputs.version_string }}/g" debian/changelog
+
+      - name: Build Linux Binary and Debian Package
+        run: make lin deb
+
+      - name: Upload Linux Artifact
+        id: upload_linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-${{ inputs.version_string }}
+          path: dist/msxtileforge_linux.tar.gz
+          
+      - name: Upload Debian Artifact
+        id: upload_deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-build-${{ inputs.version_string }}
+          path: dist/*.deb
