@@ -35,7 +35,8 @@ jobs:
       - name: Update Version in Files
         run: |
           find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
-          sed -i "s/<unreleased>/${{ inputs.version_string }}/g" debian/changelog
+          DEBIAN_VERSION=$(echo "${{ inputs.version_string }}" | sed -e 's/v//' -e 's/_/~/g')
+          sed -i "s/<unreleased>/$DEBIAN_VERSION/g" debian/changelog
 
       - name: Build Linux Binary and Debian Package
         run: make lin deb
