@@ -24,7 +24,8 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v4
-        with: { python-version: '3.10' }
+        with:
+          python-version: '3.10'
 
       - name: Install Dependencies
         run: pip install pyinstaller Pillow numpy scipy platformdirs tqdm
@@ -33,8 +34,7 @@ jobs:
         shell: bash
         run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
 
-- name: Build Windows Binary
-        # This replaces the old 'run: make win' line
+      - name: Build Windows Binary
         shell: cmd
         run: |
           py -m PyInstaller --noconsole --onedir --clean ^
