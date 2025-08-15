@@ -58,7 +58,7 @@ jobs:
         run: make win lin
 
       - name: Upload Developer Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dev-build-${{ env.VERSION_STRING }}
           path: |
