@@ -58,7 +58,7 @@ jobs:
             --add-data "msxtileexport.py;." `
             --add-data "msxtilemagic.py;." `
             --add-data "tilerandomizer.py;." `
-            --add-data "superfilerandomizer.py;." `
+            --add-data "supertilerandomizer.py;." `
             msxtileforge.py
           
           # After PyInstaller creates the folder, copy the static files into it
