@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 # --- Program Identification ---
+APP_VERSION = "<unreleased>"
 SCRIPT_NAME = "MSX Tile Magic"
-SCRIPT_VERSION = "0.0.37"
-MSXTILEFORGE_VERSION = "1.0.0RC15"
+SCRIPT_VERSION = APP_VERSION
+MSXTILEFORGE_VERSION = APP_VERSION
 
 # --- Imports ---
 import os
