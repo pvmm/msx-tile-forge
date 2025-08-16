@@ -28,31 +28,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Construct Dev Version String
+      - name: Construct Dev Version String via GitHub API
         id: versioning
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           echo "--- Start Version Construction ---"
-          # Use github.ref which contains the full path, e.g., refs/heads/REL_.../TKT_...
-          FULL_REF="${{ github.ref }}"
-          echo "1. Full Git Ref (github.ref): $FULL_REF"
+          BRANCH_NAME="${{ github.ref_name }}"
+          echo "1. Branch Name: $BRANCH_NAME"
           
-          # This robustly extracts the version by finding what's between "REL_" and "/TKT_"
-          BASE_VERSION=$(echo "$FULL_REF" | sed -n 's/.*REL_\([0-9.]*\)\/TKT_.*/\1/p')
-          echo "2. Parsed BASE_VERSION: $BASE_VERSION"
+          TICKET_NUM=$(echo "$BRANCH_NAME" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
+          echo "2. Parsed TICKET_NUM: $TICKET_NUM"
           
-          # This robustly extracts the ticket number from the full ref
-          TICKET_NUM=$(echo "$FULL_REF" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
-          echo "3. Parsed TICKET_NUM: $TICKET_NUM"
+          # Use the GitHub CLI to get the milestone title for the ticket
+          MILESTONE_TITLE=$(gh issue view "$TICKET_NUM" --json milestone --jq '.milestone.title')
+          echo "3. Fetched Milestone Title from API: $MILESTONE_TITLE"
           
+          # Parse the base version from the Milestone title
+          BASE_VERSION=$(echo "$MILESTONE_TITLE" | grep -oP 'REL_[0-9.]+' | sed 's/REL_//')
+          echo "4. Parsed BASE_VERSION: $BASE_VERSION"
+
           BRANCH_BUILD_NUM=$(git rev-list --count HEAD)
-          echo "4. Parsed BRANCH_BUILD_NUM (Commit Count): $BRANCH_BUILD_NUM"
+          echo "5. Parsed BRANCH_BUILD_NUM (Commit Count): $BRANCH_BUILD_NUM"
           
           GLOBAL_BUILD_NUM="${{ github.run_number }}"
-          echo "5. Parsed GLOBAL_BUILD_NUM (Run Number): $GLOBAL_BUILD_NUM"
+          echo "6. Parsed GLOBAL_BUILD_NUM (Run Number): $GLOBAL_BUILD_NUM"
           
           FINAL_VERSION="v${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_BUILD_NUM}"
-          echo "6. Assembled FINAL_VERSION: $FINAL_VERSION"
+          echo "7. Assembled FINAL_VERSION: $FINAL_VERSION"
           echo "--- End Version Construction ---"
           
           echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
