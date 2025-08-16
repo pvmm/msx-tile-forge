@@ -28,22 +28,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      # --- THIS IS THE CORRECTED STEP ---
       - name: Construct Dev Version String
         id: versioning
-        if: github.event.inputs.build_type == 'dev_build'
+        shell: bash
         run: |
+          echo "--- Start Version Construction ---"
           BRANCH_NAME="${{ github.ref_name }}"
-          # Robustly find REL_... and TKT_... parts anywhere in the branch name
-          BASE_VERSION=$(echo "$BRANCH_NAME" | grep -oP 'REL_[0-9.]+' | sed 's/REL_//')
+          echo "1. Full Branch Name (github.ref_name): $BRANCH_NAME"
+          
+          BASE_VERSION=$(echo "$BRANCH_NAME" | sed -n 's/.*REL_\([0-9.]*\)\/TKT_.*/\1/p')
+          echo "2. Parsed BASE_VERSION: $BASE_VERSION"
+          
           TICKET_NUM=$(echo "$BRANCH_NAME" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
+          echo "3. Parsed TICKET_NUM: $TICKET_NUM"
+          
           BRANCH_BUILD_NUM=$(git rev-list --count HEAD)
+          echo "4. Parsed BRANCH_BUILD_NUM (Commit Count): $BRANCH_BUILD_NUM"
+          
           GLOBAL_BUILD_NUM="${{ github.run_number }}"
+          echo "5. Parsed GLOBAL_BUILD_NUM (Run Number): $GLOBAL_BUILD_NUM"
+          
           FINAL_VERSION="v${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_BUILD_NUM}"
+          echo "6. Assembled FINAL_VERSION: $FINAL_VERSION"
+          echo "--- End Version Construction ---"
+          
           echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
-      # --- END CORRECTION ---
-      
-      # You would add more "Construct Version String" steps here for RC, Final, etc.
 
   ############################################################
   # JOB 2: Run the actual builds by calling the reusable workflows
