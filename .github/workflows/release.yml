@@ -28,18 +28,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Construct Dev Version String
+    - name: Construct Dev Version String
         id: versioning
         shell: bash
         run: |
           echo "--- Start Version Construction ---"
-          BRANCH_NAME="${{ github.ref_name }}"
-          echo "1. Full Branch Name (github.ref_name): $BRANCH_NAME"
+          # --- THIS IS THE FIX ---
+          # Use github.ref which contains the full path, e.g., refs/heads/REL_.../TKT_...
+          FULL_REF="${{ github.ref }}"
+          echo "1. Full Git Ref (github.ref): $FULL_REF"
           
-          BASE_VERSION=$(echo "$BRANCH_NAME" | sed -n 's/.*REL_\([0-9.]*\)\/TKT_.*/\1/p')
+          # This robustly extracts the version by finding what's between "REL_" and "/TKT_"
+          BASE_VERSION=$(echo "$FULL_REF" | sed -n 's/.*REL_\([0-9.]*\)\/TKT_.*/\1/p')
           echo "2. Parsed BASE_VERSION: $BASE_VERSION"
           
-          TICKET_NUM=$(echo "$BRANCH_NAME" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
+          # This robustly extracts the ticket number from the full ref
+          TICKET_NUM=$(echo "$FULL_REF" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
           echo "3. Parsed TICKET_NUM: $TICKET_NUM"
           
           BRANCH_BUILD_NUM=$(git rev-list --count HEAD)
