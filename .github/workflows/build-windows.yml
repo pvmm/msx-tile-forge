@@ -68,6 +68,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # This will be the name of the final .zip file the user downloads
-          name: windows-build-${{ inputs.version_string }}
+          name: msxtileforge-v${{ inputs.version_string }}
           # This is the path to the FOLDER that upload-artifact will zip up for us
           path: dist/msxtileforge/

@@ -8,31 +8,50 @@ on:
       version_string:
         required: true
         type: string
-    outputs:
-      artifact_name_linux:
-        description: "The name of the Linux artifact"
-        value: ${{ jobs.build.outputs.artifact_name_linux }}
-      artifact_name_deb:
-        description: "The name of the Debian artifact"
-        value: ${{ jobs.build.outputs.artifact_name_deb }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      artifact_name_linux: ${{ steps.upload_linux.outputs.artifact-name }}
-      artifact_name_deb: ${{ steps.upload_deb.outputs.artifact-name }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # --- START DEBUGGING STEPS ---
+      - name: 1. Verify Python Environment
+        shell: bash
         run: |
+          echo "--- Python Version ---"
+          python --version
+          echo "--- PIP Version ---"
+          python -m pip --version
+          echo "--- Location of Python ---"
+          which python
+          echo "--- System PATH ---"
+          echo $PATH
+
+      - name: 2. Install System & Python Dependencies
+        shell: bash
+        run: |
+          echo "Installing system packages..."
           sudo apt-get update
           sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
-          pip3 install pyinstaller Pillow numpy scipy platformdirs tqdm
+          echo "Installing Python packages with 'python -m pip'..."
+          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
+
+      - name: 3. Verify Installed Packages
+        shell: bash
+        run: |
+          echo "--- Listing installed packages after install step ---"
+          python -m pip list
+      # --- END DEBUGGING STEPS ---
 
       - name: Update Version in Files
+        shell: bash
         run: |
           find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
           DEBIAN_VERSION=$(echo "${{ inputs.version_string }}" | sed -e 's/v//' -e 's/_/~/g')
@@ -42,15 +61,13 @@ jobs:
         run: make lin deb
 
       - name: Upload Linux Artifact
-        id: upload_linux
         uses: actions/upload-artifact@v4
         with:
-          name: linux-build-${{ inputs.version_string }}
+          name: linux-build-v${{ inputs.version_string }}
           path: dist/msxtileforge_linux.tar.gz
           
       - name: Upload Debian Artifact
-        id: upload_deb
         uses: actions/upload-artifact@v4
         with:
-          name: debian-build-${{ inputs.version_string }}
+          name: debian-build-v${{ inputs.version_string }}
           path: dist/*.deb

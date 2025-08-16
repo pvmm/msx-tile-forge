@@ -55,7 +55,7 @@ jobs:
           GLOBAL_BUILD_NUM="${{ github.run_number }}"
           echo "6. Parsed GLOBAL_BUILD_NUM (Run Number): $GLOBAL_BUILD_NUM"
           
-          FINAL_VERSION="v${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_BUILD_NUM}"
+          FINAL_VERSION="${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_BUILD_NUM}"
           echo "7. Assembled FINAL_VERSION: $FINAL_VERSION"
           echo "--- End Version Construction ---"
           
