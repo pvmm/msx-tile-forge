@@ -21,7 +21,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      # --- START DEBUGGING STEPS ---
       - name: 1. Verify Python Environment
         shell: bash
         run: |
@@ -34,12 +33,16 @@ jobs:
           echo "--- System PATH ---"
           echo $PATH
 
-      - name: 2. Install System & Python Dependencies
+      - name: Install System & Python Dependencies
         shell: bash
         run: |
-          echo "Installing system packages..."
-          sudo apt-get update
-          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
+          # Add a retry loop for the apt-get commands
+          for i in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13 && break
+            echo "apt-get failed, retrying in 10 seconds..."
+            sleep 10
+          done
+          
           echo "Installing Python packages with 'python -m pip'..."
           python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
 
@@ -48,7 +51,6 @@ jobs:
         run: |
           echo "--- Listing installed packages after install step ---"
           python -m pip list
-      # --- END DEBUGGING STEPS ---
 
       - name: Update Version in Files
         shell: bash
