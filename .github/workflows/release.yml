@@ -28,12 +28,11 @@ jobs:
         with:
           fetch-depth: 0
 
-    - name: Construct Dev Version String
+      - name: Construct Dev Version String
         id: versioning
         shell: bash
         run: |
           echo "--- Start Version Construction ---"
-          # --- THIS IS THE FIX ---
           # Use github.ref which contains the full path, e.g., refs/heads/REL_.../TKT_...
           FULL_REF="${{ github.ref }}"
           echo "1. Full Git Ref (github.ref): $FULL_REF"
