@@ -2,7 +2,7 @@
 
 # Define the name of the main script and all helper scripts to be included.
 MAIN_SCRIPT = msxtileforge.py
-HELPER_SCRIPTS = msxtileexport.py msxtilemagic.py tilerandomizer.py superfilerandomizer.py
+HELPER_SCRIPTS = msxtileexport.py msxtilemagic.py tilerandomizer.py supertilerandomizer.py
 
 # --- Build Targets ---
 all: win lin deb
@@ -14,7 +14,7 @@ win:
 		--add-data "msxtileexport.py:." \
 		--add-data "msxtilemagic.py:." \
 		--add-data "tilerandomizer.py:." \
-		--add-data "superfilerandomizer.py:." \
+		--add-data "supertilerandomizer.py:." \
 		$(MAIN_SCRIPT)
 	# After building, copy the non-Python assets into the folder.
 	cp README.md LICENSE dist/$(MAIN_SCRIPT:.py=)/
@@ -26,7 +26,7 @@ lin:
 		--add-data "msxtileexport.py:." \
 		--add-data "msxtilemagic.py:." \
 		--add-data "tilerandomizer.py:." \
-		--add-data "superfilerandomizer.py:." \
+		--add-data "supertilerandomizer.py:." \
 		$(MAIN_SCRIPT)
 	# Copy non-Python assets into the Linux build folder.
 	cp README.md LICENSE dist/$(MAIN_SCRIPT:.py=)/
