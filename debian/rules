@@ -1,5 +1,19 @@
 #!/usr/bin/make -f
-# See debhelper(7) for details.
 
 %:
 	dh $@ --with python3
+
+# Override the clean step to prevent deletion of our pre-built 'dist' folder.
+override_dh_auto_clean:
+
+# Override the build step to do nothing, as 'make lin' already built the binary.
+override_dh_auto_build:
+
+# Override the install step to manually copy the pre-built files
+# into the correct packaging directory.
+override_dh_auto_install:
+	# 1. Create the target directory under /opt inside the package staging area.
+	install -d -p debian/msxtileforge/opt/msxtileforge/
+	
+	# 2. Use 'cp -a' to copy the application files into that target directory.
+	cp -a dist/msxtileforge/* debian/msxtileforge/opt/msxtileforge/

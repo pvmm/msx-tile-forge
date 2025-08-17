@@ -1,0 +1,160 @@
+﻿# .github/workflows/nightly-build.yml
+
+name: Nightly Build
+
+on:
+  schedule:
+    # IMPORTANT: Set this to a time ~10-15 minutes in the future (in UTC) for your test.
+    # Example: '0 23 * * *' for 23:00 UTC.
+    # After testing, change it to your desired nightly time, e.g., '0 4 * * *' for 4 AM UTC.
+    - cron: '20 22 * * *'
+  # Allow manual trigger for easier debugging
+  workflow_dispatch:
+
+permissions:
+  contents: write # Needed to post commit comments
+
+jobs:
+  ############################################################
+  # JOB 1: Find all REL_* branches with recent commits
+  ############################################################
+  find-active-branches:
+    name: Find Active REL Branches
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.get-branches.outputs.branches }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to get commit history
+
+      - name: Identify active branches
+        id: get-branches
+        shell: bash
+        run: |
+          echo "Searching for REL_* branches with commits in the last 24 hours..."
+          
+          # Get a list of all remote REL branches
+          REMOTE_REL_BRANCHES=$(git branch -r | grep 'origin/REL_' | sed 's/origin\///')
+          
+          ACTIVE_BRANCHES=()
+          for branch in $REMOTE_REL_BRANCHES; do
+            echo "Checking branch: $branch"
+            
+            # Check if there's at least one commit on this branch in the last day
+            # We use --git-dir to avoid issues with sparse checkouts
+            RECENT_COMMIT_COUNT=$(git --git-dir=$PWD/.git log "origin/$branch" --since="24 hours ago" --oneline | wc -l)
+
+            if [ "$RECENT_COMMIT_COUNT" -gt 0 ]; then
+              echo " -> Found $RECENT_COMMIT_COUNT recent commit(s). Adding to build list."
+              # Add the branch name in quotes to the bash array
+              ACTIVE_BRANCHES+=("\"$branch\"")
+            else
+              echo " -> No recent commits. Skipping."
+            fi
+          done
+
+          if [ ${#ACTIVE_BRANCHES[@]} -eq 0 ]; then
+            echo "No active REL branches found."
+            echo "branches=[]" >> $GITHUB_OUTPUT
+          else
+            # Convert the bash array to a comma-separated string, then wrap in JSON brackets
+            JSON_ARRAY=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")
+            echo "Found active branches: $JSON_ARRAY"
+            echo "branches=${JSON_ARRAY}" >> $GITHUB_OUTPUT
+          fi
+
+  ############################################################
+  # JOB 2: Build, upload, and comment for each active branch
+  ############################################################
+  build-and-release-nightly:
+    name: Build Nightly for ${{ matrix.branch }}
+    needs: find-active-branches
+    if: fromJson(needs.find-active-branches.outputs.branches)[0] != null # Only run if branches were found
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false # Ensures one failed build doesn't cancel the others
+      matrix:
+        branch: ${{ fromJson(needs.find-active-branches.outputs.branches) }}
+
+    steps:
+      - name: Checkout specific branch (${{ matrix.branch }})
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install System & Python Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13 curl
+          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
+
+      - name: Construct Nightly Version String
+        id: versioning
+        shell: bash
+        run: |
+          BASE_VERSION=$(echo "${{ matrix.branch }}" | sed 's/REL_//')
+          DATE_STAMP=$(date +'%y%m%d')
+          GLOBAL_RUN_NUM="${{ github.run_number }}"
+          FINAL_VERSION="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
+          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          
+          DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')
+          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update Version in Files
+        run: |
+          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ steps.versioning.outputs.VERSION_STRING }}/g" {} +
+          sed -i "s/<unreleased>/${{ steps.versioning.outputs.DEBIAN_VERSION }}/g" debian/changelog
+
+      - name: Build Linux Binary and Debian Package
+        run: make lin deb
+        
+      - name: Upload to transfer.sh and create comment
+        id: uploader
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # --- Upload Linux Tarball ---
+          TAR_FILE=$(find dist -name "*.tar.gz")
+          echo "Uploading $TAR_FILE..."
+          TAR_URL=$(curl --upload-file "$TAR_FILE" "https://transfer.sh/$(basename $TAR_FILE)")
+          echo "::notice::Linux URL: $TAR_URL"
+
+          # --- Upload Debian Package ---
+          DEB_FILE=$(find dist -name "*.deb")
+          echo "Uploading $DEB_FILE..."
+          DEB_URL=$(curl --upload-file "$DEB_FILE" "https://transfer.sh/$(basename $DEB_FILE)")
+          echo "::notice::Debian URL: $DEB_URL"
+
+          # --- Get Commit SHA ---
+          COMMIT_SHA=$(git rev-parse HEAD)
+
+          # --- Prepare Comment Body ---
+          COMMENT_BODY="🚀 **Nightly Build Successful for \`${{ matrix.branch }}\`**
+
+          Version: \`${{ steps.versioning.outputs.VERSION_STRING }}\`
+          Commit: \`$COMMIT_SHA\`
+
+          **Downloads:**
+          *   **Linux (tar.gz):** [$TAR_URL]($TAR_URL)
+          *   **Debian (.deb):** [$DEB_URL]($DEB_URL)
+
+          *Note: These links are temporary and will expire.*"
+
+          # --- Post Comment to Commit ---
+          echo "Posting comment to commit $COMMIT_SHA"
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/commits/$COMMIT_SHA/comments \
+            -f body="$COMMENT_BODY"
