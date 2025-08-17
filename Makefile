@@ -1,4 +1,4 @@
-# Makefile for MSX Tile Forge (Linux/Debian builds)
+# Makefile for MSX Tile Forge
 
 # Define the name of the main script and all helper scripts to be included.
 MAIN_SCRIPT = msxtileforge.py

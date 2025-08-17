@@ -59,24 +59,21 @@ jobs:
           echo "7. Assembled FINAL_VERSION: $FINAL_VERSION"
           echo "--- End Version Construction ---"
           
-          echo "version_string=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
 
   ############################################################
   # JOB 2: Run the actual builds by calling the reusable workflows
   ############################################################
-  build_windows:
+  build_binaries:
     name: Build Binaries
     needs: call_builds
     uses: ./.github/workflows/build-windows.yml
     with:
-      version_string: ${{ needs.prepare.outputs.version_string }}
-      artifact_name: windows-build-${{ needs.prepare.outputs.version_string }}
+      version_string: ${{ needs.call_builds.outputs.version_string }}
       
   build_linux_binaries:
     name: Build Linux Binaries
     needs: call_builds
     uses: ./.github/workflows/build-linux.yml
     with:
-      version_string: ${{ needs.prepare.outputs.version_string }}
-      artifact_name_linux: linux-build-${{ needs.prepare.outputs.version_string }}
-      artifact_name_deb: debian-build-${{ needs.prepare.outputs.version_string }}
+      version_string: ${{ needs.call_builds.outputs.version_string }}

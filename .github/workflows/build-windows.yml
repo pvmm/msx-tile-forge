@@ -8,50 +8,66 @@ on:
       version_string:
         required: true
         type: string
-      artifact_name:
-        required: true
-        type: string
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Debug Received Version
-        run: echo "Received version_string input: ${{ inputs.version_string }}"
-
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
+      # --- START NEW DEBUGGING STEPS ---
+      - name: 1. Verify Python Environment
+        run: |
+          echo "--- Python Version ---"
+          python --version
+          echo "--- PIP Version ---"
+          python -m pip --version
+          echo "--- Location of Python ---"
+          Get-Command python
+          echo "--- System PATH ---"
+          echo $env:PATH
+        shell: powershell
+
+      - name: 2. Install Dependencies
+        run: |
+          echo "Installing packages with 'python -m pip'..."
+          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
+        shell: powershell
+
+      - name: 3. Verify Installed Packages
+        run: |
+          echo "--- Listing installed packages after install step ---"
+          python -m pip list
+        shell: powershell
+      # --- END NEW DEBUGGING STEPS ---
 
       - name: Update Version in Files
         shell: bash
         run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
 
-      - name: Install, Build, and Copy Assets 
+      - name: Build Windows Executable
         shell: powershell
         run: |
-          # 1. Install dependencies
-          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-          
-          # 2. Run PyInstaller with the corrected script name
           python -m PyInstaller --noconsole --onedir --clean `
             --add-data "msxtileexport.py;." `
             --add-data "msxtilemagic.py;." `
             --add-data "tilerandomizer.py;." `
             --add-data "supertilerandomizer.py;." `
             msxtileforge.py
-            
-          # 3. Copy static files into the output directory created by PyInstaller
+          
+          # After PyInstaller creates the folder, copy the static files into it
           Copy-Item README.md, LICENSE -Destination dist\msxtileforge
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           # This will be the name of the final .zip file the user downloads
-          name: ${{ inputs.artifact_name }}
+          name: msxtileforge-v${{ inputs.version_string }}
           # This is the path to the FOLDER that upload-artifact will zip up for us
           path: dist/msxtileforge/
