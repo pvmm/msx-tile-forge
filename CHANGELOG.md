@@ -54,5 +54,5 @@ All notable changes to this project will be documented in this file.
     -   **Tile Import:** Can derive and quantize a new tileset and palette from an image.
 -   **Import from ROM:** Includes a graphical tool to scan binary ROM files and visually extract 1bpp tile graphics.
 -   **Developer Export:** Can export project data to raw binary and generate assembly (`.s`) and C header (`.h`) files via `msxtileexport.py`.
--   **Standalone Helper Scripts:** Provides command-line scripts (`tilerandomizer.py`, `superfilerandomizer.py`) for programmatic asset manipulation.
+-   **Standalone Helper Scripts:** Provides command-line scripts (`tilerandomizer.py`, `supertilerandomizer.py`) for programmatic asset manipulation.
 -   **Versioning:** The version string is no longer hardcoded and is now dynamically inserted at build time.
