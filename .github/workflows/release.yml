@@ -69,11 +69,14 @@ jobs:
     needs: call_builds
     uses: ./.github/workflows/build-windows.yml
     with:
-      version_string: ${{ needs.call_builds.outputs.version_string }}
+      version_string: ${{ needs.prepare.outputs.version_string }}
+      artifact_name: windows-build-${{ needs.prepare.outputs.version_string }}
       
   build_linux_binaries:
     name: Build Linux Binaries
     needs: call_builds
     uses: ./.github/workflows/build-linux.yml
     with:
-      version_string: ${{ needs.call_builds.outputs.version_string }}
+      version_string: ${{ needs.prepare.outputs.version_string }}
+      artifact_name_linux: linux-build-${{ needs.prepare.outputs.version_string }}
+      artifact_name_deb: debian-build-${{ needs.prepare.outputs.version_string }}
