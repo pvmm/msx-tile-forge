@@ -10,11 +10,10 @@ override_dh_auto_clean:
 override_dh_auto_build:
 
 # Override the install step to manually copy the pre-built files
-# from the 'dist' directory into the Debian package structure.
+# into the correct packaging directory.
 override_dh_auto_install:
-	# Create the target directory inside the package staging area.
-	# The -p flag ensures parent directories are created if they don't exist.
-	install -d -p debian/msxtileforge/usr/local/bin/
+	# 1. Create the target directory under /opt inside the package staging area.
+	install -d -p debian/msxtileforge/opt/msxtileforge/
 	
-	# Use 'cp -a' to recursively copy the application files into the target directory.
-	cp -a dist/msxtileforge/* debian/msxtileforge/usr/local/bin/
+	# 2. Use 'cp -a' to copy the application files into that target directory.
+	cp -a dist/msxtileforge/* debian/msxtileforge/opt/msxtileforge/
