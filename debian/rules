@@ -12,8 +12,9 @@ override_dh_auto_build:
 # Override the install step to manually copy the pre-built files
 # from the 'dist' directory into the Debian package structure.
 override_dh_auto_install:
-	# Create the target directory inside the package staging area
-	install -d debian/msxtileforge/usr/local/bin/
+	# Create the target directory inside the package staging area.
+	# The -p flag ensures parent directories are created if they don't exist.
+	install -d -p debian/msxtileforge/usr/local/bin/
 	
-	# Copy the contents of the PyInstaller output folder to the target directory
-	install -t debian/msxtileforge/usr/local/bin/ -D -r dist/msxtileforge/*
+	# Use 'cp -a' to recursively copy the application files into the target directory.
+	cp -a dist/msxtileforge/* debian/msxtileforge/usr/local/bin/
