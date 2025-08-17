@@ -64,7 +64,7 @@ jobs:
   ############################################################
   # JOB 2: Run the actual builds by calling the reusable workflows
   ############################################################
-  build_binaries:
+  build_windows:
     name: Build Binaries
     needs: call_builds
     uses: ./.github/workflows/build-windows.yml

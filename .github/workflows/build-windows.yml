@@ -16,6 +16,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      - name: Debug Received Version
+        run: echo "Received version_string input: ${{ inputs.version_string }}"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -28,7 +31,7 @@ jobs:
         shell: bash
         run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
 
-      - name: Install, Build, and Copy Assets
+      - name: Install, Build, and Copy Assets 
         shell: powershell
         run: |
           # 1. Install dependencies
