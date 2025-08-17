@@ -149,6 +149,10 @@ jobs:
     needs: [call_builds, build_binaries, build_linux_binaries] # Run after builds succeed
     if: needs.call_builds.outputs.build_type == 'rc'         # Only run for RC builds
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # Allow this job to push tags
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
