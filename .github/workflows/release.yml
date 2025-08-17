@@ -107,7 +107,7 @@ jobs:
           
           GLOBAL_BUILD_NUM="${{ github.run_number }}"
           
-          FINAL_VERSION="${BASE_VERSION}_rc${NEXT_RC_NUM}_${GLOBAL_BUILD_UM}"
+          FINAL_VERSION="${BASE_VERSION}_rc${NEXT_RC_NUM}_${GLOBAL_BUILD_NUM}"
           echo "3. Assembled FINAL_VERSION: $FINAL_VERSION"
           echo "--- End RC Version Construction ---"
           
