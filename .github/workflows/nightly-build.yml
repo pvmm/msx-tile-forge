@@ -120,7 +120,7 @@ jobs:
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-          IA_IDENTIFIER: "msxtileforge-nightly-builds" # Make sure this is a unique name
+          IA_LIST: "MSX Tile Forge Nightly Builds" # Your list name
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
@@ -131,30 +131,29 @@ jobs:
           DEB_FILENAME=$(basename "$DEB_FILE")
 
           # --- 2. Upload Files Using curl ---
-          echo "Uploading $TAR_FILENAME to Internet Archive..."
-          curl -v --fail --location --request PUT \
-            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
-            --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
-            --header "x-archive-meta-mediatype: software" \
-            --header "x-archive-meta-collection: opensource" \
-            --upload-file "$TAR_FILE" \
-            "https://s3.us.archive.org/${IA_IDENTIFIER}/${TAR_FILENAME}"
+          for FILE in "$TAR_FILE" "$DEB_FILE"; do
+            FILENAME=$(basename "$FILE")
+            echo "Uploading $FILENAME to Internet Archive..."
 
-          echo "Uploading $DEB_FILENAME to Internet Archive..."
+            curl -v --fail --location --request PUT \
+              --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+              --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
+              --header "x-archive-meta-mediatype: software" \
+              --header "x-archive-meta-collection: opensource" \
+              --upload-file "$FILE" \
+              "https://s3.us.archive.org/${FILENAME}"
 
-          curl -v --fail --location --request PUT \
-            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
-            --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
-            --header "x-archive-meta-mediatype: software" \
-            --header "x-archive-meta-collection: opensource" \
-            --upload-file "$DEB_FILE" \
-            "https://s3.us.archive.org/${IA_IDENTIFIER}/${DEB_FILENAME}"
+            echo "Adding $FILENAME to IA list ${IA_LIST}..."
+            curl -v --fail --location --request POST \
+              -H "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{\"list\": \"${IA_LIST}\", \"identifier\": \"${FILENAME}\"}" \
+              "https://archive.org/services/lists/add_item.php"
+          done
 
           # --- 3. Construct URLs and Post Comment ---
-          echo "Upload complete. Constructing URLs..."
-          BASE_URL="https://archive.org/download/$IA_IDENTIFIER"
-          TAR_URL="$BASE_URL/$TAR_FILENAME"
-          DEB_URL="$BASE_URL/$DEB_FILENAME"
+          TAR_URL="https://archive.org/download/$TAR_FILENAME"
+          DEB_URL="https://archive.org/download/$DEB_FILENAME"
 
           echo "::notice::Linux URL: $TAR_URL"
           echo "::notice::Debian URL: $DEB_URL"
