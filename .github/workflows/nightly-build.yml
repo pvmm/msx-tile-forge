@@ -115,52 +115,36 @@ jobs:
       - name: Build Linux Binary and Debian Package
         run: make lin deb
         
-      - name: Upload to Internet Archive and Create Comment
+      - name: Upload to Internet Archive via curl and Create Comment
         id: uploader
         env:
-          # These secrets are used to configure the ia tool
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-          # This is the unique "page" or "folder" on archive.org for your builds
-          IA_IDENTIFIER: "msxtileforge-nightly-builds"
+          IA_IDENTIFIER: "msxtileforge-nightly-builds" # Make sure this is a unique name
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # --- 1. Install and Configure the IA Tool ---
-          echo "Installing Internet Archive tool..."
-          python -m pip install internetarchive
-          
-          echo "Configuring credentials..."
-          ia configure --username "${IA_ACCESS_KEY}" --password "${IA_SECRET_KEY}"
-
-          # --- 2. Prepare Metadata for the Item ---
-          # This creates a nice description on the archive.org page
-          echo "Creating metadata file..."
-          METADATA_BODY="""
-          mediatype: software
-          collection: opensource_media
-          creator: DamnedAngel
-          description: These are automated nightly builds of the MSX Tile Forge application. Files are updated daily and should be considered unstable.
-          subject: msx; gamedev; tools
-          title: MSX Tile Forge (Nightly Builds)
-          """
-          echo "$METADATA_BODY" > metadata.yaml
-
-          # --- 3. Upload the Build Artifacts ---
-          echo "Uploading build files to identifier: $IA_IDENTIFIER"
+          # --- 1. Find the Build Artifacts ---
           TAR_FILE=$(find dist -name "*.tar.gz")
           DEB_FILE=$(find dist -name "*.deb")
-
-          # The 'ia upload' command is smart. It will create the item if it doesn't exist,
-          # and it will update/overwrite the files if it does.
-          ia upload "$IA_IDENTIFIER" "$TAR_FILE" "$DEB_FILE" \
-            --metadata-file=metadata.yaml \
-            --retries=3
-
-          # --- 4. Construct URLs and Post Comment ---
-          echo "Upload complete. Constructing URLs..."
           TAR_FILENAME=$(basename "$TAR_FILE")
           DEB_FILENAME=$(basename "$DEB_FILE")
+
+          # --- 2. Upload Files Using curl ---
+          echo "Uploading $TAR_FILENAME to Internet Archive..."
+          curl --fail --location --request PUT \
+            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --upload-file "$TAR_FILE" \
+            "https://s3.us.archive.org/${IA_IDENTIFIER}/${TAR_FILENAME}"
+
+          echo "Uploading $DEB_FILENAME to Internet Archive..."
+          curl --fail --location --request PUT \
+            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --upload-file "$DEB_FILE" \
+            "https://s3.us.archive.org/${IA_IDENTIFIER}/${DEB_FILENAME}"
+
+          # --- 3. Construct URLs and Post Comment ---
+          echo "Upload complete. Constructing URLs..."
           BASE_URL="https://archive.org/download/$IA_IDENTIFIER"
           TAR_URL="$BASE_URL/$TAR_FILENAME"
           DEB_URL="$BASE_URL/$DEB_FILENAME"
