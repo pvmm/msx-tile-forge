@@ -1,13 +1,10 @@
-﻿# .github/workflows/nightly-build.yml
-
-name: Nightly Build
-
+﻿name: Nightly Build
 on:
   schedule:
     # IMPORTANT: Set this to a time ~10-15 minutes in the future (in UTC) for your test.
     # Example: '0 23 * * *' for 23:00 UTC.
     # After testing, change it to your desired nightly time, e.g., '0 4 * * *' for 4 AM UTC.
-    - cron: '20 22 * * *'
+    - cron: '15 11 * * *'
   # Allow manual trigger for easier debugging
   workflow_dispatch:
 
