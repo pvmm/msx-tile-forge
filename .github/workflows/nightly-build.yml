@@ -133,7 +133,7 @@ jobs:
           # --- 2. Upload Files Using curl ---
           echo "Uploading $TAR_FILENAME to Internet Archive..."
           curl -v --fail --location --request PUT \
-            -u "${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
             --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
             --header "x-archive-meta-mediatype: software" \
             --header "x-archive-meta-collection: opensource" \
@@ -143,7 +143,7 @@ jobs:
           echo "Uploading $DEB_FILENAME to Internet Archive..."
 
           curl -v --fail --location --request PUT \
-            -u "${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
             --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
             --header "x-archive-meta-mediatype: software" \
             --header "x-archive-meta-collection: opensource" \
