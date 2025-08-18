@@ -198,8 +198,7 @@ jobs:
 
       - name: Attempt to add an item to the list
         run: |
-          # Replace 'YOUR_LIST_ID' with your actual list ID
-          # Replace 'msxtileforge-final-test-20250818' with a real, existing item identifier
-          echo "Attempting to add item to list..."
-          ia list --append YOUR_LIST_ID --identifier msxtileforge-final-test-20250818
-          echo "List command finished."
+          ITEM_ID="msxtileforge-final-test-20250818"
+          echo "Attempting to modify metadata for item: ${ITEM_ID}"
+          ia metadata "${ITEM_ID}" --modify="subject:msxtileforge_nightlybuild_test"
+          echo "Metadata command finished."
