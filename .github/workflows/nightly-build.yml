@@ -177,4 +177,29 @@ jobs:
             /repos/${{ github.repository }}/commits/$COMMIT_SHA/comments \
             -f body="$COMMENT_BODY"
 
+  ############################################################
+  # TEMPORARY JOB: Test full automation with email/password
+  ############################################################
+  test-full-automation:
+    name: Test IA List Append with Email/Password
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Internet Archive Tool
+        run: python -m pip install internetarchive --upgrade
 
+      - name: Attempt to configure IA tool with email and password
+        env:
+          IA_EMAIL: ${{ secrets.IA_EMAIL }}
+          IA_PASSWORD: ${{ secrets.IA_PASSWORD }}
+        run: |
+          echo "Attempting non-interactive login..."
+          ia configure --username "${IA_EMAIL}" --password "${IA_PASSWORD}"
+          echo "Login command finished."
+
+      - name: Attempt to add an item to the list
+        run: |
+          # Replace 'YOUR_LIST_ID' with your actual list ID
+          # Replace 'msxtileforge-final-test-20250818' with a real, existing item identifier
+          echo "Attempting to add item to list..."
+          ia list --append YOUR_LIST_ID --identifier msxtileforge-final-test-20250818
+          echo "List command finished."
