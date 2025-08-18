@@ -132,18 +132,21 @@ jobs:
 
           # --- 2. Upload Files Using curl ---
           echo "Uploading $TAR_FILENAME to Internet Archive..."
-          curl --fail --location --request PUT \
-            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
-            --header "x-archive-meta01-title: MSX Tile Forge Nightly Builds" \
+          curl -v --fail --location --request PUT \
+            -u "${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
             --header "x-archive-meta-mediatype: software" \
+            --header "x-archive-meta-collection: opensource" \
             --upload-file "$TAR_FILE" \
             "https://s3.us.archive.org/${IA_IDENTIFIER}/${TAR_FILENAME}"
 
           echo "Uploading $DEB_FILENAME to Internet Archive..."
-          curl --fail --location --request PUT \
-            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
-            --header "x-archive-meta01-title: MSX Tile Forge Nightly Builds" \
+
+          curl -v --fail --location --request PUT \
+            -u "${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --header "x-archive-meta-title: MSX Tile Forge Nightly Builds" \
             --header "x-archive-meta-mediatype: software" \
+            --header "x-archive-meta-collection: opensource" \
             --upload-file "$DEB_FILE" \
             "https://s3.us.archive.org/${IA_IDENTIFIER}/${DEB_FILENAME}"
 
