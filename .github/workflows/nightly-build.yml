@@ -115,7 +115,7 @@ jobs:
       - name: Build Linux Binary and Debian Package
         run: make lin deb
         
-- name: Upload to Internet Archive and Create Comment
+      - name: Upload to Internet Archive and Create Comment
         id: uploader
         env:
           # These secrets are used to configure the ia tool
