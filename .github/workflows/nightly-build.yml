@@ -1,11 +1,8 @@
 ﻿name: Nightly Build
 on:
   schedule:
-    # IMPORTANT: Set this to a time ~10-15 minutes in the future (in UTC) for your test.
-    # Example: '0 23 * * *' for 23:00 UTC.
-    # After testing, change it to your desired nightly time, e.g., '0 4 * * *' for 4 AM UTC.
-    - cron: '15 11 * * *'
-  # Allow manual trigger for easier debugging
+    # Set to your desired nightly time, e.g., '0 4 * * *' for 4 AM UTC.
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:
@@ -20,121 +17,163 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branches: ${{ steps.get-branches.outputs.branches }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required to get commit history
-
+          fetch-depth: 0
       - name: Identify active branches
         id: get-branches
         shell: bash
         run: |
-          echo "Searching for REL_* branches with commits in the last 24 hours..."
-          
-          # Get a list of all remote REL branches
           REMOTE_REL_BRANCHES=$(git branch -r | grep 'origin/REL_' | sed 's/origin\///')
-          
           ACTIVE_BRANCHES=()
           for branch in $REMOTE_REL_BRANCHES; do
-            echo "Checking branch: $branch"
-            
-            # Check if there's at least one commit on this branch in the last day
-            # We use --git-dir to avoid issues with sparse checkouts
-            RECENT_COMMIT_COUNT=$(git --git-dir=$PWD/.git log "origin/$branch" --since="24 hours ago" --oneline | wc -l)
-
+            RECENT_COMMIT_COUNT=$(git log "origin/$branch" --since="24 hours ago" --oneline | wc -l)
             if [ "$RECENT_COMMIT_COUNT" -gt 0 ]; then
-              echo " -> Found $RECENT_COMMIT_COUNT recent commit(s). Adding to build list."
-              # Add the branch name in quotes to the bash array
               ACTIVE_BRANCHES+=("\"$branch\"")
-            else
-              echo " -> No recent commits. Skipping."
             fi
           done
-
-          if [ ${#ACTIVE_BRANCHES[@]} -eq 0 ]; then
-            echo "No active REL branches found."
-            echo "branches=[]" >> $GITHUB_OUTPUT
-          else
-            # Convert the bash array to a comma-separated string, then wrap in JSON brackets
-            JSON_ARRAY=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")
-            echo "Found active branches: $JSON_ARRAY"
-            echo "branches=${JSON_ARRAY}" >> $GITHUB_OUTPUT
-          fi
+          JSON_ARRAY=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")
+          echo "branches=${JSON_ARRAY}" >> $GITHUB_OUTPUT
 
   ############################################################
-  # JOB 2: Build, upload, and comment for each active branch
+  # JOB 2: Generate version strings for each active branch
   ############################################################
-  build-and-release-nightly:
-    name: Build Nightly for ${{ matrix.branch }}
+  generate-versions:
+    name: Generate Versions
     needs: find-active-branches
     if: fromJson(needs.find-active-branches.outputs.branches)[0] != null
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         branch: ${{ fromJson(needs.find-active-branches.outputs.branches) }}
+    outputs:
+      branch: ${{ matrix.branch }}
+      version_base: ${{ steps.versioning.outputs.VERSION_BASE }}
+      version_full: ${{ steps.versioning.outputs.VERSION_FULL }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
+      ia_identifier: ${{ steps.versioning.outputs.IA_IDENTIFIER }}
     steps:
-      - name: Checkout specific branch (${{ matrix.branch }})
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ matrix.branch }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install System & Python Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13 curl
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-
-      - name: Construct Nightly Version String and IA Identifier
+      - name: Construct Nightly Version Strings
         id: versioning
         shell: bash
         run: |
           BASE_VERSION=$(echo "${{ matrix.branch }}" | sed 's/REL_//')
           DATE_STAMP=$(date +'%Y%m%d')
           GLOBAL_RUN_NUM="${{ github.run_number }}"
-          FINAL_VERSION="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
-          
-          DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')
-          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
-          
-          IA_IDENTIFIER="msxtileforge-nightly-${DATE_STAMP}"
-          echo "IA_IDENTIFIER=${IA_IDENTIFIER}" >> $GITHUB_OUTPUT
+          VERSION_BASE="msxtileforge_${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
+          echo "VERSION_BASE=${VERSION_BASE}" >> $GITHUB_OUTPUT
+          echo "VERSION_FULL=${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=$(echo "${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}" | sed 's/_/~/g')" >> $GITHUB_OUTPUT
+          echo "IA_IDENTIFIER=${VERSION_BASE}_all" >> $GITHUB_OUTPUT
 
+  ############################################################
+  # JOB 3: Build on Linux
+  ############################################################
+  build-linux:
+    name: Build Linux
+    needs: generate-versions
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ needs.generate-versions.outputs }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: ${{ matrix.branch }} }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13 curl
+          python -m pip install -r requirements.txt
       - name: Update Version in Files
         run: |
-          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ steps.versioning.outputs.VERSION_STRING }}/g" {} +
-          sed -i "s/<unreleased>/${{ steps.versioning.outputs.DEBIAN_VERSION }}/g" debian/changelog
-
+          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ matrix.version_full }}/g" {} +
+          sed -i "s/<unreleased>/${{ matrix.debian_version }}/g" debian/changelog
       - name: Build Linux Binary and Debian Package
         run: make lin deb
-        
+      - name: Prepare Artifacts
+        run: |
+          mv dist/msxtileforge_linux.tar.gz dist/${{ matrix.version_base }}_linux.tar.gz
+          # Debian package is already named correctly by the build tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.ia_identifier }}
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+
+  ############################################################
+  # JOB 4: Build on Windows
+  ############################################################
+  build-windows:
+    name: Build Windows
+    needs: generate-versions
+    runs-on: windows-latest
+    strategy:
+      matrix: ${{ needs.generate-versions.outputs }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: ${{ matrix.branch }} }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - name: Install Dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Update Version in Files
+        shell: bash
+        run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ matrix.version_full }}/g" {} +
+      - name: Build Windows Executable
+        run: python -m PyInstaller --onedir --clean msxtileforge.py
+      - name: Prepare Artifact
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE -Destination dist\msxtileforge
+          Compress-Archive -Path dist\msxtileforge\* -DestinationPath dist\${{ matrix.version_base }}_windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.ia_identifier }}
+          path: dist/*.zip
+  
+  ############################################################
+  # JOB 5: Upload all builds and report
+  ############################################################
+  upload-and-report:
+    name: Upload and Report
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ needs.generate-versions.outputs }} # This ensures we run once per branch
+    env:
+      IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+      IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+      IA_IDENTIFIER: ${{ matrix.ia_identifier }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.ia_identifier }}
+          path: dist
       - name: Upload to Internet Archive and Create Comment
         id: uploader
-        env:
-          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }} # Using only S3 keys now
-          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-          IA_IDENTIFIER: ${{ steps.versioning.outputs.IA_IDENTIFIER }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # --- 1. Find the Build Artifacts ---
+          set -e # Exit immediately if a command fails
+          
+          # Find all build files
+          WIN_FILE=$(find dist -name "*.zip")
           TAR_FILE=$(find dist -name "*.tar.gz")
           DEB_FILE=$(find dist -name "*.deb")
+          
+          WIN_FILENAME=$(basename "$WIN_FILE")
           TAR_FILENAME=$(basename "$TAR_FILE")
           DEB_FILENAME=$(basename "$DEB_FILE")
-          ITEM_TITLE="MSX Tile Forge Nightly Build (${{ steps.versioning.outputs.VERSION_STRING }})"
+          
+          ITEM_TITLE="MSX Tile Forge Nightly Build (${{ matrix.version_full }})"
 
-          # --- 2. Create Item and Upload First File with All Metadata ---
-          echo "Creating Item '${IA_IDENTIFIER}' and uploading $TAR_FILENAME..."
+          # Create Item and Upload First File with All Metadata
+          echo "Creating Item '${IA_IDENTIFIER}' and uploading $WIN_FILENAME..."
           curl --fail --location --request PUT \
             --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
             --header "x-amz-auto-make-bucket: 1" \
@@ -142,45 +181,46 @@ jobs:
             --header "x-archive-meta-collection: opensource_media" \
             --header "x-archive-meta-mediatype: software" \
             --header "x-archive-meta01-subject: msxtileforge_nightly_build" \
-            --header "x-archive-meta02-subject: msxtileforge" \
-            --upload-file "$TAR_FILE" \
-            "https://s3.us.archive.org/${IA_IDENTIFIER}/${TAR_FILENAME}"
+            --upload-file "$WIN_FILE" \
+            "https://s3.us.archive.org/${IA_IDENTIFIER}/${WIN_FILENAME}"
 
-          # --- 3. Upload Second File to the Same Item ---
-          echo "Uploading $DEB_FILENAME to item '${IA_IDENTIFIER}'..."
-          sleep 15
-          curl --fail --location --request PUT \
-            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
-            --upload-file "$DEB_FILE" \
-            "https://s3.us.archive.org/${IA_IDENTIFIER}/${DEB_FILENAME}"
+          # Upload remaining files
+          echo "Uploading $TAR_FILENAME..."
+          sleep 10
+          curl --fail --location --request PUT --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" --upload-file "$TAR_FILE" "https://s3.us.archive.org/${IA_IDENTIFIER}/${TAR_FILENAME}"
+          
+          echo "Uploading $DEB_FILENAME..."
+          sleep 10
+          curl --fail --location --request PUT --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" --upload-file "$DEB_FILE" "https://s3.us.archive.org/${IA_IDENTIFIER}/${DEB_FILENAME}"
 
-          # --- 4. Construct URLs and Post Comment ---
-          echo "Uploads complete. Waiting for processing..."
-          sleep 30
+          # Post Comment
+          sleep 20
           BASE_URL="https://archive.org/download/$IA_IDENTIFIER"
+          WIN_URL="$BASE_URL/$WIN_FILENAME"
           TAR_URL="$BASE_URL/$TAR_FILENAME"
           DEB_URL="$BASE_URL/$DEB_FILENAME"
-
-          echo "::notice::Item URL: https://archive.org/details/$IA_IDENTIFIER"
           
-          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHA=$(git rev-parse HEAD) # Note: This needs a checkout to work
+          # The commit SHA is not easily available here, so we will omit it for now to ensure reliability.
+          # A link to the Item page is more important.
+          
           COMMENT_BODY="🚀 **Nightly Build Successful for \`${{ matrix.branch }}\`**
 
-          A new historical archive for this build has been created and tagged for collection.
+          A new historical archive for this build has been created and tagged.
           **Item Page:** [${IA_IDENTIFIER}](https://archive.org/details/${IA_IDENTIFIER})
 
-          Version: \`${{ steps.versioning.outputs.VERSION_STRING }}\`
-          Commit: \`$COMMIT_SHA\`
-
           **Direct Downloads:**
+          *   **Windows:** [$WIN_FILENAME]($WIN_URL)
           *   **Linux (tar.gz):** [$TAR_FILENAME]($TAR_URL)
           *   **Debian (.deb):** [$DEB_FILENAME]($DEB_URL)"
 
-          echo "Posting comment to commit $COMMIT_SHA"
+          # To post a comment, we need the commit SHA. The easiest way is to check out the code again.
+          git checkout ${{ matrix.branch }}
+          COMMIT_SHA_LATEST=$(git rev-parse HEAD)
+
+          echo "Posting comment to commit ${COMMIT_SHA_LATEST}"
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/commits/$COMMIT_SHA/comments \
+            /repos/${{ github.repository }}/commits/${COMMIT_SHA_LATEST}/comments \
             -f body="$COMMENT_BODY"
-
-
