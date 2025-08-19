@@ -1,5 +1,7 @@
 # MSX Tile Forge
-v1.0.0RC17
+
+[![Latest Release](https://img.shields.io/github/v/release/DamnedAngel/msx-tile-forge?include_prereleases&label=Latest%20Release&color=blue)](https://github.com/DamnedAngel/msx-tile-forge/releases/latest)
+[![Nightly Build Status](https://github.com/DamnedAngel/msx-tile-forge/actions/workflows/nightly-build.yml/badge.svg)](https://github.com/DamnedAngel/msx-tile-forge/actions/workflows/nightly-build.yml)
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and Tkinter.
 
@@ -8,6 +10,17 @@ An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python
 MSX Tile Forge is a desktop application created to assist in the development of graphical assets for MSX2 computers and similar retro systems that utilize tile-based graphics and have specific palette limitations. It provides an integrated environment for designing 16-color palettes, creating 8x8 pixel tiles with row-specific colors, composing supertiles (e.g., 4x4, but dimensions are project-configurable) from these tiles, and arranging them into larger game maps. The tool aims to streamline the asset creation workflow for retro game developers, specially for MSX.
 
 All project components (palette, tiles, supertiles, map) can be saved and loaded individually or as a complete project, using custom binary file formats designed for ease of use and integration into MSX development pipelines.
+
+## Downloads
+
+You can download pre-compiled, ready-to-run versions of MSX Tile Forge for various operating systems.
+
+*   **Latest Official Release & Release Candidates:** For the most stable versions (yet to be populated), please visit the **[Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases)**. (Note: The first official release is coming soon!)
+
+*   **Nightly Builds:** For the latest "bleeding-edge" features and fixes, you can download a build from the most recent successful nightly run. These builds are generated automatically and are not guaranteed to be stable, but they represent the most up-to-date version of the software.
+    *   **[Browse All Nightly Builds on the Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build"&sort=-date)**
+
+*   **Source Code:** If you prefer to run the application from source, you can download the latest source archive from the [Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases) or clone the repository directly. This is a much smaller download, but it requires you to set up your own Python environment as described in the [Getting Started](#getting-started) section.
 
 ## Features
 
