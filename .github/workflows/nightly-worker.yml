@@ -13,7 +13,7 @@ on:
 
 jobs:
   #########################################
-  # A. Generate version strings and identifiers
+  # A. Generate version strings
   #########################################
   generate-version:
     name: Generate Version
@@ -21,8 +21,8 @@ jobs:
     outputs:
       base_name: ${{ steps.versioning.outputs.BASE_NAME }}
       item_identifier: ${{ steps.versioning.outputs.ITEM_IDENTIFIER }}
+      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
-      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
     steps:
       - name: Construct Nightly Version Strings
         id: versioning
@@ -34,148 +34,81 @@ jobs:
           BASE_NAME="msxtileforge_${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
           ITEM_IDENTIFIER="${BASE_NAME}_all"
           VERSION_STRING="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
-          DEBIAN_VERSION=$(echo "$VERSION_STRING" | sed -e 's/_/~/g')
           
           echo "BASE_NAME=${BASE_NAME}" >> $GITHUB_OUTPUT
           echo "ITEM_IDENTIFIER=${ITEM_IDENTIFIER}" >> $GITHUB_OUTPUT
+          echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ inputs.branch }}" >> $GITHUB_OUTPUT
           echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_OUTPUT
-          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
 
   #########################################
-  # B. Build Linux and Debian packages
+  # B. Prepare source code
+  #########################################
+  prepare-source:
+    name: Prepare Source Code
+    needs: generate-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Update version strings using reusable action
+        uses: ./.github/actions/update-version-in-files
+        with:
+          version_string: ${{ needs.generate-version.outputs.version_string }}
+          debian_version: ${{ needs.generate-version.outputs.version_string }} # Debian versioning is handled in build-linux
+
+      - name: Upload prepared source as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+          path: .
+
+  #########################################
+  # C. Call the Reusable Builders
   #########################################
   build-linux:
-    name: Build Linux & Debian
-    needs: generate-version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout target branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
+    name: Call Linux Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install system and Python dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
-          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-
-      - name: Update version string in source files
-        run: |
-          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ needs.generate-version.outputs.version_string }}/g" {} +
-          sed -i "s/<unreleased>/${{ needs.generate-version.outputs.debian_version }}/g" debian/changelog
-
-      - name: Build Linux binary and Debian package
-        run: make lin deb
-
-      - name: Upload Linux and Debian artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-artifacts-${{ github.run_id }}-${{ inputs.branch }}
-          path: |
-            dist/*.tar.gz
-            dist/*.deb
-
-  #########################################
-  # C. Build Windows package
-  #########################################
   build-windows:
-    name: Build Windows
-    needs: generate-version
-    runs-on: windows-latest
-    steps:
-      - name: Checkout target branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
+    name: Call Windows Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Install Python dependencies
-        run: python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-
-      - name: Update version string in source files
-        shell: bash
-        run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ needs.generate-version.outputs.version_string }}/g" {} +
-
-      - name: Build Windows executable
-        shell: powershell
-        run: |
-          python -m PyInstaller --onedir --clean `
-            --add-data "msxtileexport.py;." `
-            --add-data "msxtilemagic.py;." `
-            --add-data "tilerandomizer.py;." `
-            --add-data "supertilerandomizer.py;." `
-            msxtileforge.py
-          cp README.md,LICENSE dist/msxtileforge
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-artifacts-${{ github.run_id }}-${{ inputs.branch }}
-          path: dist/msxtileforge
-
-  #########################################
-  # D. Build source archive
-  #########################################
   build-source:
-    name: Build Source Archive
-    needs: generate-version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout target branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
-      
-      - name: Create source archive package
-        run: make sdist
-
-      - name: Upload source artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-artifacts-${{ github.run_id }}-${{ inputs.branch }}
-          path: dist/msxtileforge-source.zip
+    name: Call Source Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-source.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
 
   #########################################
-  # E. Publish all artifacts to Internet Archive
+  # D. Publish all artifacts to Internet Archive
   #########################################
   publish:
     name: Publish to Internet Archive
     needs: [generate-version, build-linux, build-windows, build-source]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: DEBUG - Inspect Artifacts
-        shell: bash
-        run: |
-          echo "--- 1. Full directory tree of downloaded artifacts ---"
-          ls -R artifacts/
-          
-          echo "--- 2. Attempting to find the Windows directory ---"
-          WIN_DIR_TEST=$(find artifacts/windows-artifacts* -type d -name "msxtileforge")
-          
-          echo "--- 3. Content of the WIN_DIR_TEST variable ---"
-          echo "${WIN_DIR_TEST}"
-          
-          echo "--- 4. Checking if the variable is empty ---"
-          if [ -z "${WIN_DIR_TEST}" ]; then
-            echo "ERROR: The WIN_DIR_TEST variable is empty. The 'find' command failed."
-          else
-            echo "SUCCESS: The WIN_DIR_TEST variable is not empty."
-          fi
+          # Pattern matching to download all artifacts produced by the build jobs
+          pattern: "*-artifacts"
+          merge-multiple: true
 
       - name: Prepare and rename files for publishing
         id: files
@@ -185,19 +118,15 @@ jobs:
           BASE_NAME="${{ needs.generate-version.outputs.base_name }}"
           mkdir -p staging
           
-          # Find, move, and rename linux/deb artifacts
-          DEB_FILE=$(find artifacts/linux-artifacts* -name "*.deb")
-          TAR_FILE=$(find artifacts/linux-artifacts* -name "*.tar.gz")
+          DEB_FILE=$(find artifacts -name "*.deb")
+          TAR_FILE=$(find artifacts -name "*.tar.gz")
+          SRC_FILE=$(find artifacts -name "msxtileforge-source.zip")
+          WIN_FILE=$(find artifacts -name "msxtileforge-windows.zip")
+          
           mv "$DEB_FILE" "staging/${BASE_NAME}_deb.deb"
           mv "$TAR_FILE" "staging/${BASE_NAME}_lin.tar.gz"
-
-          # Find, move, and rename source artifact
-          SRC_FILE=$(find artifacts/source-artifacts* -name "*.zip")
           mv "$SRC_FILE" "staging/${BASE_NAME}_src.zip"
-
-          # Zip, move, and rename windows artifact
-          WIN_DIR=$(find artifacts/windows-artifacts* -type d -name "msxtileforge")
-          (cd "$WIN_DIR" && zip -r "../../staging/${BASE_NAME}_win.zip" .)
+          mv "$WIN_FILE" "staging/${BASE_NAME}_win.zip"
           
           echo "Prepared files for upload:"
           ls -l staging/
@@ -216,11 +145,9 @@ jobs:
           UPLOAD_COUNT=0
           COMMENT_FILE_LIST=""
           
-          # Loop through all prepared files and upload them
           for FILE in *; do
             echo "Uploading $FILE to item '${IA_IDENTIFIER}'..."
             if [ $UPLOAD_COUNT -eq 0 ]; then
-              # The first file creates the item and sets all metadata
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --header "x-amz-auto-make-bucket: 1" \
@@ -232,7 +159,6 @@ jobs:
                 --upload-file "$FILE" \
                 "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILE}"
             else
-              # Subsequent files are just added to the now-existing item
               sleep 15
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
@@ -241,15 +167,12 @@ jobs:
             fi
             UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
             
-            # Add file to the markdown list for the commit comment
             FILE_URL="https://archive.org/download/${IA_IDENTIFIER}/${FILE}"
             COMMENT_FILE_LIST="${COMMENT_FILE_LIST}*   **${FILE}**: [Download](${FILE_URL})\n"
           done
           
           cd ..
           
-          # Construct and post the final commit comment
-          echo "Uploads complete. Waiting for processing..."
           sleep 30
           
           COMMIT_SHA=$(git rev-parse HEAD)
@@ -265,10 +188,9 @@ jobs:
           ${COMMENT_FILE_LIST}"
 
           echo "Posting comment to commit ${COMMIT_SHA}"
-          # Use a heredoc to safely pass the multiline comment body
           gh api \
             --method POST \
-            -H "Accept: application/vnd.github+json" \
+            -H "Accept: application/vnd.github+_json" \
             /repos/${{ github.repository }}/commits/${COMMIT_SHA}/comments \
             -f body=- <<EOF
           ${COMMENT_BODY}
