@@ -1,73 +1,45 @@
-# .github/workflows/build-windows.yml
-
-name: Reusable Windows Build
-
-on:
-  workflow_call:
-    inputs:
-      version_string:
-        required: true
-        type: string
-
-jobs:
-  build:
+  #########################################
+  # C. Build Windows package
+  #########################################
+  build-windows:
+    name: Build Windows
+    needs: generate-version
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
 
-      # --- START NEW DEBUGGING STEPS ---
-      - name: 1. Verify Python Environment
-        run: |
-          echo "--- Python Version ---"
-          python --version
-          echo "--- PIP Version ---"
-          python -m pip --version
-          echo "--- Location of Python ---"
-          Get-Command python
-          echo "--- System PATH ---"
-          echo $env:PATH
-        shell: powershell
-
-      - name: 2. Install Dependencies
-        run: |
-          echo "Installing packages with 'python -m pip'..."
-          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-        shell: powershell
-
-      - name: 3. Verify Installed Packages
-        run: |
-          echo "--- Listing installed packages after install step ---"
-          python -m pip list
-        shell: powershell
-      # --- END NEW DEBUGGING STEPS ---
-
-      - name: Update Version in Files
+      - name: Update version string in source files
         shell: bash
-        run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
+        run: find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ needs.generate-version.outputs.version_string }}/g" {} +
 
-      - name: Build Windows Executable
+      - name: Build Windows executable
         shell: powershell
         run: |
-          python -m PyInstaller --noconsole --onedir --clean `
+          python -m PyInstaller --onedir --clean `
             --add-data "msxtileexport.py;." `
             --add-data "msxtilemagic.py;." `
             --add-data "tilerandomizer.py;." `
-            --add-data "supertilerandomizer.py;." `
+            --add-data "supertandomizer.py;." `
             msxtileforge.py
-          
-          # After PyInstaller creates the folder, copy the static files into it
-          Copy-Item README.md, LICENSE -Destination dist\msxtileforge
+          cp README.md,LICENSE dist/msxtileforge
 
-      - name: Upload Windows Artifact
+      - name: Create final Windows zip archive
+        shell: pwsh
+        run: Compress-Archive -Path dist/msxtileforge/* -DestinationPath dist/msxtileforge-windows.zip
+
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          # This will be the name of the final .zip file the user downloads
-          name: msxtileforge-v${{ inputs.version_string }}-win
-          # This is the path to the FOLDER that upload-artifact will zip up for us
-          path: dist/msxtileforge/
+          name: windows-artifacts-${{ github.run_id }}-${{ inputs.branch }}
+          path: dist/msxtileforge-windows.zip

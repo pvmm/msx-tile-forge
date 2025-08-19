@@ -148,6 +148,9 @@ jobs:
   #########################################
   # E. Publish all artifacts to Internet Archive
   #########################################
+  #########################################
+  # E. Publish all artifacts to Internet Archive
+  #########################################
   publish:
     name: Publish to Internet Archive
     needs: [generate-version, build-linux, build-windows, build-source]
@@ -158,25 +161,6 @@ jobs:
         with:
           path: artifacts
 
-      - name: DEBUG - Inspect Artifacts
-        shell: bash
-        run: |
-          echo "--- 1. Full directory tree of downloaded artifacts ---"
-          ls -R artifacts/
-          
-          echo "--- 2. Attempting to find the Windows directory ---"
-          WIN_DIR_TEST=$(find artifacts/windows-artifacts* -type d -name "msxtileforge")
-          
-          echo "--- 3. Content of the WIN_DIR_TEST variable ---"
-          echo "${WIN_DIR_TEST}"
-          
-          echo "--- 4. Checking if the variable is empty ---"
-          if [ -z "${WIN_DIR_TEST}" ]; then
-            echo "ERROR: The WIN_DIR_TEST variable is empty. The 'find' command failed."
-          else
-            echo "SUCCESS: The WIN_DIR_TEST variable is not empty."
-          fi
-
       - name: Prepare and rename files for publishing
         id: files
         shell: bash
@@ -185,19 +169,17 @@ jobs:
           BASE_NAME="${{ needs.generate-version.outputs.base_name }}"
           mkdir -p staging
           
-          # Find, move, and rename linux/deb artifacts
+          # Use a consistent strategy for all artifact types
           DEB_FILE=$(find artifacts/linux-artifacts* -name "*.deb")
           TAR_FILE=$(find artifacts/linux-artifacts* -name "*.tar.gz")
+          SRC_FILE=$(find artifacts/source-artifacts* -name "*.zip")
+          WIN_FILE=$(find artifacts/windows-artifacts* -name "*.zip")
+          
+          # Move and rename all files according to the convention
           mv "$DEB_FILE" "staging/${BASE_NAME}_deb.deb"
           mv "$TAR_FILE" "staging/${BASE_NAME}_lin.tar.gz"
-
-          # Find, move, and rename source artifact
-          SRC_FILE=$(find artifacts/source-artifacts* -name "*.zip")
           mv "$SRC_FILE" "staging/${BASE_NAME}_src.zip"
-
-          # Zip, move, and rename windows artifact
-          WIN_DIR=$(find artifacts/windows-artifacts* -type d -name "msxtileforge")
-          (cd "$WIN_DIR" && zip -r "../../staging/${BASE_NAME}_win.zip" .)
+          mv "$WIN_FILE" "staging/${BASE_NAME}_win.zip"
           
           echo "Prepared files for upload:"
           ls -l staging/
