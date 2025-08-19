@@ -149,10 +149,10 @@ jobs:
           name: source-artifacts-${{ github.run_id }}-${{ inputs.branch }}
           path: dist/msxtileforge-source.zip
 
-    #########################################
+  #########################################
   # E. Publish all artifacts to Internet Archive
   #########################################
-publish:
+  publish:
     name: Publish to Internet Archive
     needs: [generate-version, build-linux, build-windows, build-source]
     runs-on: ubuntu-latest
