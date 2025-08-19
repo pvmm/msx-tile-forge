@@ -113,15 +113,19 @@ jobs:
             --add-data "msxtileexport.py;." `
             --add-data "msxtilemagic.py;." `
             --add-data "tilerandomizer.py;." `
-            --add-data "supertilerandomizer.py;." `
+            --add-data "supertandomizer.py;." `
             msxtileforge.py
           cp README.md,LICENSE dist/msxtileforge
+
+      - name: Create final Windows zip archive
+        shell: pwsh
+        run: Compress-Archive -Path dist/msxtileforge/* -DestinationPath dist/msxtileforge-windows.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts-${{ github.run_id }}-${{ inputs.branch }}
-          path: dist/msxtileforge
+          path: dist/msxtileforge-windows.zip
 
   #########################################
   # D. Build source archive
@@ -145,10 +149,7 @@ jobs:
           name: source-artifacts-${{ github.run_id }}-${{ inputs.branch }}
           path: dist/msxtileforge-source.zip
 
-  #########################################
-  # E. Publish all artifacts to Internet Archive
-  #########################################
-  #########################################
+    #########################################
   # E. Publish all artifacts to Internet Archive
   #########################################
   publish:
