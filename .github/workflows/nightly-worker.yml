@@ -1,5 +1,4 @@
 ﻿name: Reusable Nightly Worker
-
 on:
   workflow_call:
     inputs:
