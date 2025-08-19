@@ -158,6 +158,25 @@ jobs:
         with:
           path: artifacts
 
+      - name: DEBUG - Inspect Artifacts
+        shell: bash
+        run: |
+          echo "--- 1. Full directory tree of downloaded artifacts ---"
+          ls -R artifacts/
+          
+          echo "--- 2. Attempting to find the Windows directory ---"
+          WIN_DIR_TEST=$(find artifacts/windows-artifacts* -type d -name "msxtileforge")
+          
+          echo "--- 3. Content of the WIN_DIR_TEST variable ---"
+          echo "${WIN_DIR_TEST}"
+          
+          echo "--- 4. Checking if the variable is empty ---"
+          if [ -z "${WIN_DIR_TEST}" ]; then
+            echo "ERROR: The WIN_DIR_TEST variable is empty. The 'find' command failed."
+          else
+            echo "SUCCESS: The WIN_DIR_TEST variable is not empty."
+          fi
+
       - name: Prepare and rename files for publishing
         id: files
         shell: bash
