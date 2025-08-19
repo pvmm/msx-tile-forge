@@ -1,5 +1,7 @@
 # MSX Tile Forge
-v1.0.0RC17
+
+[![Latest Release](https://img.shields.io/github/v/release/DamnedAngel/msx-tile-forge?include_prereleases&label=Latest%20Release&color=blue)](https://github.com/DamnedAngel/msx-tile-forge/releases/latest)
+[![Nightly Build Status](https://github.com/DamnedAngel/msx-tile-forge/actions/workflows/nightly-build.yml/badge.svg)](https://github.com/DamnedAngel/msx-tile-forge/actions/workflows/nightly-build.yml)
 
 An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python and Tkinter.
 
@@ -8,6 +10,17 @@ An integrated Palette, Tile, Supertile and Map Editor for MSX, built with Python
 MSX Tile Forge is a desktop application created to assist in the development of graphical assets for MSX2 computers and similar retro systems that utilize tile-based graphics and have specific palette limitations. It provides an integrated environment for designing 16-color palettes, creating 8x8 pixel tiles with row-specific colors, composing supertiles (e.g., 4x4, but dimensions are project-configurable) from these tiles, and arranging them into larger game maps. The tool aims to streamline the asset creation workflow for retro game developers, specially for MSX.
 
 All project components (palette, tiles, supertiles, map) can be saved and loaded individually or as a complete project, using custom binary file formats designed for ease of use and integration into MSX development pipelines.
+
+## Downloads
+
+You can download pre-compiled, ready-to-run versions of MSX Tile Forge for various operating systems.
+
+*   **Latest Official Release & Release Candidates:** For the most stable versions (yet to be populated), please visit the **[Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases)**. (Note: The first official release is coming soon!)
+
+*   **Nightly Builds:** For the latest "bleeding-edge" features and fixes, you can download a build from the most recent successful nightly run. These builds are generated automatically and are not guaranteed to be stable, but they represent the most up-to-date version of the software.
+    *   **[Browse All Nightly Builds on the Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build"&sort=-date)**
+
+*   **Source Code:** If you prefer to run the application from source, you can download the latest source archive from the [Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases) or clone the repository directly. This is a much smaller download, but it requires you to set up your own Python environment as described in the [Getting Started](#getting-started) section.
 
 ## Features
 
@@ -111,79 +124,47 @@ All project components (palette, tiles, supertiles, map) can be saved and loaded
         *   Use `Ctrl+1`..`0` / `Alt+1`..`0` to directly open recent items.
     *   **Persistent Window State:** The size and position of the main window, Usage windows, and editor sash dividers are saved and restored between sessions.
 
-## Getting Started
+## Installation
 
-This section explains how to set up your system and run MSX Tile Forge, including the dependencies required for its advanced import/export features.
+Getting MSX Tile Forge up and running is straightforward. You can choose between using pre-compiled binaries for convenience or running directly from the source code if you are a developer.
 
-### System Requirements & Dependencies
+### Choosing a Version
 
-To run MSX Tile Forge and use all its features, your system will need the following:
+First, decide which version is right for you:
 
-*   **Python:**
-    *   Version 3.x is required. The application has been primarily developed and tested with Python 3.12, but it is expected to be compatible with other recent Python 3 releases (e.g., Python 3.7 and newer).
-    *   Ensure Python 3 is installed on your system and that the `python` (or `python3` on some systems) command is accessible from your command line or terminal.
+*   **Official Release (Recommended):** This is the most stable and tested version. If you want a reliable tool for your projects, start here. You can find the "Latest" release on the **[Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases/latest)**.
 
-*   **Tkinter (GUI Library):**
-    *   Tkinter is Python's standard GUI (Graphical User Interface) package and is essential for the application's interface.
-    *   It is typically included with most Python installations on Windows, macOS, and Linux.
-    *   On some Linux distributions, Tkinter (often named `python3-tk` or similar) might need to be installed separately via the system's package manager if it wasn't included in a minimal Python installation. For example, on Debian/Ubuntu-based systems, you can install it by running:
-        ```bash
-        sudo apt-get update
-        sudo apt-get install python3-tk
-        ```
+*   **Release Candidate (RC):** These are pre-release versions that are considered stable but are in a final testing phase before becoming the official release. They are a great way to try out new features early. RCs are also found on the **[Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases)** and will be marked as "Pre-release".
 
-*   **Required Python Libraries:**
-    These libraries provide the core functionality for image processing, numerical operations, and advanced algorithms used by the application and its integrated scripts. You can install them all at once using pip. Open your terminal or command prompt and execute:
+*   **Nightly Build (Advanced Users):** This is a build generated automatically every night from the very latest source code, when there are updates to the project. It contains the newest features and bug fixes but is also the least tested and may contain bugs. This is for users who want to follow development closely or test a very recent change. You can find these on the **[Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build")**.
+
+### Running a Pre-compiled Version (Windows, Linux)
+
+This is the easiest way to get started and applies to Official, Release Candidate, and Nightly builds.
+
+1.  **Download:** Go to the appropriate page (Releases or Internet Archive) and download the archive for your operating system (e.g., `..._win.zip` for Windows, `..._lin.tar.gz` or `..._deb.deb` for Linux).
+2.  **Extract:** Unzip or extract the archive to a permanent location on your computer.
+3.  **Run:**
+    *   **On Windows:** Open the extracted folder and double-click `msxtileforge.exe`.
+    *   **On Linux:** Open the extracted folder. You may need to make the main executable runnable first. Open a terminal in the directory and run `chmod +x msxtileforge`, then you can run it with `./msxtileforge`.
+    *   **For Debian/Ubuntu users:** Alternatively, you can install the `.deb` package directly by double-clicking it or using the command line: `sudo dpkg -i /path/to/your/..._deb.deb`. After installation, you should be able to run `msxtileforge` from your terminal or find it in your application menu.
+
+### Running from Source Code
+
+This option is for users who are comfortable with Python and the command line.
+
+1.  **Download:** Download the source code archive (e.g., `..._src.zip`) from the [Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases).
+2.  **Install Dependencies:** Make sure you have Python 3 installed. Then, open a terminal in the directory where you extracted the source files and install the required libraries using the provided `requirements.txt` file:
     ```bash
-    pip install Pillow numpy scipy platformdirs tqdm
+    pip install -r requirements.txt
     ```
-    *   **Pillow:** The Python Imaging Library Fork is required for all image processing tasks.
-    *   **NumPy:** A fundamental package for scientific computing, used by the import scripts for efficient array manipulation.
-    *   **SciPy:** This library provides scientific algorithms. It is specifically used for the "Hungarian algorithm" (`linear_sum_assignment`) to perform optimal color and tile remapping during paste operations.
-    *   **platformdirs:** Used to find the correct user-specific directory for saving application settings (`settings.json`).
-    *   **tqdm:** Used by the `MSX Tile Magic` script to display progress bars in the console, which are streamed to the application's process runner window.
-
-*   **Optional `colour-science` Library (for advanced color accuracy):**
-    *   For the highest quality color palette generation and analysis, MSX Tile Forge can use the `colour-science` library. This enables the "CIE76" and "CIEDE2000" color difference metrics, which are based on human perceptual models.
-    *   This dependency is optional. If it is not installed, the application will default to its high-quality `weighted-rgb` metric.
-    *   To install it for advanced use, run:
-        ```bash
-        pip install colour-science
-        ```
-
-### Running the Application
-
-1.  **Ensure Dependencies are Installed:**
-    Verify that Python 3 and all the required Python libraries listed above are installed.
-
-2.  **Obtain the Scripts:**
-    Download or clone the `msxtileforge.py` script and its required companion scripts, `msxtilemagic.py` and `msxtileexport.py`. **All three files must be in the same directory for the application to function correctly.**
-
-3.  **Navigate to the Scripts' Directory:**
-    Open your command line interface (Terminal, Command Prompt, PowerShell, etc.) and navigate to the directory where you saved the `.py` files.
-    ```bash
-    cd path/to/your/msx-tile-forge-directory
-    ```
-
-4.  **Execute the Script:**
-    Run the main application using the Python interpreter:
+3.  **Run the Application:** Execute the main script with Python:
     ```bash
     python msxtileforge.py
     ```
-    *   On some systems, particularly Linux or macOS where Python 2 might also be present, you may need to use `python3` explicitly:
-        ```bash
-        python3 msxtileforge.py
-        ```
+    *(Note: On some systems, you may need to use `python3` instead of `python`)*.
 
-5.  **Optional Debug Mode:**
-    To launch the application with detailed diagnostic messages printed to the console (useful for troubleshooting or development), use the `--debug` flag:
-    ```bash
-    python msxtileforge.py --debug
-    ```
-
-Upon successful execution, the MSX Tile Forge application window should appear after a brief splash screen.
-
-## Manual
+## User Guide
 
 This manual provides an overview of MSX Tile Forge's functionalities, organized by its main interface components.
 
