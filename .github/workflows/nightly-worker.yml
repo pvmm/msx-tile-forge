@@ -113,7 +113,7 @@ jobs:
             --add-data "msxtileexport.py;." `
             --add-data "msxtilemagic.py;." `
             --add-data "tilerandomizer.py;." `
-            --add-data "supertandomizer.py;." `
+            --add-data "supertilerandomizer.py;." `
             msxtileforge.py
           cp README.md,LICENSE dist/msxtileforge
 
