@@ -1,11 +1,9 @@
-# .github/workflows/build-linux.yml
-
 name: Reusable Linux & Debian Build
-
 on:
   workflow_call:
     inputs:
-      version_string:
+      prepared_source_artifact_name:
+        description: 'The name of the prepared source code artifact to download'
         required: true
         type: string
 
@@ -13,63 +11,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Download prepared source code
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.prepared_source_artifact_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 1. Verify Python Environment
-        shell: bash
-        run: |
-          echo "--- Python Version ---"
-          python --version
-          echo "--- PIP Version ---"
-          python -m pip --version
-          echo "--- Location of Python ---"
-          which python
-          echo "--- System PATH ---"
-          echo $PATH
-
       - name: Install System & Python Dependencies
-        shell: bash
         run: |
-          # Add a retry loop for the apt-get commands
-          for i in 1 2 3 4 5; do
-            sudo apt-get update && sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13 && break
-            echo "apt-get failed, retrying in 10 seconds..."
-            sleep 10
-          done
-          
-          echo "Installing Python packages with 'python -m pip'..."
+          sudo apt-get update
+          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
           python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-
-      - name: 3. Verify Installed Packages
-        shell: bash
-        run: |
-          echo "--- Listing installed packages after install step ---"
-          python -m pip list
-
-      - name: Update Version in Files
-        shell: bash
-        run: |
-          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
-          DEBIAN_VERSION=$(echo "${{ inputs.version_string }}" | sed -e 's/v//' -e 's/_/~/g')
-          sed -i "s/<unreleased>/$DEBIAN_VERSION/g" debian/changelog
 
       - name: Build Linux Binary and Debian Package
         run: make lin deb
 
-      - name: Upload Linux Artifact
+      - name: Upload Linux and Debian artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: msxtileforge-v${{ inputs.version_string }}-lin
-          path: dist/msxtileforge_linux.tar.gz
-          
-      - name: Upload Debian Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: msxtileforge-v${{ inputs.version_string }}-deb
-          path: dist/*.deb
+          name: linux-artifacts # The calling workflow will add the unique suffix
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
