@@ -1,12 +1,11 @@
 ﻿name: 4. Nightly Build
 on:
   schedule:
-    # Runs at 4 AM UTC daily.
     - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # Needed for the final commit comment
 
 jobs:
   ############################################################
@@ -14,35 +13,29 @@ jobs:
   ############################################################
   find-active-branches:
     name: Find Active REL Branches
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       branches: ${{ steps.get-branches.outputs.branches }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Identify active branches
-        id: get-branches
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: get-branches
         shell: bash
         run: |
           REMOTE_REL_BRANCHES=$(git branch -r | grep 'origin/REL_' | sed 's/origin\///')
           ACTIVE_BRANCHES=()
           for branch in $REMOTE_REL_BRANCHES; do
-            RECENT_COMMIT_COUNT=$(git log "origin/$branch" --since="24 hours ago" --oneline | wc -l)
-            if [ "$RECENT_COMMIT_COUNT" -gt 0 ]; then
+            if [ -n "$(git log "origin/$branch" --since="24 hours ago" --oneline)" ]; then
               ACTIVE_BRANCHES+=("\"$branch\"")
             fi
           done
-          JSON_ARRAY=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")
-          echo "Found active branches: $JSON_ARRAY"
-          echo "branches=${JSON_ARRAY}" >> $GITHUB_OUTPUT
+          echo "branches=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")" >> $GITHUB_OUTPUT
 
   ############################################################
-  # JOB 2: Call the worker workflow for each active branch
+  # JOB 2: A meta-job that runs the build process for each branch
   ############################################################
-  build:
+  build-and-publish:
     name: Build for ${{ matrix.branch }}
     needs: find-active-branches
     if: fromJson(needs.find-active-branches.outputs.branches)[0] != null
@@ -50,7 +43,10 @@ jobs:
       fail-fast: false
       matrix:
         branch: ${{ fromJson(needs.find-active-branches.outputs.branches) }}
+    
     uses: ./.github/workflows/nightly-worker.yml
     with:
       branch: ${{ matrix.branch }}
-    secrets: inherit
+    secrets:
+      IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+      IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
