@@ -135,10 +135,15 @@ jobs:
           UPLOAD_COUNT=0
           COMMENT_FILE_LIST=""
           
-          find . -type f -print0 | while IFS= read -r -d $'\0' FILE; do
+          # This is the fix: Explicitly find only the top-level package files.
+          # The '*/' ensures we are looking inside the artifact subdirectories.
+          PACKAGE_FILES=$(find . -maxdepth 2 -type f \( -name "*_win.zip" -o -name "*_lin.tar.gz" -o -name "*_deb.deb" -o -name "*_src.zip" \))
+
+          for FILE in $PACKAGE_FILES; do
             FILENAME=$(basename "$FILE")
             echo "Uploading $FILENAME to item '${IA_IDENTIFIER}'..."
             if [ $UPLOAD_COUNT -eq 0 ]; then
+              # First file creates the item and sets all metadata
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --header "x-amz-auto-make-bucket: 1" \
@@ -150,6 +155,7 @@ jobs:
                 --upload-file "$FILE" \
                 "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILENAME}"
             else
+              # Subsequent files are just added
               sleep 15
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
