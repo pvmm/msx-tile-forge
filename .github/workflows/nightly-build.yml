@@ -1,4 +1,4 @@
-﻿name: Nightly Build
+﻿name: 4. Nightly Build
 on:
   schedule:
     # Runs at 4 AM UTC daily.

@@ -10,38 +10,46 @@ on:
         required: true
       IA_SECRET_KEY:
         required: true
+      GITHUB_TOKEN:
+        required: true
 
 jobs:
   #########################################
-  # A. Generate version strings
+  # A. Generate version strings and filenames
   #########################################
   generate-version:
-    name: Generate Version
+    name: Generate Version & Filenames
     runs-on: ubuntu-latest
     outputs:
-      base_name: ${{ steps.versioning.outputs.BASE_NAME }}
-      item_identifier: ${{ steps.versioning.outputs.ITEM_IDENTIFIER }}
-      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
       debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
+      item_identifier: ${{ steps.versioning.outputs.ITEM_IDENTIFIER }}
+      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
+      win_filename: ${{ steps.versioning.outputs.WIN_FILENAME }}
+      lin_filename: ${{ steps.versioning.outputs.LIN_FILENAME }}
+      deb_filename: ${{ steps.versioning.outputs.DEBI_FILENAME }}
+      src_filename: ${{ steps.versioning.outputs.SRC_FILENAME }}
     steps:
-      - name: Construct Nightly Version Strings
+      - name: Construct Nightly Version Strings and Filenames
         id: versioning
         shell: bash
         run: |
           BASE_VERSION=$(echo "${{ inputs.branch }}" | sed 's/REL_//')
           DATE_STAMP=$(date +'%y%m%d')
           GLOBAL_RUN_NUM="${{ github.run_number }}"
-          BASE_NAME="msxtileforge_${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
-          ITEM_IDENTIFIER="${BASE_NAME}_all"
-          VERSION_STRING="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
-          DEBIAN_VERSION=$(echo "$VERSION_STRING" | sed -e 's/_/~/g')
           
-          echo "BASE_NAME=${BASE_NAME}" >> $GITHUB_OUTPUT
+          FINAL_VERSION="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
+          BASE_NAME="msxtileforge_${FINAL_VERSION}"
+          ITEM_IDENTIFIER="${BASE_NAME}_all"
+
+          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')" >> $GITHUB_OUTPUT
           echo "ITEM_IDENTIFIER=${ITEM_IDENTIFIER}" >> $GITHUB_OUTPUT
           echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ inputs.branch }}" >> $GITHUB_OUTPUT
-          echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_OUTPUT
-          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "WIN_FILENAME=${BASE_NAME}_win.zip" >> $GITHUB_OUTPUT
+          echo "LIN_FILENAME=${BASE_NAME}_lin.tar.gz" >> $GITHUB_OUTPUT
+          echo "DEB_FILENAME=${BASE_NAME}_deb.deb" >> $GITHUB_OUTPUT
+          echo "SRC_FILENAME=${BASE_NAME}_src.zip" >> $GITHUB_OUTPUT
 
   #########################################
   # B. Prepare source code
@@ -77,6 +85,8 @@ jobs:
     uses: ./.github/workflows/build-linux.yml
     with:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      lin_filename: ${{ needs.generate-version.outputs.lin_filename }}
+      deb_filename: ${{ needs.generate-version.outputs.deb_filename }}
 
   build-windows:
     name: Call Windows Builder
@@ -84,6 +94,7 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      win_filename: ${{ needs.generate-version.outputs.win_filename }}
 
   build-source:
     name: Call Source Builder
@@ -91,6 +102,7 @@ jobs:
     uses: ./.github/workflows/build-source.yml
     with:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      src_filename: ${{ needs.generate-version.outputs.src_filename }}
 
   #########################################
   # D. Publish all artifacts to Internet Archive
@@ -105,11 +117,10 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
 
-      - name: Package and rename using reusable action
-        id: package
-        uses: ./.github/actions/package-and-rename-artifacts
+      - name: Download all final build artifacts
+        uses: actions/download-artifact@v4
         with:
-          base_name: ${{ needs.generate-version.outputs.base_name }}
+          path: final-packages
 
       - name: Upload to Internet Archive and create comment
         env:
@@ -120,17 +131,18 @@ jobs:
         shell: bash
         run: |
           ITEM_TITLE="MSX Tile Forge Nightly Build (${{ needs.generate-version.outputs.version_string }})"
-          PACKAGE_PATH="${{ steps.package.outputs.package_path }}"
           
-          cd "${PACKAGE_PATH}"
+          # The files are now already correctly named in their own subdirectories
+          cd final-packages
           UPLOAD_COUNT=0
           COMMENT_FILE_LIST=""
           
-          # Loop through all prepared files and upload them
-          for FILE in *; do
-            echo "Uploading $FILE to item '${IA_IDENTIFIER}'..."
+          # Find all files across the downloaded artifact folders and upload them
+          find . -type f -print0 | while IFS= read -r -d $'\0' FILE; do
+            FILENAME=$(basename "$FILE")
+            echo "Uploading $FILENAME to item '${IA_IDENTIFIER}'..."
             if [ $UPLOAD_COUNT -eq 0 ]; then
-              # The first file creates the item and sets all metadata
+              # First file creates the item and sets all metadata
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --header "x-amz-auto-make-bucket: 1" \
@@ -140,25 +152,23 @@ jobs:
                 --header "x-archive-meta01-subject: msxtileforge_nightly_build" \
                 --header "x-archive-meta02-subject: msxtileforge" \
                 --upload-file "$FILE" \
-                "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILE}"
+                "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILENAME}"
             else
-              # Subsequent files are just added to the now-existing item
+              # Subsequent files are just added
               sleep 15
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --upload-file "$FILE" \
-                "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILE}"
+                "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILENAME}"
             fi
             UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
             
-            # Add file to the markdown list for the commit comment
-            FILE_URL="https://archive.org/download/${IA_IDENTIFIER}/${FILE}"
-            COMMENT_FILE_LIST="${COMMENT_FILE_LIST}*   **${FILE}**: [Download](${FILE_URL})\n"
+            FILE_URL="https://archive.org/download/${IA_IDENTIFIER}/${FILENAME}"
+            COMMENT_FILE_LIST="${COMMENT_FILE_LIST}*   **${FILENAME}**: [Download](${FILE_URL})\n"
           done
           
           cd ..
           
-          # Construct and post the final commit comment
           sleep 30
           
           COMMIT_SHA=$(git rev-parse HEAD)

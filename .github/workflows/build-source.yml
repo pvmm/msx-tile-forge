@@ -1,4 +1,5 @@
 name: Reusable Source Archive Build
+
 on:
   workflow_call:
     inputs:
@@ -6,9 +7,13 @@ on:
         description: 'The name of the prepared source code artifact to download'
         required: true
         type: string
+      src_filename:
+        description: 'The final, desired filename for the source .zip package'
+        required: true
+        type: string
 
 jobs:
-  build_src:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Download prepared source code
@@ -17,10 +22,10 @@ jobs:
           name: ${{ inputs.prepared_source_artifact_name }}
       
       - name: Create source archive package
-        run: make sdist
+        run: make sdist SRC_ZIP=${{ inputs.src_filename }}
 
-      - name: Upload source artifact
+      - name: Upload final source artifact
         uses: actions/upload-artifact@v4
         with:
-          name: source-artifacts # The calling workflow will add the unique suffix
-          path: dist/msxtileforge-source.zip
+          name: ${{ inputs.src_filename }}
+          path: dist/${{ inputs.src_filename }}
