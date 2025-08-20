@@ -114,7 +114,7 @@ jobs:
   #########################################
   package:
     name: Package and Rename Artifacts
-    needs: generate-version
+    needs: [generate-version, build-linux, build-windows, build-source]
     runs-on: ubuntu-latest
     outputs:
       base_name: ${{ needs.generate-version.outputs.base_name }} # Expose the base_name as an output
