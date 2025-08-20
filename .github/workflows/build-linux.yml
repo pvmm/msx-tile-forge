@@ -42,14 +42,17 @@ jobs:
       - name: Find and rename Debian package
         shell: bash
         run: |
-          # debuild creates the .deb in the parent directory, so we look for it there
           DEB_FILE=$(find .. -maxdepth 1 -name "*.deb")
-          echo "Found Debian package at: $DEB_FILE"
-          echo "Renaming to: dist/${{ inputs.deb_filename }}"
           mv "$DEB_FILE" "dist/${{ inputs.deb_filename }}"
 
-      - name: Upload final Linux and Debian artifacts
+      - name: Upload Linux tar.gz artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-artifacts
-          path: dist/
+          name: ${{ inputs.lin_filename }}
+          path: dist/${{ inputs.lin_filename }}
+
+      - name: Upload Debian package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.deb_filename }}
+          path: dist/${{ inputs.deb_filename }}
