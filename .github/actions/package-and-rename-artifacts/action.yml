@@ -1,0 +1,46 @@
+name: 'Package and Rename Artifacts'
+description: 'Downloads all build artifacts, renames them using the provided base name, and places them in a `final_packages` directory.'
+
+inputs:
+  base_name:
+    description: 'The base name for the packages (e.g., msxtileforge_..._nightly...)'
+    required: true
+
+outputs:
+  package_path:
+    description: 'The path to the directory containing the final, renamed packages.'
+    value: ${{ steps.files.outputs.package_path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      shell: bash
+      with:
+        path: artifacts
+        pattern: "*-artifacts-*"
+        merge-multiple: true
+
+    - name: Prepare and rename files
+      id: files
+      shell: bash
+      run: |
+        set -x
+        BASE_NAME="${{ inputs.base_name }}"
+        mkdir -p final_packages
+        
+        DEB_FILE=$(find artifacts -name "*.deb")
+        TAR_FILE=$(find artifacts -name "*.tar.gz")
+        SRC_FILE=$(find artifacts -name "msxtileforge-source.zip")
+        WIN_FILE=$(find artifacts -name "msxtileforge-windows.zip")
+        
+        mv "$DEB_FILE" "final_packages/${BASE_NAME}_deb.deb"
+        mv "$TAR_FILE" "final_packages/${BASE_NAME}_lin.tar.gz"
+        mv "$SRC_FILE" "final_packages/${BASE_NAME}_src.zip"
+        mv "$WIN_FILE" "final_packages/${BASE_NAME}_win.zip"
+        
+        echo "Prepared final packages:"
+        ls -l final_packages/
+
+        echo "package_path=final_packages" >> $GITHUB_OUTPUT
