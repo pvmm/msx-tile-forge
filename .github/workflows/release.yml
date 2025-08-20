@@ -1,5 +1,4 @@
-name: Final Release
-
+name: 3. Final Release
 on:
   push:
     tags:
@@ -16,10 +15,12 @@ jobs:
     name: Validate Tag & Generate Version
     runs-on: ubuntu-latest
     outputs:
-      base_name: ${{ steps.versioning.outputs.BASE_NAME }}
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
-      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
       prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
+      win_filename: ${{ steps.versioning.outputs.WIN_FILENAME }}
+      lin_filename: ${{ steps.versioning.outputs.LIN_FILENAME }}
+      deb_filename: ${{ steps.versioning.outputs.DEB_FILENAME }}
+      src_filename: ${{ steps.versioning.outputs.SRC_FILENAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,31 +30,28 @@ jobs:
       - name: Validate that the tag is on the master branch
         shell: bash
         run: |
-          # Get the commit hash of the tag and the master branch head
           TAG_COMMIT=$(git rev-parse "${{ github.ref }}")
           MASTER_COMMIT=$(git rev-parse "origin/master")
           
-          echo "Tag commit:   $TAG_COMMIT"
-          echo "Master commit: $MASTER_COMMIT"
-          
-          # Check if the tag's commit is an ancestor of the master branch head
           if ! git merge-base --is-ancestor "$TAG_COMMIT" "$MASTER_COMMIT"; then
             echo "::error::Tag '${{ github.ref }}' is not on the master branch. Final releases must be tagged on master."
             exit 1
           fi
           echo "Tag is correctly on the master branch."
 
-      - name: Construct Final Version String
+      - name: Construct Final Version String and Filenames
         id: versioning
         shell: bash
         run: |
-          # For final releases, the version is simply parsed from the tag
           RAW_VERSION=$(echo "${{ github.ref_name }}" | sed 's/v//')
+          BASE_NAME="msxtileforge_v${RAW_VERSION}"
           
-          echo "BASE_NAME=msxtileforge-v${RAW_VERSION}" >> $GITHUB_OUTPUT
           echo "VERSION_STRING=${RAW_VERSION}" >> $GITHUB_OUTPUT
-          echo "DEBIAN_VERSION=${RAW_VERSION}" >> $GITHUB_OUTPUT
           echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "WIN_FILENAME=${BASE_NAME}_win.zip" >> $GITHUB_OUTPUT
+          echo "LIN_FILENAME=${BASE_NAME}_lin.tar.gz" >> $GITHUB_OUTPUT
+          echo "DEB_FILENAME=${BASE_NAME}_deb.deb" >> $GITHUB_OUTPUT
+          echo "SRC_FILENAME=${BASE_NAME}_src.zip" >> $GITHUB_OUTPUT
 
   #########################################
   # B. Prepare source code
@@ -66,13 +64,13 @@ jobs:
       - name: Checkout target branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }} # Checkout the code at the specific tag
+          ref: ${{ github.ref_name }}
 
       - name: Update version strings using reusable action
         uses: ./.github/actions/update-version-in-files
         with:
           version_string: ${{ needs.generate-version.outputs.version_string }}
-          debian_version: ${{ needs.generate-version.outputs.debian_version }}
+          debian_version: ${{ needs.generate-version.outputs.version_string }} # For final release, debian version is the same
 
       - name: Upload prepared source as artifact
         uses: actions/upload-artifact@v4
@@ -89,6 +87,8 @@ jobs:
     uses: ./.github/workflows/build-linux.yml
     with:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      lin_filename: ${{ needs.generate-version.outputs.lin_filename }}
+      deb_filename: ${{ needs.generate-version.outputs.deb_filename }}
 
   build-windows:
     name: Call Windows Builder
@@ -96,6 +96,7 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      win_filename: ${{ needs.generate-version.outputs.win_filename }}
 
   build-source:
     name: Call Source Builder
@@ -103,6 +104,7 @@ jobs:
     uses: ./.github/workflows/build-source.yml
     with:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      src_filename: ${{ needs.generate-version.outputs.src_filename }}
 
   #########################################
   # D. Publish Final Release to GitHub
@@ -112,18 +114,19 @@ jobs:
     needs: [generate-version, build-linux, build-windows, build-source]
     runs-on: ubuntu-latest
     steps:
-      - name: Package and rename using reusable action
-        id: package
-        uses: ./.github/actions/package-and-rename-artifacts
+      - name: Download all final build artifacts
+        uses: actions/download-artifact@v4
         with:
-          base_name: ${{ needs.generate-version.outputs.base_name }}
+          path: final-artifacts
+      
+      - name: List final artifacts for verification
+        run: ls -R final-artifacts
 
       - name: Create GitHub Release and Upload Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "MSX Tile Forge v${{ needs.generate-version.outputs.version_string }}" \
+          gh release create "${{ github.ref_name }}" ./final-artifacts/*/* \
+            --title "MSX Tile Forge ${{ github.ref_name }}" \
             --notes "Official release. All packages are attached below." \
-            --latest \
-            ${{ steps.package.outputs.package_path }}/*
+            --latest
