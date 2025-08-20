@@ -40,12 +40,12 @@ jobs:
             msxtileforge.py
           cp README.md,LICENSE dist/msxtileforge
 
-      - name: Create final Windows zip archive with correct name
+      - name: Create final Windows zip archive
         shell: pwsh
         run: Compress-Archive -Path dist/msxtileforge/* -DestinationPath dist/${{ inputs.win_filename }}
 
       - name: Upload final Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-artifacts
+          name: ${{ inputs.win_filename }}
           path: dist/${{ inputs.win_filename }}

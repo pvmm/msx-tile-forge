@@ -21,11 +21,11 @@ jobs:
         with:
           name: ${{ inputs.prepared_source_artifact_name }}
       
-      - name: Create source archive package with correct name
+      - name: Create source archive package
         run: make sdist SRC_ZIP=${{ inputs.src_filename }}
 
       - name: Upload final source artifact
         uses: actions/upload-artifact@v4
         with:
-          name: source-artifacts
+          name: ${{ inputs.src_filename }}
           path: dist/${{ inputs.src_filename }}
