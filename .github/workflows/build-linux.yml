@@ -1,4 +1,5 @@
 name: Reusable Linux & Debian Build
+
 on:
   workflow_call:
     inputs:
@@ -6,9 +7,17 @@ on:
         description: 'The name of the prepared source code artifact to download'
         required: true
         type: string
+      lin_filename:
+        description: 'The final, desired filename for the .tar.gz package'
+        required: true
+        type: string
+      deb_filename:
+        description: 'The final, desired filename for the .deb package'
+        required: true
+        type: string
 
 jobs:
-  build_lin:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Download prepared source code
@@ -27,13 +36,23 @@ jobs:
           sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
           python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
 
-      - name: Build Linux Binary and Debian Package
-        run: make lin deb
+      - name: Build Linux binary and Debian package
+        run: make lin deb LIN_TGZ=${{ inputs.lin_filename }}
 
-      - name: Upload Linux and Debian artifacts
+      - name: Find and rename Debian package
+        shell: bash
+        run: |
+          DEB_FILE=$(find .. -maxdepth 1 -name "*.deb")
+          mv "$DEB_FILE" "dist/${{ inputs.deb_filename }}"
+
+      - name: Upload Linux tar.gz artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-artifacts # The calling workflow will add the unique suffix
-          path: |
-            dist/*.tar.gz
-            dist/*.deb
+          name: ${{ inputs.lin_filename }}
+          path: dist/${{ inputs.lin_filename }}
+
+      - name: Upload Debian package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.deb_filename }}
+          path: dist/${{ inputs.deb_filename }}
