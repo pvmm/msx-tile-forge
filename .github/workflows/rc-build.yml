@@ -107,76 +107,37 @@ jobs:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
 
   #########################################
-  # D. Tag Release Candidate
+  # D. Package and Publish Pre-release
   #########################################
-  tag-release:
-    name: Tag Release Candidate
+  package-and-publish:
+    name: Package and Publish Pre-release
     needs: [generate-version, build-linux, build-windows, build-source]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create the release and push tags
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Package and rename using reusable action
+        id: package
+        uses: ./.github/actions/package-and-rename-artifacts
         with:
-          ref: ${{ github.ref_name }}
-      
+          base_name: msxtileforge-v${{ needs.generate-version.outputs.version_string }}
+
       - name: Configure Git
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-      - name: Create and Push Tag
+      
+      - name: Create Git Tag
         run: |
-          TAG_NAME="v${{ needs.generate-version.outputs.version_string }}"
-          echo "Creating and pushing tag: $TAG_NAME"
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
-
-  #########################################
-  # E. Publish Pre-release to GitHub
-  #########################################
-  publish-pre-release:
-    name: Publish Pre-release
-    needs: [generate-version, tag-release] # Run after the tag has been pushed
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # Needed to create the release and upload assets
-    steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: "*-artifacts"
-          merge-multiple: true
-
-      - name: Prepare and rename files for release
-        id: files
-        shell: bash
-        run: |
-          set -x
-          BASE_NAME="msxtileforge-v${{ needs.generate-version.outputs.version_string }}"
-          mkdir -p release_assets
-          
-          DEB_FILE=$(find artifacts -name "*.deb")
-          TAR_FILE=$(find artifacts -name "*.tar.gz")
-          SRC_FILE=$(find artifacts -name "msxtileforge-source.zip")
-          WIN_FILE=$(find artifacts -name "msxtileforge-windows.zip")
-          
-          # Move and rename all files according to the convention
-          mv "$DEB_FILE" "release_assets/${BASE_NAME}_deb.deb"
-          mv "$TAR_FILE" "release_assets/${BASE_NAME}_lin.tar.gz"
-          mv "$SRC_FILE" "release_assets/${BASE_NAME}_src.zip"
-          mv "$WIN_FILE" "release_assets/${BASE_NAME}_win.zip"
-          
-          echo "Prepared release assets:"
-          ls -l release_assets/
+          git tag "v${{ needs.generate-version.outputs.version_string }}"
+          git push origin "v${{ needs.generate-version.outputs.version_string }}"
 
       - name: Create GitHub Pre-release and Upload Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="v${{ needs.generate-version.outputs.version_string }}"
-          
-          gh release create "$TAG_NAME" ./release_assets/* \
-            --title "Release Candidate ${{ needs.generate-version.outputs.version_string }}" \
-            --notes "This is a pre-release version for testing." \
-            --prerelease
+          gh release create "v${{ needs.generate-version.outputs.version_string }}" \
+            --title "Release Candidate v${{ needs.generate-version.outputs.version_string }}" \
+            --notes "This is a pre-release version for testing. All packages are attached below." \
+            --prerelease \
+            ${{ steps.package.outputs.package_path }}/*

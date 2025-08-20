@@ -1,170 +1,129 @@
-# .github/workflows/release.yml
-
-name: MSX Tile Forge Build Orchestrator
+name: Final Release
 
 on:
-  workflow_dispatch:
-    ### REMOVED: The 'inputs' section is gone. The user only chooses a branch.
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+' # Trigger on tags like v1.0.0, v01.00.00, etc.
+
+permissions:
+  contents: write # Needed to create the release
 
 jobs:
-  ############################################################
-  # JOB 1: Determine Build Type, Calculate Version, and Trigger Worker Workflows
-  ############################################################
-  call_builds:
-    name: Validate Branch & Calculate Version
+  #########################################
+  # A. Validate tag and generate version
+  #########################################
+  generate-version:
+    name: Validate Tag & Generate Version
     runs-on: ubuntu-latest
     outputs:
-      version_string: ${{ steps.version_string_generator.outputs.VERSION_STRING }}
-      build_type: ${{ steps.determine_build_type.outputs.BUILD_TYPE }} ### NEW: Output the build type
-
+      base_name: ${{ steps.versioning.outputs.BASE_NAME }}
+      version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
+      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Needed for commit counts and tag lookups
+          fetch-depth: 0
 
-      ### NEW: This step determines the build type from the branch name.
-      - name: Determine Build Type and Validate Branch
-        id: determine_build_type
+      - name: Validate that the tag is on the master branch
         shell: bash
         run: |
-          BRANCH_NAME="${{ github.ref_name }}"
-          echo "1. Validating branch: $BRANCH_NAME"
+          # Get the commit hash of the tag and the master branch head
+          TAG_COMMIT=$(git rev-parse "${{ github.ref }}")
+          MASTER_COMMIT=$(git rev-parse "origin/master")
           
-          if [[ $BRANCH_NAME == TKT_* ]]; then
-            echo "Branch type is TKT. Setting build type to 'dev'."
-            echo "BUILD_TYPE=dev" >> $GITHUB_OUTPUT
-          elif [[ $BRANCH_NAME == REL_* ]]; then
-            echo "Branch type is REL. Setting build type to 'rc'."
-            echo "BUILD_TYPE=rc" >> $GITHUB_OUTPUT
-          else
-            echo "::error::Invalid branch for this workflow."
-            echo "This workflow can only be run on branches starting with 'TKT_' or 'REL_'."
+          echo "Tag commit:   $TAG_COMMIT"
+          echo "Master commit: $MASTER_COMMIT"
+          
+          # Check if the tag's commit is an ancestor of the master branch head
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" "$MASTER_COMMIT"; then
+            echo "::error::Tag '${{ github.ref }}' is not on the master branch. Final releases must be tagged on master."
             exit 1
           fi
+          echo "Tag is correctly on the master branch."
 
-      ### MODIFIED: This step is now conditional and only runs for 'dev' builds.
-      - name: Construct Dev Version String
-        if: steps.determine_build_type.outputs.BUILD_TYPE == 'dev'
-        id: versioning_dev
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Construct Final Version String
+        id: versioning
         shell: bash
         run: |
-          echo "--- Start Dev Version Construction ---"
-          BRANCH_NAME="${{ github.ref_name }}"
-          TICKET_NUM=$(echo "$BRANCH_NAME" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
-          echo "2. Parsed TICKET_NUM: $TICKET_NUM"
+          # For final releases, the version is simply parsed from the tag
+          RAW_VERSION=$(echo "${{ github.ref_name }}" | sed 's/v//')
           
-          MILESTONE_TITLE=$(gh issue view "$TICKET_NUM" --json milestone --jq '.milestone.title')
-          if [ -z "$MILESTONE_TITLE" ] || [ "$MILESTONE_TITLE" == "null" ]; then
-            echo "::error::Issue TKT_$TICKET_NUM is not assigned to a milestone."
-            exit 1
-          fi
-          echo "3. Fetched Milestone Title: $MILESTONE_TITLE"
-          
-          BASE_VERSION=$(echo "$MILESTONE_TITLE" | grep -oP 'REL_[0-9.]+' | sed 's/REL_//')
-          if [ -z "$BASE_VERSION" ]; then
-            echo "::error::Milestone title '$MILESTONE_TITLE' does not contain 'REL_XX.YY.ZZ' version string."
-            exit 1
-          fi
-          echo "4. Parsed BASE_VERSION: $BASE_VERSION"
+          echo "BASE_NAME=msxtileforge-v${RAW_VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION_STRING=${RAW_VERSION}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=${RAW_VERSION}" >> $GITHUB_OUTPUT
+          echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
-          BRANCH_BUILD_NUM=$(git rev-list --count HEAD)
-          GLOBAL_BUILD_NUM="${{ github.run_number }}"
-          
-          FINAL_VERSION="${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_BUILD_NUM}"
-          echo "7. Assembled FINAL_VERSION: $FINAL_VERSION"
-          echo "--- End Dev Version Construction ---"
-          
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+  #########################################
+  # B. Prepare source code
+  #########################################
+  prepare-source:
+    name: Prepare Source Code
+    needs: generate-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }} # Checkout the code at the specific tag
 
-      ### NEW: This step contains the logic for RC versioning.
-      - name: Construct RC Version String
-        if: steps.determine_build_type.outputs.BUILD_TYPE == 'rc'
-        id: versioning_rc
-        shell: bash
-        run: |
-          echo "--- Start RC Version Construction ---"
-          BRANCH_NAME="${{ github.ref_name }}"
-          
-          BASE_VERSION=$(echo "$BRANCH_NAME" | sed 's/REL_//')
-          echo "1. Parsed BASE_VERSION: $BASE_VERSION"
-          
-          # Fetch all tags to ensure we have the latest information
-          git fetch --tags
-          
-          # Find the highest existing RC number for this base version
-          LATEST_RC_NUM=$(git tag --list "v${BASE_VERSION}_rc*" | sed 's/.*_rc//' | sort -n | tail -n 1)
-          
-          NEXT_RC_NUM=1
-          if [[ -n "$LATEST_RC_NUM" ]]; then
-            NEXT_RC_NUM=$((LATEST_RC_NUM + 1))
-            echo "2. Found latest RC: $LATEST_RC_NUM. Next RC will be: $NEXT_RC_NUM"
-          else
-            echo "2. No existing RC tags found for v$BASE_VERSION. Starting with RC: $NEXT_RC_NUM"
-          fi
-          
-          GLOBAL_BUILD_NUM="${{ github.run_number }}"
-          
-          FINAL_VERSION="${BASE_VERSION}_rc${NEXT_RC_NUM}_${GLOBAL_BUILD_NUM}"
-          echo "3. Assembled FINAL_VERSION: $FINAL_VERSION"
-          echo "--- End RC Version Construction ---"
-          
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+      - name: Update version strings using reusable action
+        uses: ./.github/actions/update-version-in-files
+        with:
+          version_string: ${{ needs.generate-version.outputs.version_string }}
+          debian_version: ${{ needs.generate-version.outputs.debian_version }}
 
-      ### NEW: A helper step to consolidate the version string from the conditional steps above.
-      - name: Set Final Version String
-        id: version_string_generator
-        shell: bash
-        run: |
-          if [ "${{ steps.determine_build_type.outputs.BUILD_TYPE }}" == "dev" ]; then
-            echo "VERSION_STRING=${{ steps.versioning_dev.outputs.VERSION_STRING }}" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.determine_build_type.outputs.BUILD_TYPE }}" == "rc" ]; then
-            echo "VERSION_STRING=${{ steps.versioning_rc.outputs.VERSION_STRING }}" >> $GITHUB_OUTPUT
-          fi
+      - name: Upload prepared source as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+          path: .
 
-  ############################################################
-  # JOB 2: Run the actual builds (Unchanged)
-  ############################################################
-  build_binaries:
-    name: Build Binaries
-    needs: call_builds
-    uses: ./.github/workflows/build-windows.yml
-    with:
-      version_string: ${{ needs.call_builds.outputs.version_string }}
-      
-  build_linux_binaries:
-    name: Build Linux Binaries
-    needs: call_builds
+  #########################################
+  # C. Call the Reusable Builders
+  #########################################
+  build-linux:
+    name: Call Linux Builder
+    needs: [generate-version, prepare-source]
     uses: ./.github/workflows/build-linux.yml
     with:
-      version_string: ${{ needs.call_builds.outputs.version_string }}
-      
-  ############################################################
-  # JOB 3: Create and push the Git tag for RC builds
-  ############################################################
-  tag_release_candidate:
-    name: Tag Release Candidate
-    needs: [call_builds, build_binaries, build_linux_binaries] # Run after builds succeed
-    if: needs.call_builds.outputs.build_type == 'rc'         # Only run for RC builds
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-windows:
+    name: Call Windows Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-source:
+    name: Call Source Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-source.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  #########################################
+  # D. Publish Final Release to GitHub
+  #########################################
+  publish-final-release:
+    name: Publish Final Release
+    needs: [generate-version, build-linux, build-windows, build-source]
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write # Allow this job to push tags
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Package and rename using reusable action
+        id: package
+        uses: ./.github/actions/package-and-rename-artifacts
+        with:
+          base_name: ${{ needs.generate-version.outputs.base_name }}
 
-      - name: Configure Git
+      - name: Create GitHub Release and Upload Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "github-actions@github.com"
-          
-      - name: Create and Push Tag
-        run: |
-          TAG_NAME="v${{ needs.call_builds.outputs.version_string }}"
-          echo "Creating and pushing tag: $TAG_NAME"
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
+          gh release create "${{ github.ref_name }}" \
+            --title "MSX Tile Forge v${{ needs.generate-version.outputs.version_string }}" \
+            --notes "Official release. All packages are attached below." \
+            --latest \
+            ${{ steps.package.outputs.package_path }}/*
