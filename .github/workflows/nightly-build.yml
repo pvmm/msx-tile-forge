@@ -1,15 +1,12 @@
 ﻿name: Nightly Build
 on:
   schedule:
-    # IMPORTANT: Set this to a time ~10-15 minutes in the future (in UTC) for your test.
-    # Example: '0 23 * * *' for 23:00 UTC.
-    # After testing, change it to your desired nightly time, e.g., '0 4 * * *' for 4 AM UTC.
-    - cron: '15 11 * * *'
-  # Allow manual trigger for easier debugging
+    # Runs at 4 AM UTC daily.
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write # Needed to post commit comments
+  contents: write
 
 jobs:
   ############################################################
@@ -20,169 +17,40 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branches: ${{ steps.get-branches.outputs.branches }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required to get commit history
+          fetch-depth: 0
 
       - name: Identify active branches
         id: get-branches
         shell: bash
         run: |
-          echo "Searching for REL_* branches with commits in the last 24 hours..."
-          
-          # Get a list of all remote REL branches
           REMOTE_REL_BRANCHES=$(git branch -r | grep 'origin/REL_' | sed 's/origin\///')
-          
           ACTIVE_BRANCHES=()
           for branch in $REMOTE_REL_BRANCHES; do
-            echo "Checking branch: $branch"
-            
-            # Check if there's at least one commit on this branch in the last day
-            # We use --git-dir to avoid issues with sparse checkouts
-            RECENT_COMMIT_COUNT=$(git --git-dir=$PWD/.git log "origin/$branch" --since="24 hours ago" --oneline | wc -l)
-
+            RECENT_COMMIT_COUNT=$(git log "origin/$branch" --since="24 hours ago" --oneline | wc -l)
             if [ "$RECENT_COMMIT_COUNT" -gt 0 ]; then
-              echo " -> Found $RECENT_COMMIT_COUNT recent commit(s). Adding to build list."
-              # Add the branch name in quotes to the bash array
               ACTIVE_BRANCHES+=("\"$branch\"")
-            else
-              echo " -> No recent commits. Skipping."
             fi
           done
-
-          if [ ${#ACTIVE_BRANCHES[@]} -eq 0 ]; then
-            echo "No active REL branches found."
-            echo "branches=[]" >> $GITHUB_OUTPUT
-          else
-            # Convert the bash array to a comma-separated string, then wrap in JSON brackets
-            JSON_ARRAY=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")
-            echo "Found active branches: $JSON_ARRAY"
-            echo "branches=${JSON_ARRAY}" >> $GITHUB_OUTPUT
-          fi
+          JSON_ARRAY=$(IFS=,; echo "[${ACTIVE_BRANCHES[*]}]")
+          echo "Found active branches: $JSON_ARRAY"
+          echo "branches=${JSON_ARRAY}" >> $GITHUB_OUTPUT
 
   ############################################################
-  # JOB 2: Build, upload, and comment for each active branch
+  # JOB 2: Call the worker workflow for each active branch
   ############################################################
-  build-and-release-nightly:
-    name: Build Nightly for ${{ matrix.branch }}
+  build:
+    name: Build for ${{ matrix.branch }}
     needs: find-active-branches
-    if: fromJson(needs.find-active-branches.outputs.branches)[0] != null # Only run if branches were found
-    runs-on: ubuntu-latest
-
+    if: fromJson(needs.find-active-branches.outputs.branches)[0] != null
     strategy:
-      fail-fast: false # Ensures one failed build doesn't cancel the others
+      fail-fast: false
       matrix:
         branch: ${{ fromJson(needs.find-active-branches.outputs.branches) }}
-
-    steps:
-      - name: Checkout specific branch (${{ matrix.branch }})
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ matrix.branch }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install System & Python Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13 curl
-          python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
-
-      - name: Construct Nightly Version String
-        id: versioning
-        shell: bash
-        run: |
-          BASE_VERSION=$(echo "${{ matrix.branch }}" | sed 's/REL_//')
-          DATE_STAMP=$(date +'%y%m%d')
-          GLOBAL_RUN_NUM="${{ github.run_number }}"
-          FINAL_VERSION="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
-          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
-          
-          DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')
-          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Update Version in Files
-        run: |
-          find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ steps.versioning.outputs.VERSION_STRING }}/g" {} +
-          sed -i "s/<unreleased>/${{ steps.versioning.outputs.DEBIAN_VERSION }}/g" debian/changelog
-
-      - name: Build Linux Binary and Debian Package
-        run: make lin deb
-        
-- name: Upload to Internet Archive and Create Comment
-        id: uploader
-        env:
-          # These secrets are used to configure the ia tool
-          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
-          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-          # This is the unique "page" or "folder" on archive.org for your builds
-          IA_IDENTIFIER: "msxtileforge-nightly-builds"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          # --- 1. Install and Configure the IA Tool ---
-          echo "Installing Internet Archive tool..."
-          python -m pip install internetarchive
-          
-          echo "Configuring credentials..."
-          ia configure --username "${IA_ACCESS_KEY}" --password "${IA_SECRET_KEY}"
-
-          # --- 2. Prepare Metadata for the Item ---
-          # This creates a nice description on the archive.org page
-          echo "Creating metadata file..."
-          METADATA_BODY="""
-          mediatype: software
-          collection: opensource_media
-          creator: DamnedAngel
-          description: These are automated nightly builds of the MSX Tile Forge application. Files are updated daily and should be considered unstable.
-          subject: msx; gamedev; tools
-          title: MSX Tile Forge (Nightly Builds)
-          """
-          echo "$METADATA_BODY" > metadata.yaml
-
-          # --- 3. Upload the Build Artifacts ---
-          echo "Uploading build files to identifier: $IA_IDENTIFIER"
-          TAR_FILE=$(find dist -name "*.tar.gz")
-          DEB_FILE=$(find dist -name "*.deb")
-
-          # The 'ia upload' command is smart. It will create the item if it doesn't exist,
-          # and it will update/overwrite the files if it does.
-          ia upload "$IA_IDENTIFIER" "$TAR_FILE" "$DEB_FILE" \
-            --metadata-file=metadata.yaml \
-            --retries=3
-
-          # --- 4. Construct URLs and Post Comment ---
-          echo "Upload complete. Constructing URLs..."
-          TAR_FILENAME=$(basename "$TAR_FILE")
-          DEB_FILENAME=$(basename "$DEB_FILE")
-          BASE_URL="https://archive.org/download/$IA_IDENTIFIER"
-          TAR_URL="$BASE_URL/$TAR_FILENAME"
-          DEB_URL="$BASE_URL/$DEB_FILENAME"
-
-          echo "::notice::Linux URL: $TAR_URL"
-          echo "::notice::Debian URL: $DEB_URL"
-
-          COMMIT_SHA=$(git rev-parse HEAD)
-          COMMENT_BODY="🚀 **Nightly Build Successful for \`${{ matrix.branch }}\`**
-
-          Version: \`${{ steps.versioning.outputs.VERSION_STRING }}\`
-          Commit: \`$COMMIT_SHA\`
-
-          **Downloads (via Internet Archive):**
-          *   **Linux (tar.gz):** [$TAR_FILENAME]($TAR_URL)
-          *   **Debian (.deb):** [$DEB_FILENAME]($DEB_URL)
-
-          *Note: These are permanent links to the latest successful nightly build.*"
-
-          echo "Posting comment to commit $COMMIT_SHA"
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/commits/$COMMIT_SHA/comments \
-            -f body="$COMMENT_BODY"
+    uses: ./.github/workflows/nightly-worker.yml
+    with:
+      branch: ${{ matrix.branch }}
+    secrets: inherit

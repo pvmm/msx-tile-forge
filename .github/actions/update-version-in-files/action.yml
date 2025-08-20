@@ -1,0 +1,22 @@
+name: 'Update Version in Source Files'
+description: 'Finds all .py files and the debian/changelog and replaces <unreleased> with the provided version strings.'
+
+inputs:
+  version_string:
+    description: 'The main version string (e.g., 1.2.3_nightly...)'
+    required: true
+  debian_version:
+    description: 'The Debian-compliant version string (e.g., 1.2.3~nightly...)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Replace version strings
+      shell: bash
+      run: |
+        find . -type f -name "*.py" -exec sed -i "s/<unreleased>/${{ inputs.version_string }}/g" {} +
+        # Only run the debian changelog update if the file exists
+        if [ -f "debian/changelog" ]; then
+          sed -i "s/<unreleased>/${{ inputs.debian_version }}/g" debian/changelog
+        fi

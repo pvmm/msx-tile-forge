@@ -32,6 +32,12 @@ deb:
 	debuild -us -uc
 	mv ../msxtileforge_*.deb dist/
 
+sdist:
+	# sdist stands for "source distribution"
+	mkdir -p dist/msxtileforge-source
+	cp *.py icon.bmp LICENSE README.md requirements.txt dist/msxtileforge-source/
+	cd dist && zip -r msxtileforge-source.zip msxtileforge-source
+
 clean:
 	rm -rf build dist *.spec
 	rm -f ../msxtileforge_*.deb ../msxtileforge_*.buildinfo ../msxtileforge_*.changes
