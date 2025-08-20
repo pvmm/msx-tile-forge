@@ -10,8 +10,6 @@ on:
         required: true
       IA_SECRET_KEY:
         required: true
-      GITHUB_TOKEN:
-        required: true
 
 jobs:
   #########################################
