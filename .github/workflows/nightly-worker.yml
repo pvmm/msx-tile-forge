@@ -1,0 +1,200 @@
+﻿name: Reusable Nightly Worker
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
+    secrets:
+      IA_ACCESS_KEY:
+        required: true
+      IA_SECRET_KEY:
+        required: true
+
+jobs:
+  #########################################
+  # A. Generate version strings
+  #########################################
+  generate-version:
+    name: Generate Version
+    runs-on: ubuntu-latest
+    outputs:
+      base_name: ${{ steps.versioning.outputs.BASE_NAME }}
+      item_identifier: ${{ steps.versioning.outputs.ITEM_IDENTIFIER }}
+      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
+      version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
+    steps:
+      - name: Construct Nightly Version Strings
+        id: versioning
+        shell: bash
+        run: |
+          BASE_VERSION=$(echo "${{ inputs.branch }}" | sed 's/REL_//')
+          DATE_STAMP=$(date +'%y%m%d')
+          GLOBAL_RUN_NUM="${{ github.run_number }}"
+          BASE_NAME="msxtileforge_${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
+          ITEM_IDENTIFIER="${BASE_NAME}_all"
+          VERSION_STRING="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
+          DEBIAN_VERSION=$(echo "$VERSION_STRING" | sed -e 's/_/~/g')
+          
+          echo "BASE_NAME=${BASE_NAME}" >> $GITHUB_OUTPUT
+          echo "ITEM_IDENTIFIER=${ITEM_IDENTIFIER}" >> $GITHUB_OUTPUT
+          echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ inputs.branch }}" >> $GITHUB_OUTPUT
+          echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
+
+  #########################################
+  # B. Prepare source code
+  #########################################
+  prepare-source:
+    name: Prepare Source Code
+    needs: generate-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Update version strings using reusable action
+        uses: ./.github/actions/update-version-in-files
+        with:
+          version_string: ${{ needs.generate-version.outputs.version_string }}
+          debian_version: ${{ needs.generate-version.outputs.debian_version }}
+
+      - name: Upload prepared source as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+          path: .
+
+  #########################################
+  # C. Call the Reusable Builders
+  #########################################
+  build-linux:
+    name: Call Linux Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-windows:
+    name: Call Windows Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-source:
+    name: Call Source Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-source.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  #########################################
+  # D. Publish all artifacts to Internet Archive
+  #########################################
+  publish:
+    name: Publish to Internet Archive
+    needs: [generate-version, build-linux, build-windows, build-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          # Pattern matching to download all artifacts produced by the build jobs
+          pattern: "*-artifacts"
+          merge-multiple: true
+
+      - name: Prepare and rename files for publishing
+        id: files
+        shell: bash
+        run: |
+          set -x
+          BASE_NAME="${{ needs.generate-version.outputs.base_name }}"
+          mkdir -p staging
+          
+          DEB_FILE=$(find artifacts -name "*.deb")
+          TAR_FILE=$(find artifacts -name "*.tar.gz")
+          SRC_FILE=$(find artifacts -name "msxtileforge-source.zip")
+          WIN_FILE=$(find artifacts -name "msxtileforge-windows.zip")
+          
+          mv "$DEB_FILE" "staging/${BASE_NAME}_deb.deb"
+          mv "$TAR_FILE" "staging/${BASE_NAME}_lin.tar.gz"
+          mv "$SRC_FILE" "staging/${BASE_NAME}_src.zip"
+          mv "$WIN_FILE" "staging/${BASE_NAME}_win.zip"
+          
+          echo "Prepared files for upload:"
+          ls -l staging/
+
+      - name: Upload to Internet Archive and create comment
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          IA_IDENTIFIER: ${{ needs.generate-version.outputs.item_identifier }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          ITEM_TITLE="MSX Tile Forge Nightly Build (${{ needs.generate-version.outputs.version_string }})"
+          
+          cd staging
+          UPLOAD_COUNT=0
+          COMMENT_FILE_LIST=""
+          
+          for FILE in *; do
+            echo "Uploading $FILE to item '${IA_IDENTIFIER}'..."
+            if [ $UPLOAD_COUNT -eq 0 ]; then
+              curl --fail --location --request PUT \
+                --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+                --header "x-amz-auto-make-bucket: 1" \
+                --header "x-archive-meta-title: ${ITEM_TITLE}" \
+                --header "x-archive-meta-collection: opensource_media" \
+                --header "x-archive-meta-mediatype: software" \
+                --header "x-archive-meta01-subject: msxtileforge_nightly_build" \
+                --header "x-archive-meta02-subject: msxtileforge" \
+                --upload-file "$FILE" \
+                "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILE}"
+            else
+              sleep 15
+              curl --fail --location --request PUT \
+                --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+                --upload-file "$FILE" \
+                "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILE}"
+            fi
+            UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
+            
+            FILE_URL="https://archive.org/download/${IA_IDENTIFIER}/${FILE}"
+            COMMENT_FILE_LIST="${COMMENT_FILE_LIST}*   **${FILE}**: [Download](${FILE_URL})\n"
+          done
+          
+          cd ..
+          
+          sleep 30
+          
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMENT_BODY="🚀 **Nightly Build Successful for \`${{ inputs.branch }}\`**
+
+          A new historical archive for this build has been created and tagged for collection.
+          **Item Page:** [${IA_IDENTIFIER}](https://archive.org/details/${IA_IDENTIFIER})
+
+          Version: \`${{ needs.generate-version.outputs.version_string }}\`
+          Commit: \`${COMMIT_SHA}\`
+
+          **Downloads:**
+          ${COMMENT_FILE_LIST}"
+
+          echo "Posting comment to commit ${COMMIT_SHA}"
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+_json" \
+            /repos/${{ github.repository }}/commits/${COMMIT_SHA}/comments \
+            -f body=- <<EOF
+          ${COMMENT_BODY}
+          EOF

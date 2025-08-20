@@ -1,0 +1,182 @@
+name: Release Candidate Build (REL_XX.YY.ZZ Branches)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # Needed to push tags
+
+jobs:
+  #########################################
+  # A. Validate branch and generate version
+  #########################################
+  generate-version:
+    name: Validate Branch & Generate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
+      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Branch Name
+        shell: bash
+        run: |
+          if [[ ! "${{ github.ref_name }}" == REL_* ]]; then
+            echo "::error::This workflow can only be run on branches starting with 'REL_'."
+            exit 1
+          fi
+
+      - name: Construct RC Version String
+        id: versioning
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          BASE_VERSION=$(echo "$BRANCH_NAME" | sed 's/REL_//')
+          
+          git fetch --tags
+          
+          LATEST_RC_NUM=$(git tag --list "v${BASE_VERSION}_rc*" | sed 's/.*_rc//' | cut -d'_' -f1 | sort -n | tail -n 1)
+          
+          NEXT_RC_NUM=1
+          if [[ -n "$LATEST_RC_NUM" ]]; then
+            NEXT_RC_NUM=$((LATEST_RC_NUM + 1))
+          fi
+          
+          GLOBAL_RUN_NUM="${{ github.run_number }}"
+          
+          FINAL_VERSION="${BASE_VERSION}_rc${NEXT_RC_NUM}_${GLOBAL_RUN_NUM}"
+          DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')
+          
+          echo "Assembled FINAL_VERSION: $FINAL_VERSION"
+          
+          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
+  #########################################
+  # B. Prepare source code
+  #########################################
+  prepare-source:
+    name: Prepare Source Code
+    needs: generate-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Update version strings using reusable action
+        uses: ./.github/actions/update-version-in-files
+        with:
+          version_string: ${{ needs.generate-version.outputs.version_string }}
+          debian_version: ${{ needs.generate-version.outputs.debian_version }}
+
+      - name: Upload prepared source as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+          path: .
+
+  #########################################
+  # C. Call the Reusable Builders
+  #########################################
+  build-linux:
+    name: Call Linux Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-windows:
+    name: Call Windows Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-source:
+    name: Call Source Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-source.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  #########################################
+  # D. Tag Release Candidate
+  #########################################
+  tag-release:
+    name: Tag Release Candidate
+    needs: [generate-version, build-linux, build-windows, build-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+      - name: Create and Push Tag
+        run: |
+          TAG_NAME="v${{ needs.generate-version.outputs.version_string }}"
+          echo "Creating and pushing tag: $TAG_NAME"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+
+  #########################################
+  # E. Publish Pre-release to GitHub
+  #########################################
+  publish-pre-release:
+    name: Publish Pre-release
+    needs: [generate-version, tag-release] # Run after the tag has been pushed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create the release and upload assets
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "*-artifacts"
+          merge-multiple: true
+
+      - name: Prepare and rename files for release
+        id: files
+        shell: bash
+        run: |
+          set -x
+          BASE_NAME="msxtileforge-v${{ needs.generate-version.outputs.version_string }}"
+          mkdir -p release_assets
+          
+          DEB_FILE=$(find artifacts -name "*.deb")
+          TAR_FILE=$(find artifacts -name "*.tar.gz")
+          SRC_FILE=$(find artifacts -name "msxtileforge-source.zip")
+          WIN_FILE=$(find artifacts -name "msxtileforge-windows.zip")
+          
+          # Move and rename all files according to the convention
+          mv "$DEB_FILE" "release_assets/${BASE_NAME}_deb.deb"
+          mv "$TAR_FILE" "release_assets/${BASE_NAME}_lin.tar.gz"
+          mv "$SRC_FILE" "release_assets/${BASE_NAME}_src.zip"
+          mv "$WIN_FILE" "release_assets/${BASE_NAME}_win.zip"
+          
+          echo "Prepared release assets:"
+          ls -l release_assets/
+
+      - name: Create GitHub Pre-release and Upload Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v${{ needs.generate-version.outputs.version_string }}"
+          
+          gh release create "$TAG_NAME" ./release_assets/* \
+            --title "Release Candidate ${{ needs.generate-version.outputs.version_string }}" \
+            --notes "This is a pre-release version for testing." \
+            --prerelease

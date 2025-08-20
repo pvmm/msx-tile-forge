@@ -1,0 +1,126 @@
+name: Developer Build (TKT_XXXXX Branches)
+on:
+  workflow_dispatch:
+
+jobs:
+  #########################################
+  # A. Validate branch and generate version
+  #########################################
+  generate-version:
+    name: Validate Branch & Generate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Branch Name
+        shell: bash
+        run: |
+          if [[ ! "${{ github.ref_name }}" == TKT_* ]]; then
+            echo "::error::This workflow can only be run on branches starting with 'TKT_'."
+            exit 1
+          fi
+
+      - name: Construct Dev Version String
+        id: versioning
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          TICKET_NUM=$(echo "$BRANCH_NAME" | grep -oP 'TKT_[0-9]+' | sed 's/TKT_//')
+          
+          MILESTONE_TITLE=$(gh issue view "$TICKET_NUM" --json milestone --jq '.milestone.title')
+          if [ -z "$MILESTONE_TITLE" ] || [ "$MILESTONE_TITLE" == "null" ]; then
+            echo "::error::Issue TKT_$TICKET_NUM is not assigned to a milestone."
+            exit 1
+          fi
+          
+          BASE_VERSION=$(echo "$MILESTONE_TITLE" | grep -oP 'REL_[0-9.]+' | sed 's/REL_//')
+          if [ -z "$BASE_VERSION" ]; then
+            echo "::error::Milestone title '$MILESTONE_TITLE' does not contain 'REL_XX.YY.ZZ' version string."
+            exit 1
+          fi
+
+          BRANCH_BUILD_NUM=$(git rev-list --count HEAD)
+          GLOBAL_RUN_NUM="${{ github.run_number }}"
+          
+          FINAL_VERSION="${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_RUN_NUM}"
+          echo "Assembled FINAL_VERSION: $FINAL_VERSION"
+          
+          echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
+  #########################################
+  # B. Prepare source code
+  #########################################
+  prepare-source:
+    name: Prepare Source Code
+    needs: generate-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Update version strings using reusable action
+        uses: ./.github/actions/update-version-in-files
+        with:
+          version_string: ${{ needs.generate-version.outputs.version_string }}
+          debian_version: ${{ needs.generate-version.outputs.version_string }} # No tilde for dev builds
+
+      - name: Upload prepared source as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+          path: .
+
+  #########################################
+  # C. Call the Reusable Builders
+  #########################################
+  build-linux:
+    name: Call Linux Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-windows:
+    name: Call Windows Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  build-source:
+    name: Call Source Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-source.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+
+  #########################################
+  # D. Publish Developer Artifacts
+  #########################################
+  publish-dev-artifacts:
+    name: Publish Developer Artifacts
+    needs: [generate-version, build-linux, build-windows, build-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "*-artifacts"
+          merge-multiple: true
+
+      # NOTE: For dev builds, the artifacts are simply left in the workflow run.
+      # They are not published to a release or external site.
+      - name: List final artifacts
+        run: ls -R artifacts
