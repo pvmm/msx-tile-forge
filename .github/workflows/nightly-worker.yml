@@ -1,4 +1,5 @@
 ﻿name: Reusable Nightly Worker
+
 on:
   workflow_call:
     inputs:
@@ -25,7 +26,7 @@ jobs:
       prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
       win_filename: ${{ steps.versioning.outputs.WIN_FILENAME }}
       lin_filename: ${{ steps.versioning.outputs.LIN_FILENAME }}
-      deb_filename: ${{ steps.versioning.outputs.DEBI_FILENAME }}
+      deb_filename: ${{ steps.versioning.outputs.DEB_FILENAME }}
       src_filename: ${{ steps.versioning.outputs.SRC_FILENAME }}
     steps:
       - name: Construct Nightly Version Strings and Filenames
@@ -130,17 +131,14 @@ jobs:
         run: |
           ITEM_TITLE="MSX Tile Forge Nightly Build (${{ needs.generate-version.outputs.version_string }})"
           
-          # The files are now already correctly named in their own subdirectories
           cd final-packages
           UPLOAD_COUNT=0
           COMMENT_FILE_LIST=""
           
-          # Find all files across the downloaded artifact folders and upload them
           find . -type f -print0 | while IFS= read -r -d $'\0' FILE; do
             FILENAME=$(basename "$FILE")
             echo "Uploading $FILENAME to item '${IA_IDENTIFIER}'..."
             if [ $UPLOAD_COUNT -eq 0 ]; then
-              # First file creates the item and sets all metadata
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --header "x-amz-auto-make-bucket: 1" \
@@ -152,7 +150,6 @@ jobs:
                 --upload-file "$FILE" \
                 "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILENAME}"
             else
-              # Subsequent files are just added
               sleep 15
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
