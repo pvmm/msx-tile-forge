@@ -105,34 +105,11 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
 
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+      - name: Package and rename using reusable action
+        id: package
+        uses: ./.github/actions/package-and-rename-artifacts
         with:
-          path: artifacts
-          # Pattern matching to download all artifacts produced by the build jobs
-          pattern: "*-artifacts"
-          merge-multiple: true
-
-      - name: Prepare and rename files for publishing
-        id: files
-        shell: bash
-        run: |
-          set -x
-          BASE_NAME="${{ needs.generate-version.outputs.base_name }}"
-          mkdir -p staging
-          
-          DEB_FILE=$(find artifacts -name "*.deb")
-          TAR_FILE=$(find artifacts -name "*.tar.gz")
-          SRC_FILE=$(find artifacts -name "msxtileforge-source.zip")
-          WIN_FILE=$(find artifacts -name "msxtileforge-windows.zip")
-          
-          mv "$DEB_FILE" "staging/${BASE_NAME}_deb.deb"
-          mv "$TAR_FILE" "staging/${BASE_NAME}_lin.tar.gz"
-          mv "$SRC_FILE" "staging/${BASE_NAME}_src.zip"
-          mv "$WIN_FILE" "staging/${BASE_NAME}_win.zip"
-          
-          echo "Prepared files for upload:"
-          ls -l staging/
+          base_name: ${{ needs.generate-version.outputs.base_name }}
 
       - name: Upload to Internet Archive and create comment
         env:
@@ -143,14 +120,17 @@ jobs:
         shell: bash
         run: |
           ITEM_TITLE="MSX Tile Forge Nightly Build (${{ needs.generate-version.outputs.version_string }})"
+          PACKAGE_PATH="${{ steps.package.outputs.package_path }}"
           
-          cd staging
+          cd "${PACKAGE_PATH}"
           UPLOAD_COUNT=0
           COMMENT_FILE_LIST=""
           
+          # Loop through all prepared files and upload them
           for FILE in *; do
             echo "Uploading $FILE to item '${IA_IDENTIFIER}'..."
             if [ $UPLOAD_COUNT -eq 0 ]; then
+              # The first file creates the item and sets all metadata
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --header "x-amz-auto-make-bucket: 1" \
@@ -162,6 +142,7 @@ jobs:
                 --upload-file "$FILE" \
                 "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILE}"
             else
+              # Subsequent files are just added to the now-existing item
               sleep 15
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
@@ -170,12 +151,14 @@ jobs:
             fi
             UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
             
+            # Add file to the markdown list for the commit comment
             FILE_URL="https://archive.org/download/${IA_IDENTIFIER}/${FILE}"
             COMMENT_FILE_LIST="${COMMENT_FILE_LIST}*   **${FILE}**: [Download](${FILE_URL})\n"
           done
           
           cd ..
           
+          # Construct and post the final commit comment
           sleep 30
           
           COMMIT_SHA=$(git rev-parse HEAD)
@@ -193,7 +176,7 @@ jobs:
           echo "Posting comment to commit ${COMMIT_SHA}"
           gh api \
             --method POST \
-            -H "Accept: application/vnd.github+_json" \
+            -H "Accept: application/vnd.github+json" \
             /repos/${{ github.repository }}/commits/${COMMIT_SHA}/comments \
             -f body=- <<EOF
           ${COMMENT_BODY}

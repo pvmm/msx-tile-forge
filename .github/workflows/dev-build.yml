@@ -110,21 +110,41 @@ jobs:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
 
   #########################################
-  # D. Publish Developer Artifacts
+  # D. Package and Rename Artifacts
+  #########################################
+  package:
+    name: Package and Rename Artifacts
+    needs: [generate-version, build-linux, build-windows, build-source]
+    runs-on: ubuntu-latest
+    outputs:
+      base_name: ${{ needs.generate-version.outputs.base_name }}
+    steps:
+      - name: Package and rename using reusable action
+        uses: ./.github/actions/package-and-rename-artifacts
+        with:
+          base_name: ${{ needs.generate-version.outputs.base_name }}
+
+      - name: Upload final packages as a temporary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-packages-${{ github.run_id }}
+          path: final_packages/
+
+  #########################################
+  # E. Publish Developer Artifacts
   #########################################
   publish-dev-artifacts:
     name: Publish Developer Artifacts
-    needs: [generate-version, build-linux, build-windows, build-source]
+    needs: package
     runs-on: ubuntu-latest
     steps:
-      - name: Download all build artifacts
+      - name: Download final packages
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-          pattern: "*-artifacts"
-          merge-multiple: true
+          name: final-packages-${{ github.run_id }}
 
-      # NOTE: For dev builds, the artifacts are simply left in the workflow run.
-      # They are not published to a release or external site.
-      - name: List final artifacts
-        run: ls -R artifacts
+      - name: Upload all packages as separate build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.base_name }}
+          path: .
