@@ -114,10 +114,10 @@ jobs:
   #########################################
   package:
     name: Package and Rename Artifacts
-    needs: [generate-version, build-linux, build-windows, build-source]
+    needs: generate-version
     runs-on: ubuntu-latest
     outputs:
-      base_name: ${{ needs.generate-version.outputs.base_name }}
+      base_name: ${{ needs.generate-version.outputs.base_name }} # Expose the base_name as an output
     steps:
       - name: Checkout repository to make local actions available
         uses: actions/checkout@v4
@@ -127,7 +127,7 @@ jobs:
       - name: Package and rename using reusable action
         uses: ./.github/actions/package-and-rename-artifacts
         with:
-          base_name: ${{ needs.generate-version.outputs.base_name }}
+          base_name: ${{ needs.generate-version.outputs.base_name }} # Use the base_name from the needs context
 
       - name: Upload final packages as a temporary artifact
         uses: actions/upload-artifact@v4
@@ -148,7 +148,7 @@ jobs:
         with:
           name: final-packages-${{ github.run_id }}
 
-      - name: Upload all packages as separate build artifacts
+      - name: Upload all packages as a single build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.package.outputs.base_name }}
