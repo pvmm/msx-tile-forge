@@ -23,6 +23,7 @@ jobs:
       item_identifier: ${{ steps.versioning.outputs.ITEM_IDENTIFIER }}
       prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
     steps:
       - name: Construct Nightly Version Strings
         id: versioning
@@ -34,11 +35,13 @@ jobs:
           BASE_NAME="msxtileforge_${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
           ITEM_IDENTIFIER="${BASE_NAME}_all"
           VERSION_STRING="${BASE_VERSION}_nightly${DATE_STAMP}_${GLOBAL_RUN_NUM}"
+          DEBIAN_VERSION=$(echo "$VERSION_STRING" | sed -e 's/_/~/g')
           
           echo "BASE_NAME=${BASE_NAME}" >> $GITHUB_OUTPUT
           echo "ITEM_IDENTIFIER=${ITEM_IDENTIFIER}" >> $GITHUB_OUTPUT
           echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ inputs.branch }}" >> $GITHUB_OUTPUT
           echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
 
   #########################################
   # B. Prepare source code
@@ -57,7 +60,7 @@ jobs:
         uses: ./.github/actions/update-version-in-files
         with:
           version_string: ${{ needs.generate-version.outputs.version_string }}
-          debian_version: ${{ needs.generate-version.outputs.version_string }} # Debian versioning is handled in build-linux
+          debian_version: ${{ needs.generate-version.outputs.debian_version }}
 
       - name: Upload prepared source as artifact
         uses: actions/upload-artifact@v4
