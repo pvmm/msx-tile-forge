@@ -1,9 +1,9 @@
-name: Release Candidate Build (REL_XX.YY.ZZ Branches)
+name: 2. RC Build (REL_XX.YY.ZZ Branches)
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write # Needed to push tags
+  contents: write # Needed to create the release and push tags
 
 jobs:
   #########################################
@@ -16,6 +16,10 @@ jobs:
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
       debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
       prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
+      win_filename: ${{ steps.versioning.outputs.WIN_FILENAME }}
+      lin_filename: ${{ steps.versioning.outputs.LIN_FILENAME }}
+      deb_filename: ${{ steps.versioning.outputs.DEB_FILENAME }}
+      src_filename: ${{ steps.versioning.outputs.SRC_FILENAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,7 +34,7 @@ jobs:
             exit 1
           fi
 
-      - name: Construct RC Version String
+      - name: Construct RC Version String and Filenames
         id: versioning
         shell: bash
         run: |
@@ -49,13 +53,15 @@ jobs:
           GLOBAL_RUN_NUM="${{ github.run_number }}"
           
           FINAL_VERSION="${BASE_VERSION}_rc${NEXT_RC_NUM}_${GLOBAL_RUN_NUM}"
-          DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')
-          
-          echo "Assembled FINAL_VERSION: $FINAL_VERSION"
-          
+          BASE_NAME="msxtileforge_${FINAL_VERSION}"
+
           echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
-          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')" >> $GITHUB_OUTPUT
           echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "WIN_FILENAME=${BASE_NAME}_win.zip" >> $GITHUB_OUTPUT
+          echo "LIN_FILENAME=${BASE_NAME}_lin.tar.gz" >> $GITHUB_OUTPUT
+          echo "DEB_FILENAME=${BASE_NAME}_deb.deb" >> $GITHUB_OUTPUT
+          echo "SRC_FILENAME=${BASE_NAME}_src.zip" >> $GITHUB_OUTPUT
 
   #########################################
   # B. Prepare source code
@@ -84,60 +90,4 @@ jobs:
 
   #########################################
   # C. Call the Reusable Builders
-  #########################################
-  build-linux:
-    name: Call Linux Builder
-    needs: [generate-version, prepare-source]
-    uses: ./.github/workflows/build-linux.yml
-    with:
-      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
-
-  build-windows:
-    name: Call Windows Builder
-    needs: [generate-version, prepare-source]
-    uses: ./.github/workflows/build-windows.yml
-    with:
-      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
-
-  build-source:
-    name: Call Source Builder
-    needs: [generate-version, prepare-source]
-    uses: ./.github/workflows/build-source.yml
-    with:
-      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
-
-  #########################################
-  # D. Package and Publish Pre-release
-  #########################################
-  package-and-publish:
-    name: Package and Publish Pre-release
-    needs: [generate-version, build-linux, build-windows, build-source]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # Needed to create the release and push tags
-    steps:
-      - name: Package and rename using reusable action
-        id: package
-        uses: ./.github/actions/package-and-rename-artifacts
-        with:
-          base_name: msxtileforge-v${{ needs.generate-version.outputs.version_string }}
-
-      - name: Configure Git
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-      
-      - name: Create Git Tag
-        run: |
-          git tag "v${{ needs.generate-version.outputs.version_string }}"
-          git push origin "v${{ needs.generate-version.outputs.version_string }}"
-
-      - name: Create GitHub Pre-release and Upload Assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ needs.generate-version.outputs.version_string }}" \
-            --title "Release Candidate v${{ needs.generate-version.outputs.version_string }}" \
-            --notes "This is a pre-release version for testing. All packages are attached below." \
-            --prerelease \
-            ${{ steps.package.outputs.package_path }}/*
+  ################################
