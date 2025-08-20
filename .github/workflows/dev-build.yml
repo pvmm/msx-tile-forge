@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
       prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
     steps:
       - name: Checkout code
@@ -51,9 +52,12 @@ jobs:
           GLOBAL_RUN_NUM="${{ github.run_number }}"
           
           FINAL_VERSION="${BASE_VERSION}_dev${TICKET_NUM}.${BRANCH_BUILD_NUM}_${GLOBAL_RUN_NUM}"
+          DEBIAN_VERSION=$(echo "$FINAL_VERSION" | sed -e 's/_/~/g')
+          
           echo "Assembled FINAL_VERSION: $FINAL_VERSION"
           
           echo "VERSION_STRING=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "DEBIAN_VERSION=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
           echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
   #########################################
@@ -73,7 +77,7 @@ jobs:
         uses: ./.github/actions/update-version-in-files
         with:
           version_string: ${{ needs.generate-version.outputs.version_string }}
-          debian_version: ${{ needs.generate-version.outputs.version_string }} # No tilde for dev builds
+          debian_version: ${{ needs.generate-version.outputs.debian_version }}
 
       - name: Upload prepared source as artifact
         uses: actions/upload-artifact@v4
