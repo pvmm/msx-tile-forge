@@ -116,6 +116,11 @@ jobs:
     permissions:
       contents: write # Needed to create the release and push tags
     steps:
+      - name: Checkout repository to make local actions available
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
       - name: Package and rename using reusable action
         id: package
         uses: ./.github/actions/package-and-rename-artifacts
