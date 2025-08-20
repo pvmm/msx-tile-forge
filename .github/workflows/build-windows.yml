@@ -1,4 +1,5 @@
 name: Reusable Windows Build
+
 on:
   workflow_call:
     inputs:
@@ -6,9 +7,13 @@ on:
         description: 'The name of the prepared source code artifact to download'
         required: true
         type: string
+      win_filename:
+        description: 'The final, desired filename for the .zip package'
+        required: true
+        type: string
 
 jobs:
-  build_win:
+  build:
     runs-on: windows-latest
     steps:
       - name: Download prepared source code
@@ -35,12 +40,12 @@ jobs:
             msxtileforge.py
           cp README.md,LICENSE dist/msxtileforge
 
-      - name: Create final Windows zip archive
+      - name: Create final Windows zip archive with correct name
         shell: pwsh
-        run: Compress-Archive -Path dist/msxtileforge/* -DestinationPath dist/msxtileforge-windows.zip
+        run: Compress-Archive -Path dist/msxtileforge/* -DestinationPath dist/${{ inputs.win_filename }}
 
-      - name: Upload Windows artifact
+      - name: Upload final Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-artifacts # The calling workflow will add the unique suffix
-          path: dist/msxtileforge-windows.zip
+          name: windows-artifacts
+          path: dist/${{ inputs.win_filename }}
