@@ -16,7 +16,7 @@ runs:
   steps:
     - name: Download all build artifacts
       uses: actions/download-artifact@v4
-      shell: bash
+      # The invalid 'shell: bash' key has been removed from this step
       with:
         path: artifacts
         pattern: "*-artifacts-*"
