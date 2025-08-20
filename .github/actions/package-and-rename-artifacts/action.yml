@@ -16,10 +16,10 @@ runs:
   steps:
     - name: Download all build artifacts
       uses: actions/download-artifact@v4
-      # The invalid 'shell: bash' key has been removed from this step
       with:
         path: artifacts
-        pattern: "*-artifacts-*"
+        # The faulty 'pattern' key has been removed.
+        # This will now correctly download all artifacts.
         merge-multiple: true
 
     - name: Prepare and rename files
