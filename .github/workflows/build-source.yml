@@ -8,7 +8,7 @@ on:
         type: string
 
 jobs:
-  build:
+  build_src:
     runs-on: ubuntu-latest
     steps:
       - name: Download prepared source code
