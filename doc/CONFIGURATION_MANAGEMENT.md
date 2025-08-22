@@ -26,7 +26,7 @@ The version string in the source code (`APP_VERSION`) is always set to `<unrelea
         -   `TTTTT`: The GitHub issue number from the branch name.
         -   `AA`: The total commit count on the `TKT` branch.
         -   `BBBBB`: The unique, repository-wide run number from GitHub Actions.
-    -   **Output:** Private **Build Artifacts** downloadable only from the workflow run's summary page. Not a public release.
+    -   **Output:** The final, named packages (`..._win.zip`, `..._lin.tar.gz`, etc.) are available as individual **Build Artifacts**, downloadable from the workflow run's summary page. Not a public release.
     -   **Tag:** No git tag is created.
 
 -   **Rule 2: Release Candidate Build (`rc-build.yml`)**
@@ -67,18 +67,18 @@ The version string in the source code (`APP_VERSION`) is always set to `<unrelea
 All manual builds are triggered from the **Actions** tab on the GitHub repository.
 
 ### How to Create a Developer Build
-1.  Ensure all your work is committed and pushed to your feature branch (e.g., `TKT_00011`).
+1.  Ensure all your work is committed and pushed to your feature branch (TKT_TTTTT).
 2.  Go to the **Actions** tab on GitHub.
-3.  Select the **"Developer Build"** workflow from the list.
+3.  Select the **"1. Dev Build (TKT_XXXXX Branches)"** workflow from the list.
 4.  Click the **"Run workflow"** dropdown button.
 5.  Select your `TKT_TTTTT` branch.
 6.  Click the green **"Run workflow"** button.
-7.  Once the build is complete, you can download the `.zip`, `.tar.gz`, and `.deb` artifacts from the workflow run's summary page.
+7.  Once the build is complete, you can download the final, named artifacts (`..._win.zip`, `..._lin.tar.gz`, ..._deb.deb` or ..._src.zip`.) individually from the workflow run's summary page.
 
 ### How to Create a Release Candidate
 1.  Ensure all feature branches for the release have been merged into the target `REL_XX.YY.ZZ` branch (e.g., `REL_01.00.00`).
 2.  Go to the **Actions** tab on GitHub.
-3.  Select the **"Release Candidate Build"** workflow from the list.
+3.  Select the **"2. RC Build (REL_XX.YY.ZZ Branches)"** workflow from the list.
 4.  Click the **"Run workflow"** dropdown button.
 5.  Select the target `REL_XX.YY.ZZ` branch.
 6.  Click the green **"Run workflow"** button.
