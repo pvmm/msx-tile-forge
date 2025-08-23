@@ -7223,6 +7223,7 @@ class TileEditorApp:
         # 3. If confirmed (or if changing limit without truncation), create and execute the command.
         command = SetTilesetLimitCommand(self, new_limit)
         self.undo_manager.execute(command)
+        messagebox.showinfo("Tileset Limit", f"Tileset limit has been set to {self.project_tile_limit}.", parent=self.root)
 
     def set_supertile_count(self):
         global num_supertiles, current_supertile_index, selected_supertile_for_map, supertiles_data
@@ -12864,7 +12865,7 @@ class TileEditorApp:
             title_text="Add Many Tiles",
             prompt_text=f"How many tiles to add? (1-{space_available})",
             current_items=len(tileset_patterns),
-            max_items_total=MAX_TILES
+            max_items_total=self.project_tile_limit
         )
         if num_to_add is None or num_to_add <= 0: return
 
