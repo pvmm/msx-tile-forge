@@ -169,7 +169,6 @@ supertiles_data = [
     for _ in range(MAX_SUPERTILES)
 ]
 current_tile_index = 0
-num_tiles_in_set = 1
 selected_color_index = WHITE_IDX
 last_drawn_pixel = None
 current_supertile_index = 0
@@ -553,25 +552,39 @@ class SetDataCommand(ICommand):
         self.app_ref._mark_project_modified()
 
 class ModifyListCommand(ICommand):
-    """Command to handle insertion or deletion from lists."""
+    """Command to handle insertion or deletion from lists, adhering to strict state isolation."""
     def __init__(self, description, list_obj, index, value=None, is_insert=True):
         super().__init__(description)
         self.list_obj = list_obj
         self.index = index
-        self.value = value
         self.is_insert = is_insert
+
+        # Adhere to the "Immutable Command State" standard.
+        # All necessary state is captured via deepcopy at creation time.
+        if self.is_insert:
+            # For an insert, the value to be inserted is the state.
+            self.value = copy.deepcopy(value)
+        else:
+            # For a delete, the value being deleted is the state.
+            # Capture it BEFORE the delete happens.
+            self.value = copy.deepcopy(list_obj[index])
 
     def execute(self):
         if self.is_insert:
-            self.list_obj.insert(self.index, self.value)
+            # Adhere to the "State Isolation" standard.
+            # Insert a DEEP COPY of the internal value, not a reference to it.
+            self.list_obj.insert(self.index, copy.deepcopy(self.value))
         else:
-            self.value = self.list_obj.pop(self.index)
+            # The action is simple; the state was already captured.
+            self.list_obj.pop(self.index)
 
     def undo(self):
         if self.is_insert:
             self.list_obj.pop(self.index)
         else:
-            self.list_obj.insert(self.index, self.value)
+            # Adhere to the "State Isolation" standard.
+            # Insert a DEEP COPY of the internal value, not a reference to it.
+            self.list_obj.insert(self.index, copy.deepcopy(self.value))
 
 class ReplaceRefsCommand(ICommand):
     """Command to replace all references of one item with another."""
@@ -827,6 +840,88 @@ class UpdateMapRefsForSupertileSwapCommand(ICommand):
 
     def undo(self):
         self._swap_logic() # Swap is its own inverse
+
+class SetTilesetLimitCommand(ICommand):
+    """Command to handle changing the tileset limit, adhering to strict state isolation."""
+    def __init__(self, app_ref, new_limit):
+        super().__init__("Set Tileset Limit")
+        self.app_ref = app_ref
+        
+        # --- Capture "Before" State ---
+        self.old_limit = self.app_ref.project_tile_limit
+        self.old_patterns = copy.deepcopy(tileset_patterns)
+        self.old_colors = copy.deepcopy(tileset_colors)
+        self.old_supertiles_data = copy.deepcopy(supertiles_data)
+        self.old_current_tile_index = current_tile_index
+        self.old_selected_tile_for_supertile = selected_tile_for_supertile
+
+        # --- Calculate and Capture Definitive "After" State ---
+        self.new_limit = new_limit
+        
+        # Start with a copy of the "before" state to calculate the "after" state
+        after_patterns = copy.deepcopy(self.old_patterns)
+        after_colors = copy.deepcopy(self.old_colors)
+        after_supertiles_data = copy.deepcopy(self.old_supertiles_data)
+        current_size = len(after_patterns)
+
+        if self.new_limit < current_size:
+            # Truncation logic applied to our temporary "after" state copies
+            for st_def in after_supertiles_data:
+                for r in range(self.app_ref.supertile_grid_height):
+                    for c in range(self.app_ref.supertile_grid_width):
+                        if st_def[r][c] >= self.new_limit:
+                            st_def[r][c] = 0
+            
+            del after_patterns[self.new_limit:]
+            del after_colors[self.new_limit:]
+
+        # Store the calculated "after" state in the command
+        self.after_patterns = after_patterns
+        self.after_colors = after_colors
+        self.after_supertiles_data = after_supertiles_data
+        self.after_current_tile_index = min(self.old_current_tile_index, len(self.after_patterns) - 1)
+        self.after_selected_tile_for_supertile = min(self.old_selected_tile_for_supertile, len(self.after_patterns) - 1)
+
+    def _apply_and_update(self, limit, patterns, colors, st_data, cti, sts):
+        """Helper method to apply a given state by modifying lists in-place."""
+        global tileset_patterns, tileset_colors, supertiles_data
+        global current_tile_index, selected_tile_for_supertile
+
+        self.app_ref.project_tile_limit = limit
+        
+        # Adhere to the State Isolation standard: apply a DEEP COPY of the
+        # backup state to the live lists. This breaks the reference chain
+        # and prevents future commands from contaminating this command's state.
+        tileset_patterns.clear()
+        tileset_patterns.extend(copy.deepcopy(patterns))
+        
+        tileset_colors.clear()
+        tileset_colors.extend(copy.deepcopy(colors))
+        
+        supertiles_data.clear()
+        supertiles_data.extend(copy.deepcopy(st_data))
+
+        current_tile_index = cti
+        selected_tile_for_supertile = sts
+
+        # --- Post-change UI updates ---
+        self.app_ref.tile_limit_var.set(limit)
+        self.app_ref._mark_project_modified()
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref.update_all_displays(changed_level="all")
+        self.app_ref._update_editor_button_states()
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        _debug("Executing SetTilesetLimitCommand: Applying pre-calculated 'after' state.")
+        self._apply_and_update(self.new_limit, self.after_patterns, self.after_colors, self.after_supertiles_data, self.after_current_tile_index, self.after_selected_tile_for_supertile)
+
+    def undo(self):
+        _debug("Undoing SetTilesetLimitCommand: Applying pre-calculated 'before' state.")
+        self._apply_and_update(self.old_limit, self.old_patterns, self.old_colors, self.old_supertiles_data, self.old_current_tile_index, self.old_selected_tile_for_supertile)
 
 # --- Usage Window Classes -----------------------------------------------------------------------------------------------
 class ColorUsageWindow(tk.Toplevel):
@@ -1502,11 +1597,11 @@ class TileUsageWindow(tk.Toplevel):
                 usage_data = self.app_ref._calculate_tile_usage_data() 
             except Exception as e:
                 _error(f" Error calling _calculate_tile_usage_data: {e}")
-                for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)): 
+                for i in range(getattr(self.app_ref, 'len(tileset_patterns)', 1)): 
                      usage_data.append({'tile_index': i, 'total_uses_count': 0, 'used_by_sts_count': 0})
         else: 
             _debug(" TileUsageWindow: _calculate_tile_usage_data not found for refresh.")
-            for i in range(getattr(self.app_ref, 'num_tiles_in_set', 1)): 
+            for i in range(getattr(self.app_ref, 'len(tileset_patterns)', 1)): 
                 usage_data.append({'tile_index': i, 'total_uses_count': 0, 'used_by_sts_count': 0})
 
         valid_sort_key = self.current_sort_column_id
@@ -1561,7 +1656,6 @@ class TileUsageWindow(tk.Toplevel):
             self.tree.focus(current_selection_iid)
         
     def _on_item_selected(self, event):
-        global num_tiles_in_set
         if not self.tree.winfo_exists(): return
         selected_items = self.tree.selection() 
         if not selected_items: return
@@ -1576,7 +1670,7 @@ class TileUsageWindow(tk.Toplevel):
             _error(f" TileUsageWindow: Error parsing tile_index from iid '{item_id_str}': {e}")
             return
         
-        if 0 <= actual_item_idx < num_tiles_in_set: 
+        if 0 <= actual_item_idx < len(tileset_patterns):
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
                 self.app_ref.synchronize_selection_from_usage_window("tile", actual_item_idx)
         else:
@@ -1652,7 +1746,7 @@ class TileUsageWindow(tk.Toplevel):
 
             try:
                 tile_index = int(item_iid.split("_")[1])
-                if not (0 <= tile_index < num_tiles_in_set): return
+                if not (0 <= tile_index < len(tileset_patterns)): return
 
                 item_tags = self.tree.item(item_iid, "tags")
 
@@ -2713,6 +2807,7 @@ class TileEditorApp:
         self.undo_manager = UndoManager(self)
         self.current_project_base_path = None
         self.project_modified = False
+        self.project_tile_limit = MAX_TILES
         self.scroll_speed_units = 3 
         self.is_currently_painting_tile = False
         self.pending_command_list = []
@@ -2809,6 +2904,8 @@ class TileEditorApp:
         self.color_usage_window = None
         self.tile_usage_window = None
         self.supertile_usage_window = None 
+
+        self.tile_limit_var = tk.IntVar(value=MAX_TILES)
         
         # --- Load settings, which will be used later ---
         self._load_app_settings()
@@ -2992,7 +3089,7 @@ class TileEditorApp:
             return self.tile_image_cache[cache_key]
         render_size = max(1, int(size))
         img = tk.PhotoImage(width=render_size, height=render_size)
-        if not (0 <= tile_index < num_tiles_in_set):
+        if not (0 <= tile_index < len(tileset_patterns)):
             img.put(INVALID_TILE_COLOR, to=(0, 0, render_size, render_size))
             self.tile_image_cache[cache_key] = img
             return img
@@ -3094,7 +3191,7 @@ class TileEditorApp:
 
                 try:
                     tile_idx_from_st_def_preview = definition[src_base_tile_r_in_st_grid_preview][src_base_tile_c_in_st_grid_preview]
-                    if 0 <= tile_idx_from_st_def_preview < num_tiles_in_set:
+                    if 0 <= tile_idx_from_st_def_preview < len(tileset_patterns):
                         if not (0 <= src_pixel_r_in_base_tile_preview < TILE_HEIGHT and \
                                 len(tileset_patterns[tile_idx_from_st_def_preview]) > src_pixel_r_in_base_tile_preview and \
                                 0 <= src_pixel_c_in_base_tile_preview < TILE_WIDTH and \
@@ -3582,30 +3679,31 @@ class TileEditorApp:
         self.tileset_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")   
 
         tile_button_frame = ttk.Frame(right_frame)
-        tile_button_frame.grid(row=2, column=0, sticky="nw", pady=(5, 0)) # Use "nw" anchor
+        tile_button_frame.grid(row=2, column=0, sticky="nw", pady=(5, 0))
 
-        self.add_tile_button = ttk.Button(
-            tile_button_frame, text="Add New", command=self.handle_add_tile
-        )
-        self.add_tile_button.pack(side=tk.LEFT, padx=(0, 3))
+        # Row 0: Add buttons and Limit controls
+        self.add_tile_button = ttk.Button(tile_button_frame, text="Add New", command=self.handle_add_tile)
+        self.add_tile_button.grid(row=0, column=0, padx=(0, 3))
 
-        self.add_many_tiles_button = ttk.Button(
-            tile_button_frame, text="Add Many...", command=self.handle_add_many_tiles
-        )
-        self.add_many_tiles_button.pack(side=tk.LEFT, padx=3)
+        self.add_many_tiles_button = ttk.Button(tile_button_frame, text="Add Many...", command=self.handle_add_many_tiles)
+        self.add_many_tiles_button.grid(row=0, column=1, padx=3)
 
-        self.insert_tile_button = ttk.Button(
-            tile_button_frame, text="Insert", command=self.handle_insert_tile
-        )
-        self.insert_tile_button.pack(side=tk.LEFT, padx=3)
+        self.tile_info_label = ttk.Label(tile_button_frame, text="Tiles: 1 / 256")
+        self.tile_info_label.grid(row=0, column=2, padx=(10, 2))
 
-        self.delete_tile_button = ttk.Button(
-            tile_button_frame, text="Delete", command=self.handle_delete_tile
-        )
-        self.delete_tile_button.pack(side=tk.LEFT, padx=3)
-        
-        self.tile_info_label = ttk.Label(tile_button_frame, text="Tiles: 0")
-        self.tile_info_label.pack(side=tk.LEFT, padx=(10, 0), anchor=tk.W)
+        self.tile_limit_entry = ttk.Entry(tile_button_frame, textvariable=self.tile_limit_var, width=4)
+        self.tile_limit_entry.grid(row=0, column=3, padx=2)
+        self.tile_limit_entry.bind("<Return>", self._apply_tile_limit_from_entry)
+
+        self.apply_limit_button = ttk.Button(tile_button_frame, text="Set Limit", command=self._apply_tile_limit_from_entry)
+        self.apply_limit_button.grid(row=0, column=4, padx=(2, 0))
+
+        # Row 1: Insert and Delete buttons
+        self.insert_tile_button = ttk.Button(tile_button_frame, text="Insert", command=self.handle_insert_tile)
+        self.insert_tile_button.grid(row=1, column=0, padx=(0, 3), pady=(5, 0))
+
+        self.delete_tile_button = ttk.Button(tile_button_frame, text="Delete", command=self.handle_delete_tile)
+        self.delete_tile_button.grid(row=1, column=1, padx=3, pady=(5, 0))
 
     def create_supertile_editor_widgets(self, parent_frame):
         main_frame = ttk.Frame(parent_frame)
@@ -4153,7 +4251,7 @@ class TileEditorApp:
     # ... (draw_editor_canvas, draw_attribute_editor, draw_palette unchanged) ...
     def draw_editor_canvas(self):
         self.editor_canvas.delete("all")
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
         pattern = tileset_patterns[current_tile_index]
         colors = tileset_colors[current_tile_index]
@@ -4179,7 +4277,7 @@ class TileEditorApp:
                 )
 
     def draw_attribute_editor(self):
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
         colors = tileset_colors[current_tile_index]
         for r in range(TILE_HEIGHT):
@@ -4344,7 +4442,7 @@ class TileEditorApp:
     def draw_tileset_viewer(self, canvas, highlighted_tile_index):
         """Draws tileset viewer, highlighting selected, dragged, or unused tile."""
         _debug(f"\n--- DRAW: draw_tileset_viewer called for canvas {canvas._name}.")
-        _debug(f"\n--- DRAW: draw_tileset_viewer called. Drawing {num_tiles_in_set} tiles.")
+        _debug(f"\n--- DRAW: draw_tileset_viewer called. Drawing {len(tileset_patterns)} tiles.")
         _debug(f"--- DRAW: AT THIS MOMENT, self.marked_unused_tiles is: {self.marked_unused_tiles}")
 
         is_dragging_tile = self.drag_active and self.drag_item_type == "tile"
@@ -4354,7 +4452,7 @@ class TileEditorApp:
             canvas.delete("all")
             padding = 1
             size = VIEWER_TILE_SIZE
-            max_rows = math.ceil(num_tiles_in_set / NUM_TILES_ACROSS)
+            max_rows = math.ceil(len(tileset_patterns) / NUM_TILES_ACROSS)
             canvas_height = max(1, max_rows * (size + padding) + padding)  
             canvas_width = max(
                 1, NUM_TILES_ACROSS * (size + padding) + padding
@@ -4374,7 +4472,7 @@ class TileEditorApp:
             if current_scroll != str_scroll:
                 canvas.config(scrollregion=(0, 0, canvas_width, canvas_height))
 
-            for i in range(num_tiles_in_set):
+            for i in range(len(tileset_patterns)):
                 tile_r, tile_c = divmod(i, NUM_TILES_ACROSS)
                 base_x = tile_c * (size + padding) + padding
                 base_y = tile_r * (size + padding) + padding
@@ -4421,7 +4519,7 @@ class TileEditorApp:
             _error(f"Unexpected error during draw_tileset_viewer: {e}")
 
     def update_tile_info_label(self):
-        self.tile_info_label.config(text=f"Tiles: {num_tiles_in_set}")
+        self.tile_info_label.config(text=f"Tiles: {len(tileset_patterns)} /")
 
     def _update_supertile_info_label(self):
         self.supertile_sel_info_label.config(text=f"Supertiles: {num_supertiles}")
@@ -5023,7 +5121,7 @@ class TileEditorApp:
     # --- Tile Editor Handlers ---
     def handle_editor_click(self, event):
         global last_drawn_pixel, current_tile_index
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
         
         self.pending_command_list.clear()
@@ -5049,7 +5147,7 @@ class TileEditorApp:
 
     def handle_editor_drag(self, event):
         global last_drawn_pixel, current_tile_index
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
         
         self.is_currently_painting_tile = True 
@@ -5108,7 +5206,7 @@ class TileEditorApp:
 
     def set_row_color(self, row, fg_or_bg):
         global tileset_colors, current_tile_index, selected_color_index
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
         if not (0 <= selected_color_index < 16):
             messagebox.showwarning("Set Row Color", "No valid color selected from palette.", parent=self.root)
@@ -5153,7 +5251,7 @@ class TileEditorApp:
             if canvas.winfo_exists(): canvas.config(cursor="")
         except tk.TclError: pass
 
-        if 0 <= clicked_index < num_tiles_in_set:
+        if 0 <= clicked_index < len(tileset_patterns):
             self.drag_item_type = "tile"
             self.drag_start_index = clicked_index
             self.drag_press_x = event.x 
@@ -5162,8 +5260,8 @@ class TileEditorApp:
             # self.drag_active is NOT set to True here
 
     def flip_tile_horizontal(self):
-        global tileset_patterns, current_tile_index, num_tiles_in_set
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
 
         command = TransformCommand("Flip Tile Horizontal", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
@@ -5180,8 +5278,8 @@ class TileEditorApp:
         self.undo_manager.execute(command)
 
     def flip_tile_vertical(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, tileset_colors, current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
 
         # Create a command for each data list that will be changed
@@ -5201,8 +5299,8 @@ class TileEditorApp:
         self.undo_manager.execute(composite_command)
 
     def rotate_tile_90cw(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set, WHITE_IDX, BLACK_IDX
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, tileset_colors, current_tile_index, WHITE_IDX, BLACK_IDX
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
 
         pattern_command = TransformCommand("Rotate Tile", self, tileset_patterns, current_tile_index, self.invalidate_tile_cache)
@@ -5230,8 +5328,8 @@ class TileEditorApp:
         )
 
     def shift_tile_up(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, tileset_colors, current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
         if not (len(tileset_patterns[current_tile_index]) == TILE_HEIGHT and 
@@ -5257,8 +5355,8 @@ class TileEditorApp:
         self.undo_manager.execute(composite_command)
         
     def shift_tile_down(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, tileset_colors, current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
         if not (len(tileset_patterns[current_tile_index]) == TILE_HEIGHT and 
@@ -5284,8 +5382,8 @@ class TileEditorApp:
         self.undo_manager.execute(composite_command)
         
     def shift_tile_left(self):
-        global tileset_patterns, current_tile_index, num_tiles_in_set
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
         current_pattern = tileset_patterns[current_tile_index]
@@ -5307,8 +5405,8 @@ class TileEditorApp:
         self.undo_manager.execute(command)
         
     def shift_tile_right(self):
-        global tileset_patterns, current_tile_index, num_tiles_in_set
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global tileset_patterns, current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Shift Tile", "No valid tile selected to shift.", parent=self.root)
             return
         current_pattern = tileset_patterns[current_tile_index]
@@ -5357,7 +5455,7 @@ class TileEditorApp:
 
         # This part sets up the drag-and-drop state, which is fine to do instantly.
         # The actual selection action will be delayed.
-        if 0 <= clicked_index < num_tiles_in_set:
+        if 0 <= clicked_index < len(tileset_patterns):
             self.drag_item_type = "tile"
             self.drag_start_index = clicked_index
             self.drag_press_x = event.x
@@ -5377,7 +5475,7 @@ class TileEditorApp:
             self.single_click_timer = self.root.after(250, lambda: select_tile_for_supertile(clicked_index))
 
     def handle_supertile_def_click(self, event):
-        if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
+        if not (0 <= selected_tile_for_supertile < len(tileset_patterns)):
             messagebox.showwarning("Place Tile", "Please select a valid tile first.")
             return
             
@@ -5875,7 +5973,7 @@ class TileEditorApp:
     # --- File Menu Commands ---
     def new_project(self, interactive=True):
         # Resets all project data structures to a default new state.
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set
+        global tileset_patterns, tileset_colors, current_tile_index
         global supertiles_data, current_supertile_index, num_supertiles, selected_tile_for_supertile
         global map_data, map_width, map_height, selected_supertile_for_map, last_painted_map_cell
         global selected_color_index
@@ -5918,17 +6016,19 @@ class TileEditorApp:
         self.supertile_grid_height = new_dim_h
         _debug(f" New project data model: Supertile dimensions set to {self.supertile_grid_width}W x {self.supertile_grid_height}H.")
 
+        # Reset the project limit to default and update the UI variable
+        self.project_tile_limit = MAX_TILES
+        self.tile_limit_var.set(self.project_tile_limit)
+
         self._clear_marked_unused(trigger_redraw=False)
 
         tileset_patterns = [
-            [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)] for _ in range(MAX_TILES)
+            [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
         ]
         tileset_colors = [
             [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
-            for _ in range(MAX_TILES)
         ]
         current_tile_index = 0
-        num_tiles_in_set = 1
         selected_tile_for_supertile = 0
 
         supertiles_data = [
@@ -6149,7 +6249,7 @@ class TileEditorApp:
             return False
 
     def save_tileset(self, filepath=None, is_standalone_operation=True):
-        global num_tiles_in_set, tileset_patterns, tileset_colors # Using globals
+        global tileset_patterns, tileset_colors # Using globals
         save_path = filepath
         if not save_path:
             save_path = filedialog.asksaveasfilename(
@@ -6162,23 +6262,27 @@ class TileEditorApp:
 
         try:
             with open(save_path, "wb") as f:
-                tiles_to_write_count = num_tiles_in_set
+                tiles_to_write_count = len(tileset_patterns)
 
                 header_byte_value = 0 if tiles_to_write_count == 256 else tiles_to_write_count
                 if not (0 <= header_byte_value <= 255):
-                    _debug(f" save_tileset: Invalid header_byte_value {header_byte_value} for num_tiles_in_set {tiles_to_write_count}")
+                    _debug(f" save_tileset: Invalid header_byte_value {header_byte_value} for len(tileset_patterns) {tiles_to_write_count}")
                     raise ValueError(f"Calculated header byte value {header_byte_value} is out of 0-255 range.")
                 
                 num_byte_header = struct.pack("B", header_byte_value)
                 f.write(num_byte_header)
 
-                reserved_data = bytes([0] * RESERVED_BYTES_COUNT)
-                f.write(reserved_data)
+                # Use the first reserved byte to store the project's tile limit.
+                limit_to_save = self.project_tile_limit if self.project_tile_limit < MAX_TILES else 0
+                f.write(struct.pack("B", limit_to_save))
+
+                # Write the remaining reserved bytes.
+                f.write(bytes([0] * (RESERVED_BYTES_COUNT - 1)))
 
                 # --- Write ALL pattern data first ---
                 for i in range(tiles_to_write_count):
                     if i >= len(tileset_patterns): 
-                        _warning(f" save_tileset: num_tiles_in_set ({tiles_to_write_count}) > len(tileset_patterns). Stopping pattern write at tile {i}.")
+                        _warning(f" save_tileset: len(tileset_patterns) ({tiles_to_write_count}) > len(tileset_patterns). Stopping pattern write at tile {i}.")
                         # Pad remaining patterns for this block if this happens, to keep file structure valid
                         # This assumes we must write pattern data for all 'tiles_to_write_count'
                         for _ in range(tiles_to_write_count - i):
@@ -6199,7 +6303,7 @@ class TileEditorApp:
                 # --- Then, write ALL color data ---
                 for i in range(tiles_to_write_count):
                     if i >= len(tileset_colors):
-                        _warning(f" save_tileset: num_tiles_in_set ({tiles_to_write_count}) > len(tileset_colors). Stopping color write at tile {i}.")
+                        _warning(f" save_tileset: len(tileset_patterns) ({tiles_to_write_count}) > len(tileset_colors). Stopping color write at tile {i}.")
                         # Pad remaining colors for this block
                         for _ in range(tiles_to_write_count - i):
                             for _ in range(TILE_HEIGHT):
@@ -6239,7 +6343,7 @@ class TileEditorApp:
 
     def open_tileset(self, filepath=None, is_standalone_operation=True):
         # Loads a tileset file, returning True on success, False on failure.
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set, selected_tile_for_supertile
+        global tileset_patterns, tileset_colors, current_tile_index, selected_tile_for_supertile
         load_path = filepath
         if not load_path:
             load_path = filedialog.askopenfilename(
@@ -6285,9 +6389,17 @@ class TileEditorApp:
                     )
 
                 if has_reserved_bytes_to_read:
-                    reserved_bytes_read = f.read(RESERVED_BYTES_COUNT)
-                    if len(reserved_bytes_read) < RESERVED_BYTES_COUNT:
-                        raise EOFError("Unexpected EOF while trying to read reserved bytes in a new format tileset file.")
+                    # Read the first byte for the limit, the rest are still reserved.
+                    limit_byte_data = f.read(1)
+                    f.read(RESERVED_BYTES_COUNT - 1) # Consume the rest of the reserved block
+                    if not limit_byte_data:
+                        raise EOFError("Unexpected EOF while reading tileset limit byte.")
+                
+                    limit_from_file = struct.unpack("B", limit_byte_data)[0]
+                    self.project_tile_limit = MAX_TILES if limit_from_file == 0 else limit_from_file
+                else:
+                    # For legacy files without the reserved block, default to max.
+                    self.project_tile_limit = MAX_TILES
 
                 new_patterns = [
                     [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
@@ -6343,19 +6455,12 @@ class TileEditorApp:
             if confirm:
                 if self._clear_marked_unused(trigger_redraw=False):
                     pass
-                
-                for i in range(MAX_TILES):
-                    if i < loaded_num_tiles:
-                        tileset_patterns[i] = new_patterns[i]
-                        tileset_colors[i] = new_colors[i]
-                    else:
-                        tileset_patterns[i] = [[0] * TILE_WIDTH for _r_clear in range(TILE_HEIGHT)]
-                        tileset_colors[i] = [(WHITE_IDX, BLACK_IDX) for _r_clear in range(TILE_HEIGHT)]
-                
-                num_tiles_in_set = loaded_num_tiles
-                
-                current_tile_index = max(0, min(current_tile_index, num_tiles_in_set - 1))
-                selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, num_tiles_in_set - 1))
+
+                tileset_patterns = new_patterns
+                tileset_colors = new_colors
+
+                current_tile_index = max(0, min(current_tile_index, len(tileset_patterns) - 1))
+                selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, len(tileset_patterns) - 1))
 
                 if is_standalone_operation:
                     self.clear_all_caches()
@@ -6371,10 +6476,12 @@ class TileEditorApp:
                         _debug(" open_tileset: TclError selecting tile editor tab.")
                     messagebox.showinfo(
                         "Load Successful",
-                        f"Loaded {num_tiles_in_set} tiles from {os.path.basename(load_path)}",
+                        f"Loaded {len(tileset_patterns)} tiles from {os.path.basename(load_path)}",
                     )
                     self._mark_project_modified()
                     self._add_to_recent_list("modules", load_path)
+                
+                self.tile_limit_var.set(self.project_tile_limit) # Sync UI with loaded limit
                 return True
             else:
                 return False
@@ -6486,7 +6593,7 @@ class TileEditorApp:
 
     def open_supertiles(self, filepath=None, is_standalone_operation=True):
         # Loads a supertile file, returning True on success, False on failure.
-        global supertiles_data, num_supertiles, current_supertile_index, selected_supertile_for_map, num_tiles_in_set 
+        global supertiles_data, num_supertiles, current_supertile_index, selected_supertile_for_map
         load_path = filepath
         if not load_path:
             load_path = filedialog.askopenfilename(
@@ -6585,7 +6692,7 @@ class TileEditorApp:
                 current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1))
                 selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
                 
-                max_valid_tile_idx = num_tiles_in_set - 1
+                max_valid_tile_idx = len(tileset_patterns) - 1
                 for st_idx in range(num_supertiles):
                     for r in range(self.supertile_grid_height):
                         for c in range(self.supertile_grid_width):
@@ -6973,6 +7080,10 @@ class TileEditorApp:
             _debug(" open_project: Finalizing SUCCESS. Setting project path and modified status.")
             self.current_project_base_path = base_path
             self.project_modified = False
+
+            # After a successful load, sync the UI entry with the loaded limit
+            self.tile_limit_var.set(self.project_tile_limit)
+
             _debug(f" open_project: Project '{base_name}' data loaded successfully.")
             _debug(" open_project: Returning True.")
             return True
@@ -7075,112 +7186,43 @@ class TileEditorApp:
         
         _debug(" _perform_project_load_ui_updates: Deferred UI updates complete.")
 
-    # --- Edit Menu Commands ---
+    def set_tileset_limit(self, new_limit):
+        """Handles user request to set a new tileset limit. Creates and executes an undoable command."""
+        
+        # 1. Validate the new limit
+        if not (1 <= new_limit <= MAX_TILES):
+            messagebox.showerror("Invalid Limit", f"Tileset limit must be between 1 and {MAX_TILES}.", parent=self.root)
+            self.tile_limit_var.set(self.project_tile_limit) # Reset UI to the last valid limit
+            return
 
-    def set_tileset_size(self):
-        global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
+        # Do nothing if the limit hasn't actually changed
+        if new_limit == self.project_tile_limit:
+            return
 
-        prompt = f"Enter number of tiles (1-{MAX_TILES}):"
-        new_size_str = simpledialog.askstring(
-            "Set Tileset Size", prompt, initialvalue=str(num_tiles_in_set)
-        )
+        current_size = len(tileset_patterns)
 
-        if new_size_str:
-            try:
-                new_size = int(new_size_str)
+        # 2. Handle confirmation only if tiles will be deleted (truncation)
+        if new_limit < current_size:
+            affected_supertiles = set()
+            for i in range(new_limit, current_size):
+                usage = self._check_tile_usage(i)
+                if usage:
+                    affected_supertiles.update(usage)
+            
+            warning_msg = (
+                f"Setting the limit to {new_limit} will delete tiles from index {new_limit} to {current_size - 1}.\n\n"
+                "This action is fully undoable."
+            )
+            if affected_supertiles:
+                warning_msg += "\n\nTiles being deleted are in use by one or more supertiles."
 
-                if not (1 <= new_size <= MAX_TILES):
-                    messagebox.showerror(
-                        "Invalid Size", f"Size must be between 1 and {MAX_TILES}."
-                    )
-                    return
-
-                if new_size == num_tiles_in_set:
-                    return
-
-                reduced = new_size < num_tiles_in_set
-                confirmed_resize = True # Renamed for clarity
-                if reduced:
-                    affected_supertiles_list = set() # Use a set to avoid duplicates
-                    for del_idx_tile in range(new_size, num_tiles_in_set):
-                        # _check_tile_usage uses self.supertile_grid_width/height internally
-                        usage_list = self._check_tile_usage(del_idx_tile)
-                        for st_idx_affected in usage_list:
-                            affected_supertiles_list.add(st_idx_affected)
-
-                    confirm_prompt_msg = f"Reducing size to {new_size} will discard tiles {new_size} to {num_tiles_in_set-1}."
-                    if affected_supertiles_list:
-                        confirm_prompt_msg += "\n\n*** WARNING! ***\nDiscarded tiles are used by Supertile(s):\n"
-                        affected_list_sorted = sorted(list(affected_supertiles_list))
-                        confirm_prompt_msg += ", ".join(map(str, affected_list_sorted[:10]))
-                        if len(affected_list_sorted) > 10:
-                            confirm_prompt_msg += "..."
-                        confirm_prompt_msg += "\n\nReferences to discarded tiles in these Supertiles will be reset to Tile 0."
-
-                    confirmed_resize = messagebox.askokcancel(
-                        "Reduce Tileset Size", confirm_prompt_msg, icon="warning"
-                    )
-
-                if confirmed_resize:
-                    if self._clear_marked_unused(trigger_redraw=False):
-                        pass
-
-                    self._mark_project_modified()
-
-                    if reduced:
-                        for del_idx_tile_loop in range(new_size, num_tiles_in_set):
-                            # _update_supertile_refs_for_tile_change uses self.supertile_grid_width/height
-                            self._update_supertile_refs_for_tile_change(
-                                del_idx_tile_loop, "delete"
-                            )
-                            self._adjust_marked_indices_after_delete(self.marked_unused_tiles, del_idx_tile_loop)
-                        for i in range(new_size, num_tiles_in_set):
-                            self.invalidate_tile_cache(i) # Invalidate cache for tiles being removed from active set
-                        
-                        # Trim the lists
-                        del tileset_patterns[new_size:]
-                        del tileset_colors[new_size:]
-                        # Ensure they are padded back to MAX_TILES if that's the desired behavior for fixed-size arrays
-                        # For dynamic Python lists, this just shortens them.
-                        # If MAX_TILES is a hard limit for array indexing elsewhere, pad them:
-                        # while len(tileset_patterns) < MAX_TILES:
-                        #     tileset_patterns.append([[0]*TILE_WIDTH for _r in range(TILE_HEIGHT)])
-                        #     tileset_colors.append([(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)])
-
-
-                    elif new_size > num_tiles_in_set: # Increasing size
-                        # Add new blank tiles up to new_size, but not exceeding MAX_TILES
-                        tiles_to_add = new_size - num_tiles_in_set
-                        for _ in range(tiles_to_add):
-                            if len(tileset_patterns) < MAX_TILES: # Check against actual list capacity
-                                tileset_patterns.append(
-                                    [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
-                                )
-                                tileset_colors.append(
-                                    [(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)]
-                                )
-                            else: # Should not happen if new_size <= MAX_TILES
-                                break 
-                    
-                    num_tiles_in_set = new_size # Update the count of active tiles
-
-                    current_tile_index = max(0, min(current_tile_index, num_tiles_in_set - 1))
-                    selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, num_tiles_in_set - 1))
-
-                    self.clear_all_caches()
-                    self.invalidate_minimap_background_cache()
-                    self.update_all_displays(changed_level="all")
-                    self._update_editor_button_states()
-                    self._update_edit_menu_state()
-
-                    self._request_color_usage_refresh()
-                    self._request_tile_usage_refresh()
-
-            except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter a valid whole number.")
-            except Exception as e:
-                messagebox.showerror("Error", f"An error occurred: {e}")
-                _error(f"Error setting tileset size: {e}")
+            if not messagebox.askokcancel("Confirm Truncate Tileset", warning_msg, icon="warning", parent=self.root):
+                self.tile_limit_var.set(self.project_tile_limit) # Reset UI on cancel
+                return
+        
+        # 3. If confirmed (or if changing limit without truncation), create and execute the command.
+        command = SetTilesetLimitCommand(self, new_limit)
+        self.undo_manager.execute(command)
 
     def set_supertile_count(self):
         global num_supertiles, current_supertile_index, selected_supertile_for_map, supertiles_data
@@ -7347,8 +7389,8 @@ class TileEditorApp:
                 )
 
     def clear_current_tile(self):
-        global current_tile_index, num_tiles_in_set 
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global current_tile_index
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Clear Tile", "No valid tile selected to clear.", parent=self.root)
             return
             
@@ -7377,8 +7419,8 @@ class TileEditorApp:
             self.undo_manager.execute(command)
 
     def copy_current_tile(self):
-        global current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global current_tile_index, tileset_patterns, tileset_colors
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Copy Tile", "No valid tile selected.")
             return
 
@@ -7406,8 +7448,8 @@ class TileEditorApp:
             messagebox.showerror("Copy Error", "Could not copy tile data to the system clipboard.")
 
     def paste_tile(self):
-        global current_tile_index, num_tiles_in_set, tileset_patterns, tileset_colors
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        global current_tile_index, tileset_patterns, tileset_colors
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             messagebox.showwarning("Paste Tile", "No valid tile selected to paste onto.")
             return
 
@@ -7490,7 +7532,7 @@ class TileEditorApp:
         # This creates a self-contained tileset on the clipboard.
         source_tiles_payload = {}
         for tile_idx in unique_tile_indices:
-            if 0 <= tile_idx < num_tiles_in_set:
+            if 0 <= tile_idx < len(tileset_patterns):
                 source_tiles_payload[tile_idx] = {
                     "pattern": tileset_patterns[tile_idx],
                     "colors": tileset_colors[tile_idx]
@@ -7546,7 +7588,7 @@ class TileEditorApp:
                 raise ValueError("Clipboard data payload is missing definition, tiles, or palette information.")
             
             dest_tileset_fingerprints = {}
-            for i in range(num_tiles_in_set):
+            for i in range(len(tileset_patterns)):
                 fingerprint = self._render_tile_to_lab_pixels(
                     tileset_patterns[i], tileset_colors[i], self.active_msx_palette
                 )
@@ -8369,7 +8411,7 @@ class TileEditorApp:
                                    0 <= tile_col_in_st_mm < self.supertile_grid_width:
 
                                     tile_idx_mm = st_def_mm[tile_row_in_st_mm][tile_col_in_st_mm]
-                                    if 0 <= tile_idx_mm < num_tiles_in_set:
+                                    if 0 <= tile_idx_mm < len(tileset_patterns):
                                         if 0 <= pixel_row_in_tile_mm < TILE_HEIGHT and \
                                            0 <= pixel_col_in_tile_mm < TILE_WIDTH:
                                             pattern_val_mm = tileset_patterns[tile_idx_mm][pixel_row_in_tile_mm][pixel_col_in_tile_mm]
@@ -8639,10 +8681,10 @@ class TileEditorApp:
         if selected_tab_index == 1:
             copy_label = "Copy Tile"
             paste_label = "Paste Tile"
-            can_copy = 0 <= current_tile_index < num_tiles_in_set
+            can_copy = 0 <= current_tile_index < len(tileset_patterns)
             
             can_paste = False
-            if 0 <= current_tile_index < num_tiles_in_set:
+            if 0 <= current_tile_index < len(tileset_patterns):
                 try:
                     clipboard_data = json.loads(self.root.clipboard_get())
                     if isinstance(clipboard_data, dict) and \
@@ -8855,7 +8897,7 @@ class TileEditorApp:
         
         if not (0 <= current_supertile_index < num_supertiles):
             return False
-        if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
+        if not (0 <= selected_tile_for_supertile < len(tileset_patterns)):
             return False
         
         if not (0 <= r_place < self.supertile_grid_height and 0 <= c_place < self.supertile_grid_width):
@@ -8890,7 +8932,7 @@ class TileEditorApp:
         if self.last_placed_supertile_cell is None:
             return
 
-        if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
+        if not (0 <= selected_tile_for_supertile < len(tileset_patterns)):
             return
 
         canvas = self.supertile_def_canvas
@@ -9165,7 +9207,7 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} shifted right.")
 
     def handle_supertile_def_right_click(self, event):
-        global selected_tile_for_supertile, current_supertile_index, num_supertiles, num_tiles_in_set, supertiles_data
+        global selected_tile_for_supertile, current_supertile_index, num_supertiles, supertiles_data
 
         canvas = self.supertile_def_canvas
         # SUPERTILE_DEF_TILE_SIZE is display size of one mini-tile in editor
@@ -9192,7 +9234,7 @@ class TileEditorApp:
 
                 clicked_tile_index_val = definition_rc[row][col]
 
-                if 0 <= clicked_tile_index_val < num_tiles_in_set:
+                if 0 <= clicked_tile_index_val < len(tileset_patterns):
                     if selected_tile_for_supertile != clicked_tile_index_val:
                         selected_tile_for_supertile = clicked_tile_index_val
                         _debug(f"Right-click selected Tile: {selected_tile_for_supertile}")
@@ -9202,7 +9244,7 @@ class TileEditorApp:
                         self._update_st_tab_selected_tile_info_panel()
                         self.scroll_viewers_to_tile(selected_tile_for_supertile)
                 # else:
-                    _debug(f"Right-click: Tile index {clicked_tile_index_val} at ST def [{row},{col}] is out of tile bounds (max {num_tiles_in_set-1}).")
+                    _debug(f"Right-click: Tile index {clicked_tile_index_val} at ST def [{row},{col}] is out of tile bounds (max {len(tileset_patterns)-1}).")
 
             except IndexError: # Should be caught by structure check above
                 _error(f"Right-click: IndexError accessing supertile data for ST {current_supertile_index} at def [{row},{col}].")
@@ -9271,7 +9313,7 @@ class TileEditorApp:
 
     def _check_tile_usage(self, tile_index_check): # Renamed tile_index
         used_in_supertiles_list = [] # Renamed
-        if not (0 <= tile_index_check < num_tiles_in_set):
+        if not (0 <= tile_index_check < len(tileset_patterns)):
             return used_in_supertiles_list
 
         for st_idx_check in range(num_supertiles):
@@ -9385,14 +9427,14 @@ class TileEditorApp:
             self._request_supertile_usage_refresh()
 
     def _insert_tile(self, index):
-        global num_tiles_in_set, tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX
+        global tileset_patterns, tileset_colors, WHITE_IDX, BLACK_IDX
 
         if not (
-            0 <= index <= num_tiles_in_set
+            0 <= index <= len(tileset_patterns)
         ):  
-            _error(f"Insert tile index {index} out of range [0, {num_tiles_in_set}].")
+            _error(f"Insert tile index {index} out of range [0, {len(tileset_patterns)}].")
             return False
-        if num_tiles_in_set >= MAX_TILES:
+        if len(tileset_patterns) >= MAX_TILES:
             _error("Cannot insert tile, maximum tiles reached.")
             return False
 
@@ -9413,13 +9455,13 @@ class TileEditorApp:
         return True
 
     def _delete_tile(self, index):
-        global num_tiles_in_set, tileset_patterns, tileset_colors
+        global tileset_patterns, tileset_colors
 
-        if not (0 <= index < num_tiles_in_set):
-            _error(f"Delete tile index {index} out of range [0, {num_tiles_in_set - 1}]."
+        if not (0 <= index < len(tileset_patterns)):
+            _error(f"Delete tile index {index} out of range [0, {len(tileset_patterns) - 1}]."
             )
             return False
-        if num_tiles_in_set <= 1:
+        if len(tileset_patterns) <= 1:
             _error("Cannot delete the last tile.")
             return False
 
@@ -9487,12 +9529,12 @@ class TileEditorApp:
         return True
 
     def _update_editor_button_states(self):
-        global num_tiles_in_set, num_supertiles # Using globals
+        global num_supertiles # Using globals
 
         # --- Tile Editor Buttons ---
-        can_add_tile = num_tiles_in_set < MAX_TILES
-        can_insert_tile = num_tiles_in_set < MAX_TILES # Same condition as adding for enabling insert
-        can_delete_tile = num_tiles_in_set > 1
+        can_add_tile = len(tileset_patterns) < self.project_tile_limit
+        can_insert_tile = len(tileset_patterns) < self.project_tile_limit
+        can_delete_tile = len(tileset_patterns) > 1
 
         if hasattr(self, "add_tile_button") and self.add_tile_button.winfo_exists():
             self.add_tile_button.config(
@@ -9533,16 +9575,16 @@ class TileEditorApp:
             )
 
     def handle_add_tile(self):  
-        global num_tiles_in_set, current_tile_index
+        global current_tile_index
 
-        if num_tiles_in_set >= MAX_TILES:
-            messagebox.showwarning("Add Tile Failed", f"Could not add tile. Maximum {MAX_TILES} reached?")
+        if len(tileset_patterns) >= self.project_tile_limit:
+            messagebox.showwarning("Add Tile Failed", f"Could not add tile. The tileset limit is set to {self.project_tile_limit}.")
             return
     
         if self._clear_marked_unused(trigger_redraw=False):
             pass
 
-        new_tile_idx = num_tiles_in_set
+        new_tile_idx = len(tileset_patterns)
         blank_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
         blank_colors = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
 
@@ -9550,12 +9592,12 @@ class TileEditorApp:
         color_command = ModifyListCommand("Add Tile", tileset_colors, new_tile_idx, blank_colors, is_insert=True)
         
         # Command to update application state (counts and selections)
-        old_state = (num_tiles_in_set, current_tile_index)
-        new_state = (num_tiles_in_set + 1, new_tile_idx)
+        old_state = (current_tile_index,)
+        new_state = (new_tile_idx,)
 
         def state_setter(state_tuple):
-            global num_tiles_in_set, current_tile_index
-            num_tiles_in_set, current_tile_index = state_tuple
+            global current_tile_index
+            current_tile_index = state_tuple[0]
         
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
@@ -9579,9 +9621,9 @@ class TileEditorApp:
         _debug(f"Added new tile {new_tile_idx}")
 
     def handle_insert_tile(self):
-        global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-        if num_tiles_in_set >= MAX_TILES:
-            messagebox.showwarning("Insert Tile Failed", f"Could not insert tile. Maximum {MAX_TILES} reached?")
+        global current_tile_index, selected_tile_for_supertile
+        if len(tileset_patterns) >= self.project_tile_limit:
+            messagebox.showwarning("Insert Tile Failed", f"Could not insert tile. The tileset limit is set to {self.project_tile_limit}.")
             return
         if self._clear_marked_unused(trigger_redraw=False): pass 
 
@@ -9594,15 +9636,15 @@ class TileEditorApp:
         
         st_refs_command = UpdateSupertileRefsForTileCommand("Update Supertile Refs", self, insert_idx, is_insert=True)
 
-        old_state = (num_tiles_in_set, current_tile_index, selected_tile_for_supertile)
-        new_num_tiles = num_tiles_in_set + 1
+        old_state = (current_tile_index, selected_tile_for_supertile)
+        new_num_tiles = len(tileset_patterns) + 1 # This is still needed to calculate the clamped new_st_selection
         new_selection = insert_idx
         new_st_selection = selected_tile_for_supertile + 1 if selected_tile_for_supertile >= insert_idx else selected_tile_for_supertile
         new_st_selection = min(new_st_selection, new_num_tiles - 1)
-        new_state = (new_num_tiles, new_selection, new_st_selection)
+        new_state = (new_selection, new_st_selection)
         def state_setter(state_tuple):
-            global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-            num_tiles_in_set, current_tile_index, selected_tile_for_supertile = state_tuple
+            global current_tile_index, selected_tile_for_supertile
+            current_tile_index, selected_tile_for_supertile = state_tuple
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
         def post_insert_hooks():
@@ -9618,12 +9660,12 @@ class TileEditorApp:
         _debug(f"Inserted tile at index {insert_idx}")
 
     def handle_delete_tile(self):
-        global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-        if num_tiles_in_set <= 1:
+        global current_tile_index, selected_tile_for_supertile
+        if len(tileset_patterns) <= 1:
             messagebox.showinfo("Delete Tile", "Cannot delete the last tile.")
             return
         delete_idx = current_tile_index
-        if not (0 <= delete_idx < num_tiles_in_set):
+        if not (0 <= delete_idx < len(tileset_patterns)):
             messagebox.showerror("Delete Tile Error", "Invalid tile index selected.")
             return
 
@@ -9643,17 +9685,17 @@ class TileEditorApp:
         # Use the new, optimized command for updating supertile references
         st_refs_command = UpdateSupertileRefsForTileCommand("Update Supertile Refs", self, delete_idx, is_insert=False)
         
-        old_state = (num_tiles_in_set, current_tile_index, selected_tile_for_supertile)
-        new_num_tiles = num_tiles_in_set - 1
+        old_state = (current_tile_index, selected_tile_for_supertile)
+        new_num_tiles = len(tileset_patterns) - 1
         new_selection = min(delete_idx, new_num_tiles - 1)
         new_st_selection = selected_tile_for_supertile
         if selected_tile_for_supertile == delete_idx: new_st_selection = 0
         elif selected_tile_for_supertile > delete_idx: new_st_selection -= 1
         new_st_selection = min(new_st_selection, new_num_tiles - 1)
-        new_state = (new_num_tiles, new_selection, new_st_selection)
+        new_state = (new_selection, new_st_selection)
         def state_setter(state_tuple):
-            global num_tiles_in_set, current_tile_index, selected_tile_for_supertile
-            num_tiles_in_set, current_tile_index, selected_tile_for_supertile = state_tuple
+            global current_tile_index, selected_tile_for_supertile
+            current_tile_index, selected_tile_for_supertile = state_tuple
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
         def post_delete_hooks():
@@ -9865,11 +9907,11 @@ class TileEditorApp:
         _debug(f"Deleted supertile at index {delete_idx}")
 
     def _reposition_tile(self, source_index, target_index):
-        global num_tiles_in_set, tileset_patterns, tileset_colors
+        global tileset_patterns, tileset_colors
         global current_tile_index, selected_tile_for_supertile
 
-        if not (0 <= source_index < num_tiles_in_set): return False
-        clamped_target = max(0, min(target_index, num_tiles_in_set))
+        if not (0 <= source_index < len(tileset_patterns)): return False
+        clamped_target = max(0, min(target_index, len(tileset_patterns)))
         
         actual_insert_idx = clamped_target
         if source_index < clamped_target:
@@ -10002,7 +10044,7 @@ class TileEditorApp:
             items_across_calc = NUM_TILES_ACROSS # Constant for tile viewers
             item_render_w = VIEWER_TILE_SIZE
             item_render_h = VIEWER_TILE_SIZE
-            max_items_count = num_tiles_in_set
+            max_items_count = len(tileset_patterns)
         elif item_type_str == "supertile":
             item_render_w = self.supertile_grid_width * TILE_WIDTH
             item_render_h = self.supertile_grid_height * TILE_HEIGHT
@@ -10163,7 +10205,7 @@ class TileEditorApp:
                 item_w_ind = VIEWER_TILE_SIZE
                 item_h_ind = VIEWER_TILE_SIZE
                 items_across_ind = NUM_TILES_ACROSS
-                max_items_ind = num_tiles_in_set
+                max_items_ind = len(tileset_patterns)
             elif self.drag_item_type == "supertile":
                 item_w_ind = self.supertile_grid_width * TILE_WIDTH
                 item_h_ind = self.supertile_grid_height * TILE_HEIGHT
@@ -10207,7 +10249,7 @@ class TileEditorApp:
                 if item_type_for_click is None: return
 
                 max_items = 0
-                if item_type_for_click == "tile": max_items = num_tiles_in_set
+                if item_type_for_click == "tile": max_items = len(tileset_patterns)
                 elif item_type_for_click == "supertile": max_items = num_supertiles
 
                 index_at_release = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type_for_click)
@@ -10245,7 +10287,7 @@ class TileEditorApp:
             elif self.drag_item_type is not None: # Drag was active
                 item_type = self.drag_item_type
                 max_items = 0
-                if item_type == "tile": max_items = num_tiles_in_set
+                if item_type == "tile": max_items = len(tileset_patterns)
                 elif item_type == "supertile": max_items = num_supertiles
                 
                 is_alt_down = (event.state & 0x20000) != 0
@@ -10777,7 +10819,7 @@ class TileEditorApp:
                     used_tile_indices.add(definition[r][c])
         
         unused_tiles = set()
-        for i in range(1, num_tiles_in_set):
+        for i in range(1, len(tileset_patterns)):
             if i not in used_tile_indices:
                 unused_tiles.add(i)
         return unused_tiles
@@ -11891,7 +11933,7 @@ class TileEditorApp:
 
     def _execute_rom_tile_import(self):
         """Reads selected tile data from ROM and appends to the main tileset, using stored colors and offsets."""
-        global num_tiles_in_set, current_tile_index, tileset_patterns, tileset_colors
+        global current_tile_index, tileset_patterns, tileset_colors
 
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
@@ -11910,13 +11952,13 @@ class TileEditorApp:
         num_tiles_to_import_attempt = len(sorted_selected_items)
         imported_tiles_count = 0
         first_newly_imported_tile_index = -1
-        tileset_structure_changed = False # Flag to see if num_tiles_in_set actually increased
+        tileset_structure_changed = False # Flag to see if len(tileset_patterns) actually increased
 
         for current_rom_tile_absolute_idx, (fg_idx_for_import, bg_idx_for_import, fine_offset_for_import) in sorted_selected_items:
-            if num_tiles_in_set >= MAX_TILES:
+            if len(tileset_patterns) >= self.project_tile_limit:
                 messagebox.showinfo(
                     "Import Limit Reached",
-                    f"Tileset limit of {MAX_TILES} reached.\nImported {imported_tiles_count} of {num_tiles_to_import_attempt} selected tiles.",
+                    f"Project tileset limit of {self.project_tile_limit} reached.\nImported {imported_tiles_count} of {num_tiles_to_import_attempt} selected tiles.",
                     parent=dialog
                 )
                 break
@@ -11947,20 +11989,19 @@ class TileEditorApp:
                     for c_pixel in range(TILE_WIDTH):
                         new_tile_pattern_data[r_pixel][c_pixel] = 0 # Fill with background
 
-            if num_tiles_in_set < MAX_TILES:
-                if len(tileset_patterns) > num_tiles_in_set and len(tileset_colors) > num_tiles_in_set:
+            if len(tileset_patterns) < MAX_TILES:
+                if len(tileset_patterns) > len(tileset_patterns) and len(tileset_colors) > len(tileset_patterns):
                     if first_newly_imported_tile_index == -1:
-                        first_newly_imported_tile_index = num_tiles_in_set
+                        first_newly_imported_tile_index = len(tileset_patterns)
 
-                    tileset_patterns[num_tiles_in_set] = new_tile_pattern_data
-                    tileset_colors[num_tiles_in_set] = new_tile_color_data
+                    tileset_patterns[len(tileset_patterns)] = new_tile_pattern_data
+                    tileset_colors[len(tileset_patterns)] = new_tile_color_data
 
-                    num_tiles_in_set += 1
                     imported_tiles_count += 1
-                    tileset_structure_changed = True # num_tiles_in_set increased
+                    tileset_structure_changed = True # len(tileset_patterns) increased
                     self._mark_project_modified()
                 else:
-                    _error(f" ROM Import EXEC Error: Tileset data structures not large enough for index {num_tiles_in_set}.")
+                    _error(f" ROM Import EXEC Error: Tileset data structures not large enough for index {len(tileset_patterns)}.")
                     break
             else:
                 break
@@ -11972,7 +12013,7 @@ class TileEditorApp:
             if first_newly_imported_tile_index != -1:
                 current_tile_index = first_newly_imported_tile_index
             else: # Should not happen if tiles were imported
-                current_tile_index = num_tiles_in_set - 1
+                current_tile_index = len(tileset_patterns) - 1
 
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
@@ -12137,7 +12178,7 @@ class TileEditorApp:
                 pixel_data_for_base_tile = [] # Flat list of (r,g,b) tuples for 8x8 tile
                 valid_tile = True
 
-                if not (0 <= tile_idx_from_st_def < num_tiles_in_set):
+                if not (0 <= tile_idx_from_st_def < len(tileset_patterns)):
                     valid_tile = False
                 else:
                     pattern = tileset_patterns[tile_idx_from_st_def]
@@ -12812,36 +12853,37 @@ class TileEditorApp:
         return result["value"]
 
     def handle_add_many_tiles(self):
-        global num_tiles_in_set, current_tile_index # Still need global here
-        if num_tiles_in_set >= MAX_TILES:
-            messagebox.showinfo("Add Many Tiles", "Tileset is already full.", parent=self.root)
+        global current_tile_index
+        if len(tileset_patterns) >= self.project_tile_limit:
+            messagebox.showinfo("Add Many Tiles", f"Tileset is at its limit of {self.project_tile_limit}.", parent=self.root)
             return
-        space_available = MAX_TILES - num_tiles_in_set
+        space_available = self.project_tile_limit - len(tileset_patterns)
+
         num_to_add = self._create_add_many_dialog(
             parent=self.root, 
             title_text="Add Many Tiles",
             prompt_text=f"How many tiles to add? (1-{space_available})",
-            current_items=num_tiles_in_set,
+            current_items=len(tileset_patterns),
             max_items_total=MAX_TILES
         )
         if num_to_add is None or num_to_add <= 0: return
 
         if self._clear_marked_unused(trigger_redraw=False): pass
         
-        first_new_tile_idx = num_tiles_in_set
+        first_new_tile_idx = len(tileset_patterns)
         commands = []
         for i in range(num_to_add):
-            new_idx = num_tiles_in_set + i
+            new_idx = len(tileset_patterns) + i
             blank_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
             blank_colors = [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
             commands.append(ModifyListCommand("Add Tile", tileset_patterns, new_idx, blank_pattern, is_insert=True))
             commands.append(ModifyListCommand("Add Tile", tileset_colors, new_idx, blank_colors, is_insert=True))
 
-        old_state = (num_tiles_in_set, current_tile_index)
-        new_state = (num_tiles_in_set + num_to_add, first_new_tile_idx)
+        old_state = (len(tileset_patterns), current_tile_index)
+        new_state = (len(tileset_patterns) + num_to_add, first_new_tile_idx)
         def state_setter(state_tuple):
-            global num_tiles_in_set, current_tile_index
-            num_tiles_in_set, current_tile_index = state_tuple
+            global current_tile_index
+            current_tile_index = state_tuple[1]
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
         commands.append(state_command)
 
@@ -12902,10 +12944,10 @@ class TileEditorApp:
         _debug(f"[HANDLE ADD MANY] FINISHED. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
 
     def append_tileset_from_file(self):
-        global tileset_patterns, tileset_colors, current_tile_index, num_tiles_in_set # Using globals
-
-        if num_tiles_in_set >= MAX_TILES:
-            messagebox.showinfo("Append Tileset", "Current project tileset is already full. Cannot append.", parent=self.root)
+        global tileset_patterns, tileset_colors, current_tile_index
+        
+        if len(tileset_patterns) >= self.project_tile_limit:
+            messagebox.showinfo("Append Tileset", f"Current project tileset is at its limit of {self.project_tile_limit}. Cannot append.", parent=self.root)
             return
 
         load_path = filedialog.askopenfilename(
@@ -12984,7 +13026,8 @@ class TileEditorApp:
                     current_byte_offset_colors += bytes_per_tile_colors
 
             # File reading successful, now handle append logic
-            space_available = MAX_TILES - num_tiles_in_set
+            space_available = self.project_tile_limit - len(tileset_patterns)
+
             num_to_actually_append = tiles_in_file_count # How many we'd like to append
 
             if tiles_in_file_count > space_available:
@@ -13010,19 +13053,16 @@ class TileEditorApp:
 
             self._mark_project_modified()
             
-            first_appended_tile_idx = num_tiles_in_set # For selection later
+            first_appended_tile_idx = len(tileset_patterns) # For selection later
 
             for i in range(num_to_actually_append):
-                # These global lists (tileset_patterns, tileset_colors) are assumed to be
-                # already allocated to MAX_TILES length. We are writing into the slots.
-                if num_tiles_in_set < MAX_TILES: # Final check within loop
-                    tileset_patterns[num_tiles_in_set] = temp_loaded_patterns[i]
-                    tileset_colors[num_tiles_in_set] = temp_loaded_colors[i]
-                    num_tiles_in_set += 1
+                if len(tileset_patterns) < MAX_TILES: # Final check within loop
+                    tileset_patterns.append(temp_loaded_patterns[i])
+                    tileset_colors.append(temp_loaded_colors[i])
                 else:
-                    # Should not be reached if num_to_actually_append logic is correct
-                    _debug(" append_tileset: Exceeded MAX_TILES during append loop unexpectedly.")
-                    break 
+                    # This logic is correct: stop if the maximum is reached.
+                    _debug(" append_tileset: Exceeded MAX_TILES during append loop.")
+                    break
             
             current_tile_index = first_appended_tile_idx # Select first appended tile
 
@@ -13136,7 +13176,7 @@ class TileEditorApp:
         return result["action"]
 
     def append_supertiles_from_file(self):
-        global supertiles_data, num_supertiles, tileset_patterns, tileset_colors, num_tiles_in_set 
+        global supertiles_data, num_supertiles, tileset_patterns, tileset_colors
         global current_supertile_index, current_tile_index 
 
         st_load_path = filedialog.askopenfilename(
@@ -13202,7 +13242,7 @@ class TileEditorApp:
              return
 
         st_space_available = MAX_SUPERTILES - num_supertiles
-        tile_space_available = MAX_TILES - num_tiles_in_set
+        tile_space_available = MAX_TILES - len(tileset_patterns)
 
         if st_space_available <= 0:
             messagebox.showinfo("Append Supertiles", "Current project supertile set is full. Cannot append.", parent=self.root)
@@ -13233,7 +13273,7 @@ class TileEditorApp:
         
         temp_appended_tile_patterns = []
         temp_appended_tile_colors = []
-        original_starting_tile_index_in_project = num_tiles_in_set 
+        original_starting_tile_index_in_project = len(tileset_patterns) 
         num_tiles_actually_staged_from_file = 0
 
         if file_tile_count > 0 and num_tiles_to_attempt_append_from_file > 0:
@@ -13360,10 +13400,9 @@ class TileEditorApp:
         appended_tiles_actual_count = 0
         if num_tiles_actually_staged_from_file > 0:
             for i_append_tile in range(num_tiles_actually_staged_from_file): # Iterate only staged tiles
-                if num_tiles_in_set < MAX_TILES:
-                    tileset_patterns[num_tiles_in_set] = temp_appended_tile_patterns[i_append_tile]
-                    tileset_colors[num_tiles_in_set] = temp_appended_tile_colors[i_append_tile]
-                    num_tiles_in_set += 1
+                if len(tileset_patterns) < MAX_TILES:
+                    tileset_patterns[len(tileset_patterns)] = temp_appended_tile_patterns[i_append_tile]
+                    tileset_colors[len(tileset_patterns)] = temp_appended_tile_colors[i_append_tile]
                     appended_tiles_actual_count +=1
                 else: break
         
@@ -13514,7 +13553,7 @@ class TileEditorApp:
         _debug(f"\n Synchronizing from USAGE WINDOW: type='{item_type}', index={index}")
         global selected_color_index, current_tile_index, selected_tile_for_supertile 
         global current_supertile_index, selected_supertile_for_map 
-        global num_tiles_in_set, num_supertiles 
+        global num_supertiles 
 
         if item_type == "color":
             if not (0 <= index <= 15):
@@ -13552,8 +13591,8 @@ class TileEditorApp:
                 _error(f"   Unexpected error during color selection synchronization: {e}")
 
         elif item_type == "tile":
-            if not (0 <= index < num_tiles_in_set): 
-                _error(f"   Invalid tile index {index} (num_tiles_in_set: {num_tiles_in_set}). Sync aborted.")
+            if not (0 <= index < len(tileset_patterns)): 
+                _error(f"   Invalid tile index {index} (len(tileset_patterns): {len(tileset_patterns)}). Sync aborted.")
                 return
             
             try:
@@ -13663,7 +13702,7 @@ class TileEditorApp:
         # calling the new, granular _calculate_single_tile_usage method.
         results = []
         # Iterate only up to the current number of active tiles
-        for t_idx in range(num_tiles_in_set):
+        for t_idx in range(len(tileset_patterns)):
             # Call the new helper to get the counts for this specific tile
             total_uses, unique_sts = self._calculate_single_tile_usage(t_idx)
             
@@ -13775,7 +13814,7 @@ class TileEditorApp:
                         base_tile_draw_x = int(c_st_def * px_per_base_tile_w_on_temp)
                         base_tile_draw_y = int(r_st_def * px_per_base_tile_h_on_temp)
 
-                        if not (0 <= tile_idx_val < num_tiles_in_set):
+                        if not (0 <= tile_idx_val < len(tileset_patterns)):
                             for y_fill_inv in range(int(px_per_base_tile_h_on_temp)):
                                 for x_fill_inv in range(int(px_per_base_tile_w_on_temp)):
                                     dest_x_inv = base_tile_draw_x + x_fill_inv
@@ -14079,7 +14118,7 @@ class TileEditorApp:
         _debug(" _restore_window_states: Method finished.")
 
     def _calculate_tile_usage_in_single_supertile(self, tile_index, supertile_index):
-        if not (0 <= tile_index < num_tiles_in_set and 0 <= supertile_index < num_supertiles):
+        if not (0 <= tile_index < len(tileset_patterns) and 0 <= supertile_index < num_supertiles):
             return 0
 
         count = 0
@@ -14099,7 +14138,7 @@ class TileEditorApp:
         total_placements = 0
         unique_supertiles_that_use_it = set()
 
-        if not (0 <= tile_index_to_check < num_tiles_in_set):
+        if not (0 <= tile_index_to_check < len(tileset_patterns)):
             return 0, 0
 
         for st_idx in range(num_supertiles):
@@ -14159,7 +14198,7 @@ class TileEditorApp:
                 return 0, 0, set()
             return 0, 0, 0 
 
-        for tile_idx in range(num_tiles_in_set):
+        for tile_idx in range(len(tileset_patterns)):
             tile_uses_this_slot = False
             if tile_idx >= len(tileset_colors): continue
 
@@ -14570,7 +14609,7 @@ class TileEditorApp:
 
     def _handle_tile_usage_label_click(self, event=None):
         """Called when the usage label in the Tile Editor is clicked."""
-        if not (0 <= current_tile_index < num_tiles_in_set):
+        if not (0 <= current_tile_index < len(tileset_patterns)):
             return
 
         # Check if the tile is actually used in any supertiles before proceeding
@@ -14755,7 +14794,7 @@ class TileEditorApp:
 
     def _handle_st_tab_global_usage_click(self, event=None):
         """Called when the global tile usage label in the Supertile Editor is clicked."""
-        if not (0 <= selected_tile_for_supertile < num_tiles_in_set):
+        if not (0 <= selected_tile_for_supertile < len(tileset_patterns)):
             return
 
         # Check if the tile is actually used before proceeding
@@ -15438,9 +15477,7 @@ class TileEditorApp:
             self.active_msx_palette.append(f"#{r:02x}{g:02x}{b:02x}")
         
         # Replace tileset data
-        global num_tiles_in_set, current_tile_index, selected_tile_for_supertile, tileset_patterns, tileset_colors
-        
-        num_tiles_in_set = len(new_tileset_patterns)
+        global current_tile_index, selected_tile_for_supertile, tileset_patterns, tileset_colors
         
         # Reset selections
         current_tile_index = 0
@@ -15466,7 +15503,7 @@ class TileEditorApp:
         self._request_tile_usage_refresh()
         self._request_supertile_usage_refresh()
 
-        final_message = f"Successfully imported {num_tiles_in_set} tiles from the image."
+        final_message = f"Successfully imported {len(tileset_patterns)} tiles from the image."
         if ignore_duplicates and duplicates_skipped > 0:
             final_message += f"\n\n({duplicates_skipped} duplicate tiles were ignored.)"
         messagebox.showinfo("Import Complete", final_message, parent=self.root)
@@ -15791,7 +15828,7 @@ class TileEditorApp:
                 if item_type_for_click is None: return
 
                 max_items = 0
-                if item_type_for_click == "tile": max_items = num_tiles_in_set
+                if item_type_for_click == "tile": max_items = len(tileset_patterns)
                 elif item_type_for_click == "supertile": max_items = num_supertiles
 
                 index_at_release = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type_for_click)
@@ -15829,7 +15866,7 @@ class TileEditorApp:
             elif self.drag_item_type is not None:
                 item_type = self.drag_item_type
                 max_items = 0
-                if item_type == "tile": max_items = num_tiles_in_set
+                if item_type == "tile": max_items = len(tileset_patterns)
                 elif item_type == "supertile": max_items = num_supertiles
                 
                 is_alt_down = (event.state & 0x20000) != 0
@@ -16003,7 +16040,7 @@ class TileEditorApp:
         elif source_widget == self.st_tileset_canvas:
             _debug("[DEEP DIVE] Request from Supertile Editor Tileset to Tile Editor.")
             tile_idx_to_edit = self._get_index_from_canvas_coords(source_widget, event.x, event.y, "tile")
-            if 0 <= tile_idx_to_edit < num_tiles_in_set:
+            if 0 <= tile_idx_to_edit < len(tileset_patterns):
                 current_tile_index = tile_idx_to_edit
                 selected_tile_for_supertile = tile_idx_to_edit
                 self.notebook.select(self.tab_tile_editor)
@@ -16413,6 +16450,17 @@ class TileEditorApp:
         self._request_color_usage_refresh()
         self._request_tile_usage_refresh()
         self._request_supertile_usage_refresh()
+
+    def _apply_tile_limit_from_entry(self, event=None):
+        """Validates and applies the tileset limit from the UI Entry widget."""
+        try:
+            new_limit = self.tile_limit_var.get()
+            # This will be the new name for our refactored function
+            self.set_tileset_limit(new_limit)
+        except tk.TclError:
+            messagebox.showerror("Invalid Input", "Please enter a valid whole number for the limit.", parent=self.root)
+            # Reset the UI variable to the actual current limit
+            self.tile_limit_var.set(self.project_tile_limit)
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
