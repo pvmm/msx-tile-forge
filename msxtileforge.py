@@ -552,25 +552,39 @@ class SetDataCommand(ICommand):
         self.app_ref._mark_project_modified()
 
 class ModifyListCommand(ICommand):
-    """Command to handle insertion or deletion from lists."""
+    """Command to handle insertion or deletion from lists, adhering to strict state isolation."""
     def __init__(self, description, list_obj, index, value=None, is_insert=True):
         super().__init__(description)
         self.list_obj = list_obj
         self.index = index
-        self.value = value
         self.is_insert = is_insert
+
+        # Adhere to the "Immutable Command State" standard.
+        # All necessary state is captured via deepcopy at creation time.
+        if self.is_insert:
+            # For an insert, the value to be inserted is the state.
+            self.value = copy.deepcopy(value)
+        else:
+            # For a delete, the value being deleted is the state.
+            # Capture it BEFORE the delete happens.
+            self.value = copy.deepcopy(list_obj[index])
 
     def execute(self):
         if self.is_insert:
-            self.list_obj.insert(self.index, self.value)
+            # Adhere to the "State Isolation" standard.
+            # Insert a DEEP COPY of the internal value, not a reference to it.
+            self.list_obj.insert(self.index, copy.deepcopy(self.value))
         else:
-            self.value = self.list_obj.pop(self.index)
+            # The action is simple; the state was already captured.
+            self.list_obj.pop(self.index)
 
     def undo(self):
         if self.is_insert:
             self.list_obj.pop(self.index)
         else:
-            self.list_obj.insert(self.index, self.value)
+            # Adhere to the "State Isolation" standard.
+            # Insert a DEEP COPY of the internal value, not a reference to it.
+            self.list_obj.insert(self.index, copy.deepcopy(self.value))
 
 class ReplaceRefsCommand(ICommand):
     """Command to replace all references of one item with another."""
@@ -826,6 +840,88 @@ class UpdateMapRefsForSupertileSwapCommand(ICommand):
 
     def undo(self):
         self._swap_logic() # Swap is its own inverse
+
+class SetTilesetLimitCommand(ICommand):
+    """Command to handle changing the tileset limit, adhering to strict state isolation."""
+    def __init__(self, app_ref, new_limit):
+        super().__init__("Set Tileset Limit")
+        self.app_ref = app_ref
+        
+        # --- Capture "Before" State ---
+        self.old_limit = self.app_ref.project_tile_limit
+        self.old_patterns = copy.deepcopy(tileset_patterns)
+        self.old_colors = copy.deepcopy(tileset_colors)
+        self.old_supertiles_data = copy.deepcopy(supertiles_data)
+        self.old_current_tile_index = current_tile_index
+        self.old_selected_tile_for_supertile = selected_tile_for_supertile
+
+        # --- Calculate and Capture Definitive "After" State ---
+        self.new_limit = new_limit
+        
+        # Start with a copy of the "before" state to calculate the "after" state
+        after_patterns = copy.deepcopy(self.old_patterns)
+        after_colors = copy.deepcopy(self.old_colors)
+        after_supertiles_data = copy.deepcopy(self.old_supertiles_data)
+        current_size = len(after_patterns)
+
+        if self.new_limit < current_size:
+            # Truncation logic applied to our temporary "after" state copies
+            for st_def in after_supertiles_data:
+                for r in range(self.app_ref.supertile_grid_height):
+                    for c in range(self.app_ref.supertile_grid_width):
+                        if st_def[r][c] >= self.new_limit:
+                            st_def[r][c] = 0
+            
+            del after_patterns[self.new_limit:]
+            del after_colors[self.new_limit:]
+
+        # Store the calculated "after" state in the command
+        self.after_patterns = after_patterns
+        self.after_colors = after_colors
+        self.after_supertiles_data = after_supertiles_data
+        self.after_current_tile_index = min(self.old_current_tile_index, len(self.after_patterns) - 1)
+        self.after_selected_tile_for_supertile = min(self.old_selected_tile_for_supertile, len(self.after_patterns) - 1)
+
+    def _apply_and_update(self, limit, patterns, colors, st_data, cti, sts):
+        """Helper method to apply a given state by modifying lists in-place."""
+        global tileset_patterns, tileset_colors, supertiles_data
+        global current_tile_index, selected_tile_for_supertile
+
+        self.app_ref.project_tile_limit = limit
+        
+        # Adhere to the State Isolation standard: apply a DEEP COPY of the
+        # backup state to the live lists. This breaks the reference chain
+        # and prevents future commands from contaminating this command's state.
+        tileset_patterns.clear()
+        tileset_patterns.extend(copy.deepcopy(patterns))
+        
+        tileset_colors.clear()
+        tileset_colors.extend(copy.deepcopy(colors))
+        
+        supertiles_data.clear()
+        supertiles_data.extend(copy.deepcopy(st_data))
+
+        current_tile_index = cti
+        selected_tile_for_supertile = sts
+
+        # --- Post-change UI updates ---
+        self.app_ref.tile_limit_var.set(limit)
+        self.app_ref._mark_project_modified()
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref.update_all_displays(changed_level="all")
+        self.app_ref._update_editor_button_states()
+        self.app_ref._request_color_usage_refresh()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        _debug("Executing SetTilesetLimitCommand: Applying pre-calculated 'after' state.")
+        self._apply_and_update(self.new_limit, self.after_patterns, self.after_colors, self.after_supertiles_data, self.after_current_tile_index, self.after_selected_tile_for_supertile)
+
+    def undo(self):
+        _debug("Undoing SetTilesetLimitCommand: Applying pre-calculated 'before' state.")
+        self._apply_and_update(self.old_limit, self.old_patterns, self.old_colors, self.old_supertiles_data, self.old_current_tile_index, self.old_selected_tile_for_supertile)
 
 # --- Usage Window Classes -----------------------------------------------------------------------------------------------
 class ColorUsageWindow(tk.Toplevel):
@@ -5920,6 +6016,10 @@ class TileEditorApp:
         self.supertile_grid_height = new_dim_h
         _debug(f" New project data model: Supertile dimensions set to {self.supertile_grid_width}W x {self.supertile_grid_height}H.")
 
+        # Reset the project limit to default and update the UI variable
+        self.project_tile_limit = MAX_TILES
+        self.tile_limit_var.set(self.project_tile_limit)
+
         self._clear_marked_unused(trigger_redraw=False)
 
         tileset_patterns = [
@@ -6980,6 +7080,10 @@ class TileEditorApp:
             _debug(" open_project: Finalizing SUCCESS. Setting project path and modified status.")
             self.current_project_base_path = base_path
             self.project_modified = False
+
+            # After a successful load, sync the UI entry with the loaded limit
+            self.tile_limit_var.set(self.project_tile_limit)
+
             _debug(f" open_project: Project '{base_name}' data loaded successfully.")
             _debug(" open_project: Returning True.")
             return True
@@ -7083,20 +7187,22 @@ class TileEditorApp:
         _debug(" _perform_project_load_ui_updates: Deferred UI updates complete.")
 
     def set_tileset_limit(self, new_limit):
-        """Sets a new capacity limit for the tileset, truncating if necessary."""
-        global tileset_patterns, tileset_colors, current_tile_index, selected_tile_for_supertile
-
+        """Handles user request to set a new tileset limit. Creates and executes an undoable command."""
+        
         # 1. Validate the new limit
         if not (1 <= new_limit <= MAX_TILES):
             messagebox.showerror("Invalid Limit", f"Tileset limit must be between 1 and {MAX_TILES}.", parent=self.root)
             self.tile_limit_var.set(self.project_tile_limit) # Reset UI to the last valid limit
             return
 
+        # Do nothing if the limit hasn't actually changed
+        if new_limit == self.project_tile_limit:
+            return
+
         current_size = len(tileset_patterns)
 
-        # 2. Handle truncation if the new limit is smaller than the current number of tiles
+        # 2. Handle confirmation only if tiles will be deleted (truncation)
         if new_limit < current_size:
-            # 2a. Check for usage and get user confirmation
             affected_supertiles = set()
             for i in range(new_limit, current_size):
                 usage = self._check_tile_usage(i)
@@ -7104,55 +7210,19 @@ class TileEditorApp:
                     affected_supertiles.update(usage)
             
             warning_msg = (
-                f"Setting the limit to {new_limit} will permanently delete tiles from index {new_limit} to {current_size - 1}.\n\n"
-                "This action CANNOT BE UNDONE and will clear the undo history."
+                f"Setting the limit to {new_limit} will delete tiles from index {new_limit} to {current_size - 1}.\n\n"
+                "This action is fully undoable."
             )
             if affected_supertiles:
-                warning_msg += "\n\n*** WARNING! ***\nTiles being deleted are in use by one or more supertiles."
+                warning_msg += "\n\nTiles being deleted are in use by one or more supertiles."
 
             if not messagebox.askokcancel("Confirm Truncate Tileset", warning_msg, icon="warning", parent=self.root):
                 self.tile_limit_var.set(self.project_tile_limit) # Reset UI on cancel
                 return
-            
-            # 2b. Perform the truncation
-            self._mark_project_modified()
-            
-            # Update supertile references for all tiles that will be deleted
-            for st_idx, st_def in enumerate(supertiles_data):
-                was_modified = False
-                for r in range(self.supertile_grid_height):
-                    for c in range(self.supertile_grid_width):
-                        if st_def[r][c] >= new_limit:
-                            st_def[r][c] = 0
-                            was_modified = True
-                
-                # If any tile in this supertile was reset, invalidate its cache.
-                if was_modified:
-                    self.invalidate_supertile_cache(st_idx)
-
-            # Physically shorten the lists
-            del tileset_patterns[new_limit:]
-            del tileset_colors[new_limit:]
-            
-            # Adjust selections to be within the new valid range
-            current_tile_index = min(current_tile_index, new_limit - 1)
-            selected_tile_for_supertile = min(selected_tile_for_supertile, new_limit - 1)
-            
-            self.undo_manager.clear() # Clear the undo history as this was a destructive action
-
-        # 3. Update the project's limit
-        self.project_tile_limit = new_limit
-        self.tile_limit_var.set(new_limit)
-
-        # 4. Update all relevant UI elements
-        self.update_tile_info_label()
-        self._update_editor_button_states()
-        self.update_all_displays(changed_level="all") # Redraw viewers to reflect changes
         
-        # Request a refresh for ALL usage windows as their data has been affected.
-        self._request_color_usage_refresh()
-        self._request_tile_usage_refresh()
-        self._request_supertile_usage_refresh()
+        # 3. If confirmed (or if changing limit without truncation), create and execute the command.
+        command = SetTilesetLimitCommand(self, new_limit)
+        self.undo_manager.execute(command)
 
     def set_supertile_count(self):
         global num_supertiles, current_supertile_index, selected_supertile_for_map, supertiles_data
@@ -9462,8 +9532,8 @@ class TileEditorApp:
         global num_supertiles # Using globals
 
         # --- Tile Editor Buttons ---
-        can_add_tile = len(tileset_patterns) < MAX_TILES
-        can_insert_tile = len(tileset_patterns) < MAX_TILES # Same condition as adding for enabling insert
+        can_add_tile = len(tileset_patterns) < self.project_tile_limit
+        can_insert_tile = len(tileset_patterns) < self.project_tile_limit
         can_delete_tile = len(tileset_patterns) > 1
 
         if hasattr(self, "add_tile_button") and self.add_tile_button.winfo_exists():
