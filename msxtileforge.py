@@ -51,7 +51,6 @@ DEFAULT_SUPERTILE_GRID_WIDTH = 4
 DEFAULT_SUPERTILE_GRID_HEIGHT = 4
 SUPERTILE_DEF_TILE_SIZE = TILE_WIDTH * 4  # 32
 SUPERTILE_SELECTOR_PREVIEW_SIZE = TILE_WIDTH * 4 # Used for an old ST selector calculation, review if still needed for that
-NUM_SUPERTILES_ACROSS = 8 # Used for an old ST selector calculation, review if still needed for that
 MAX_SUPERTILES = 65535 # MODIFIED - Increased from 256
 DEFAULT_MAP_WIDTH = 32  # In supertiles
 DEFAULT_MAP_HEIGHT = 24  # In supertiles
@@ -164,15 +163,14 @@ tileset_colors = [
 tileset_patterns = [
     [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)] for _ in range(MAX_TILES)
 ]
+# Initialize with one empty supertile. The list will grow dynamically.
 supertiles_data = [
     [[0 for _ in range(DEFAULT_SUPERTILE_GRID_WIDTH)] for _ in range(DEFAULT_SUPERTILE_GRID_HEIGHT)]
-    for _ in range(MAX_SUPERTILES)
 ]
 current_tile_index = 0
 selected_color_index = WHITE_IDX
 last_drawn_pixel = None
 current_supertile_index = 0
-num_supertiles = 1
 selected_tile_for_supertile = 0
 map_width = DEFAULT_MAP_WIDTH  # In supertiles
 map_height = DEFAULT_MAP_HEIGHT  # In supertiles
@@ -664,7 +662,7 @@ class UpdateSupertileRefsForTileCommand(ICommand):
 
     def _process_refs(self, is_forward):
         # is_forward = True for execute, False for undo
-        active_slice = supertiles_data[:num_supertiles]
+        active_slice = supertiles_data[:len(supertiles_data)]
         
         if (self.is_insert and is_forward) or (not self.is_insert and not is_forward):
             # This is an INSERT action
@@ -762,7 +760,7 @@ class UpdateSupertileRefsForTileReorderCommand(ICommand):
         self.actual_insert_idx = actual_insert_idx
 
     def _process_refs(self, is_undo):
-        active_slice = supertiles_data[:num_supertiles]
+        active_slice = supertiles_data[:len(supertiles_data)]
         source, target = (self.actual_insert_idx, self.source_index) if is_undo else (self.source_index, self.actual_insert_idx)
 
         for st_def in active_slice:
@@ -797,7 +795,7 @@ class UpdateSupertileRefsForTileSwapCommand(ICommand):
         self.index_b = index_b
 
     def _swap_logic(self):
-        active_slice = supertiles_data[:num_supertiles]
+        active_slice = supertiles_data[:len(supertiles_data)]
         for st_def in active_slice:
             for r in range(len(st_def)):
                 for c in range(len(st_def[r])):
@@ -923,6 +921,76 @@ class SetTilesetLimitCommand(ICommand):
         _debug("Undoing SetTilesetLimitCommand: Applying pre-calculated 'before' state.")
         self._apply_and_update(self.old_limit, self.old_patterns, self.old_colors, self.old_supertiles_data, self.old_current_tile_index, self.old_selected_tile_for_supertile)
 
+class SetSupertileLimitCommand(ICommand):
+    """Command to handle changing the supertile limit."""
+    def __init__(self, app_ref, new_limit):
+        super().__init__("Set Supertile Limit")
+        self.app_ref = app_ref
+
+        # --- Capture "Before" State ---
+        self.old_limit = self.app_ref.project_supertile_limit
+        self.old_supertiles_data = copy.deepcopy(supertiles_data)
+        self.old_map_data = copy.deepcopy(map_data)
+        self.old_current_supertile_index = current_supertile_index
+        self.old_selected_supertile_for_map = selected_supertile_for_map
+
+        # --- Calculate and Capture Definitive "After" State ---
+        self.new_limit = new_limit
+        
+        after_supertiles_data = copy.deepcopy(self.old_supertiles_data)
+        after_map_data = copy.deepcopy(self.old_map_data)
+        current_size = len(after_supertiles_data)
+
+        if self.new_limit < current_size:
+            # Truncate supertiles
+            del after_supertiles_data[self.new_limit:]
+            # Reset references in map
+            for r in range(len(after_map_data)):
+                for c in range(len(after_map_data[r])):
+                    if after_map_data[r][c] >= self.new_limit:
+                        after_map_data[r][c] = 0
+
+        # Store the calculated "after" state
+        self.after_supertiles_data = after_supertiles_data
+        self.after_map_data = after_map_data
+        self.after_current_supertile_index = min(self.old_current_supertile_index, len(self.after_supertiles_data) - 1)
+        self.after_selected_supertile_for_map = min(self.old_selected_supertile_for_map, len(self.after_supertiles_data) - 1)
+
+    def _apply_and_update(self, limit, st_data, m_data, csi, ssm):
+        """Helper method to apply a given state."""
+        global supertiles_data, map_data
+        global current_supertile_index, selected_supertile_for_map
+
+        _debug(f"[_apply_and_update] Setting app_ref.project_supertile_limit to: {limit}")
+        self.app_ref.project_supertile_limit = limit
+        
+        supertiles_data.clear()
+        supertiles_data.extend(copy.deepcopy(st_data))
+        
+        map_data.clear()
+        map_data.extend(copy.deepcopy(m_data))
+
+        current_supertile_index = csi
+        selected_supertile_for_map = ssm
+
+        # --- Post-change UI updates ---
+        self.app_ref.supertile_limit_var.set(limit)
+        self.app_ref._mark_project_modified()
+        self.app_ref.clear_all_caches()
+        self.app_ref.invalidate_minimap_background_cache()
+        self.app_ref.update_all_displays(changed_level="all")
+        self.app_ref._update_editor_button_states()
+        self.app_ref._request_tile_usage_refresh()
+        self.app_ref._request_supertile_usage_refresh()
+
+    def execute(self):
+        _debug("Executing SetSupertileLimitCommand.")
+        self._apply_and_update(self.new_limit, self.after_supertiles_data, self.after_map_data, self.after_current_supertile_index, self.after_selected_supertile_for_map)
+
+    def undo(self):
+        _debug("Undoing SetSupertileLimitCommand.")
+        self._apply_and_update(self.old_limit, self.old_supertiles_data, self.old_map_data, self.old_current_supertile_index, self.old_selected_supertile_for_map)
+        
 # --- Usage Window Classes -----------------------------------------------------------------------------------------------
 class ColorUsageWindow(tk.Toplevel):
     def __init__(self, master_app):
@@ -2015,11 +2083,11 @@ class SupertileUsageWindow(tk.Toplevel):
                 usage_data = self.app_ref._calculate_supertile_usage_data()
             except Exception as e:
                 _error(f" SupertileUsageWindow: Error calling _calculate_supertile_usage_data: {e}")
-                for i in range(getattr(self.app_ref, 'num_supertiles', 0)):
+                for i in range(getattr(self.app_ref, 'len(supertiles_data)', 0)):
                      usage_data.append({'st_index': i, 'uses_on_map_count': 0})
         else:
             _debug(" SupertileUsageWindow: _calculate_supertile_usage_data not found.")
-            for i in range(getattr(self.app_ref, 'num_supertiles', 0)):
+            for i in range(getattr(self.app_ref, 'len(supertiles_data)', 0)):
                  usage_data.append({'st_index': i, 'uses_on_map_count': 0})
 
         valid_sort_key = self.current_sort_column_id
@@ -2114,7 +2182,6 @@ class SupertileUsageWindow(tk.Toplevel):
             except tk.TclError: pass
 
     def _on_item_selected(self, event):
-        global num_supertiles 
         if not self.tree.winfo_exists(): return
         selected_items = self.tree.selection()
         if not selected_items: return
@@ -2130,12 +2197,12 @@ class SupertileUsageWindow(tk.Toplevel):
             _error(f" SupertileUsageWindow: Error parsing st_index from iid '{item_iid_str}': {e}")
             return
         
-        if 0 <= actual_st_idx < num_supertiles: 
+        if 0 <= actual_st_idx < len(supertiles_data): 
             _debug(f" SupertileUsageWindow: Item selected, st_index: {actual_st_idx}")
             if hasattr(self.app_ref, 'synchronize_selection_from_usage_window'):
                 self.app_ref.synchronize_selection_from_usage_window("supertile", actual_st_idx)
         else:
-            _debug(f" SupertileUsageWindow: Parsed invalid st_index {actual_st_idx} (global num_supertiles: {num_supertiles}) for selection sync.")
+            _debug(f" SupertileUsageWindow: Parsed invalid st_index {actual_st_idx} (len(supertiles_data): {len(supertiles_data)}) for selection sync.")
 
     def request_refresh(self, delay_ms=300):
         # _debug(f" SupertileUsageWindow: request_refresh called. Current timer: {self.refresh_timer_id}")
@@ -2237,7 +2304,7 @@ class SupertileUsageWindow(tk.Toplevel):
 
             try:
                 st_index = int(item_iid.split("_")[1])
-                if not (0 <= st_index < num_supertiles): return
+                if not (0 <= st_index < len(supertiles_data)): return
 
                 # If the click was on a data cell (not the preview image)...
                 if region == "cell":
@@ -2856,6 +2923,12 @@ class TileEditorApp:
         self.window_view_tile_y = 0
         self.window_view_tile_w = tk.IntVar(value=DEFAULT_WIN_VIEW_WIDTH_TILES)
         self.window_view_tile_h = tk.IntVar(value=DEFAULT_WIN_VIEW_HEIGHT_TILES)
+        self.tile_limit_var = tk.IntVar(value=MAX_TILES)
+
+        # Variables for the Supertile limit feature
+        self.project_supertile_limit = MAX_SUPERTILES
+        self.supertile_limit_var = tk.IntVar(value=MAX_SUPERTILES)
+    
         self.window_view_resize_handle = None
         self.drag_start_x = 0 
         self.drag_start_y = 0
@@ -2905,8 +2978,6 @@ class TileEditorApp:
         self.tile_usage_window = None
         self.supertile_usage_window = None 
 
-        self.tile_limit_var = tk.IntVar(value=MAX_TILES)
-        
         # --- Load settings, which will be used later ---
         self._load_app_settings()
 
@@ -3027,7 +3098,7 @@ class TileEditorApp:
         keys_to_remove = [k for k in self.tile_image_cache if k[0] == tile_index]
         for key in keys_to_remove:
             self.tile_image_cache.pop(key, None)
-        for st_index in range(num_supertiles):
+        for st_index in range(len(supertiles_data)):
             definition = supertiles_data[st_index]
             used = False
             # Check if definition is valid for current dimensions before iterating
@@ -3137,7 +3208,7 @@ class TileEditorApp:
 
         img = tk.PhotoImage(width=safe_target_preview_width, height=safe_target_preview_height)
 
-        if not (0 <= supertile_index < num_supertiles):
+        if not (0 <= supertile_index < len(supertiles_data)):
             img.put(INVALID_SUPERTILE_COLOR, to=(0, 0, safe_target_preview_width, safe_target_preview_height))
             self.supertile_image_cache[cache_key] = img
             return img
@@ -3938,26 +4009,28 @@ class TileEditorApp:
         self.supertile_selector_canvas.bind("<Button-4>", self._on_mousewheel_scroll, add="+")
         self.supertile_selector_canvas.bind("<Button-5>", self._on_mousewheel_scroll, add="+")
 
-        self.add_supertile_button = ttk.Button(
-            bottom_controls_frame, text="Add New", command=self.handle_add_supertile
-        )
-        self.add_supertile_button.pack(side=tk.LEFT, padx=(0, 3))
-        self.add_many_supertiles_button = ttk.Button(
-            bottom_controls_frame, text="Add Many...", command=self.handle_add_many_supertiles
-        )
-        self.add_many_supertiles_button.pack(side=tk.LEFT, padx=3)
-        self.insert_supertile_button = ttk.Button(
-            bottom_controls_frame, text="Insert", command=self.handle_insert_supertile
-        )
-        self.insert_supertile_button.pack(side=tk.LEFT, padx=3)
-        self.delete_supertile_button = ttk.Button(
-            bottom_controls_frame, text="Delete", command=self.handle_delete_supertile
-        )
-        self.delete_supertile_button.pack(side=tk.LEFT, padx=3)
-        self.supertile_sel_info_label = ttk.Label(
-            bottom_controls_frame, text=f"Supertiles: {num_supertiles}" 
-        )
-        self.supertile_sel_info_label.pack(side=tk.LEFT, anchor=tk.W, padx=(10, 0))
+        self.add_supertile_button = ttk.Button(bottom_controls_frame, text="Add New", command=self.handle_add_supertile)
+        self.add_supertile_button.grid(row=0, column=0, padx=(0, 3))
+
+        self.add_many_supertiles_button = ttk.Button(bottom_controls_frame, text="Add Many...", command=self.handle_add_many_supertiles)
+        self.add_many_supertiles_button.grid(row=0, column=1, padx=3)
+
+        self.supertile_sel_info_label = ttk.Label(bottom_controls_frame, text=f"Supertiles: 1 / {MAX_SUPERTILES}")
+        self.supertile_sel_info_label.grid(row=0, column=2, padx=(10, 2))
+
+        self.supertile_limit_entry = ttk.Entry(bottom_controls_frame, textvariable=self.supertile_limit_var, width=5)
+        self.supertile_limit_entry.grid(row=0, column=3, padx=2)
+        self.supertile_limit_entry.bind("<Return>", lambda e: self._apply_supertile_limit_from_entry())
+
+        self.apply_supertile_limit_button = ttk.Button(bottom_controls_frame, text="Set Limit", command=self._apply_supertile_limit_from_entry)
+        self.apply_supertile_limit_button.grid(row=0, column=4, padx=(2, 0))
+
+        # Row 1: Insert and Delete buttons
+        self.insert_supertile_button = ttk.Button(bottom_controls_frame, text="Insert", command=self.handle_insert_supertile)
+        self.insert_supertile_button.grid(row=1, column=0, padx=(0, 3), pady=(5, 0))
+
+        self.delete_supertile_button = ttk.Button(bottom_controls_frame, text="Delete", command=self.handle_delete_supertile)
+        self.delete_supertile_button.grid(row=1, column=1, padx=3, pady=(5, 0))
 
     def create_map_editor_widgets(self, parent_frame):
         main_frame = ttk.Frame(parent_frame)
@@ -4522,12 +4595,12 @@ class TileEditorApp:
         self.tile_info_label.config(text=f"Tiles: {len(tileset_patterns)} /")
 
     def _update_supertile_info_label(self):
-        self.supertile_sel_info_label.config(text=f"Supertiles: {num_supertiles}")
+        self.supertile_sel_info_label.config(text=f"Supertiles: {len(supertiles_data)} /")
 
     def draw_supertile_definition_canvas(self):
         canvas = self.supertile_def_canvas
         canvas.delete("all")
-        if not (0 <= current_supertile_index < num_supertiles):
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             return
 
         definition = supertiles_data[current_supertile_index]
@@ -4609,7 +4682,7 @@ class TileEditorApp:
 
             _debug(f" draw_supertile_selector: Calculated items_across: {items_across}")
 
-            num_logical_rows = math.ceil(num_supertiles / items_across) if items_across > 0 else num_supertiles
+            num_logical_rows = math.ceil(len(supertiles_data) / items_across) if items_across > 0 else len(supertiles_data)
             # Scrollregion width should be based on the calculated items_across to fit them snugly
             scroll_content_width = (items_across * item_pixel_w) + ((items_across + 1) * padding)
             scroll_content_height = (num_logical_rows * item_pixel_h) + ((num_logical_rows + 1) * padding)
@@ -4646,7 +4719,7 @@ class TileEditorApp:
             for r_grid in range(start_draw_row, end_draw_row):
                 for c_grid in range(items_across):
                     st_idx = r_grid * items_across + c_grid
-                    if st_idx >= num_supertiles: break
+                    if st_idx >= len(supertiles_data): break
 
                     base_x = (c_grid * (item_pixel_w + padding)) + padding
                     base_y = (r_grid * (item_pixel_h + padding)) + padding
@@ -4672,7 +4745,7 @@ class TileEditorApp:
                     canvas.create_rectangle(
                         bx1, by1, bx2, by2, outline=outline_color, width=outline_width, tags=f"st_border_{st_idx}"
                     )
-                if st_idx >= num_supertiles -1 : break # Break outer loop if all STs processed
+                if st_idx >= len(supertiles_data) -1 : break # Break outer loop if all STs processed
         except tk.TclError as e: _error(f" TclError in draw_supertile_selector: {e}")
         except Exception as e: _error(f" Unexpected error in draw_supertile_selector: {e}")
 
@@ -5512,7 +5585,7 @@ class TileEditorApp:
             if canvas.winfo_exists(): canvas.config(cursor="")
         except tk.TclError: pass
 
-        if 0 <= clicked_index < num_supertiles:
+        if 0 <= clicked_index < len(supertiles_data):
             self.drag_item_type = "supertile"
             self.drag_start_index = clicked_index
             self.drag_press_x = event.x
@@ -5543,7 +5616,7 @@ class TileEditorApp:
             if canvas.winfo_exists(): canvas.config(cursor="")
         except tk.TclError: pass
 
-        if 0 <= clicked_index < num_supertiles:
+        if 0 <= clicked_index < len(supertiles_data):
             self.drag_item_type = "supertile"
             self.drag_start_index = clicked_index
             self.drag_press_x = event.x
@@ -5974,7 +6047,7 @@ class TileEditorApp:
     def new_project(self, interactive=True):
         # Resets all project data structures to a default new state.
         global tileset_patterns, tileset_colors, current_tile_index
-        global supertiles_data, current_supertile_index, num_supertiles, selected_tile_for_supertile
+        global supertiles_data, current_supertile_index, selected_tile_for_supertile
         global map_data, map_width, map_height, selected_supertile_for_map, last_painted_map_cell
         global selected_color_index
 
@@ -6019,6 +6092,8 @@ class TileEditorApp:
         # Reset the project limit to default and update the UI variable
         self.project_tile_limit = MAX_TILES
         self.tile_limit_var.set(self.project_tile_limit)
+        self.project_supertile_limit = MAX_SUPERTILES
+        self.supertile_limit_var.set(self.project_supertile_limit)
 
         self._clear_marked_unused(trigger_redraw=False)
 
@@ -6033,10 +6108,8 @@ class TileEditorApp:
 
         supertiles_data = [
             [[0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)]
-            for _st in range(MAX_SUPERTILES)
         ]
         current_supertile_index = 0
-        num_supertiles = 1
         selected_supertile_for_map = 0
 
         map_width = DEFAULT_MAP_WIDTH
@@ -6508,7 +6581,7 @@ class TileEditorApp:
             return False
 
     def save_supertiles(self, filepath=None, is_standalone_operation=True):
-        global num_supertiles, supertiles_data # Using globals
+        global supertiles_data
         save_path = filepath
         if not save_path:
             save_path = filedialog.asksaveasfilename(
@@ -6521,35 +6594,39 @@ class TileEditorApp:
 
         try:
             with open(save_path, "wb") as f:
-                # num_supertiles is the actual count (1 to MAX_SUPERTILES)
-                if 1 <= num_supertiles <= 255:
-                    f.write(struct.pack("B", num_supertiles))
-                elif 256 <= num_supertiles <= MAX_SUPERTILES: # MAX_SUPERTILES is now 65535
+                # len(supertiles_data) is the actual count (1 to MAX_SUPERTILES)
+                if 1 <= len(supertiles_data) <= 255:
+                    f.write(struct.pack("B", len(supertiles_data)))
+                elif 256 <= len(supertiles_data) <= MAX_SUPERTILES: # MAX_SUPERTILES is now 65535
                     f.write(struct.pack("B", 0)) # Indicator byte
-                    f.write(struct.pack("<H", num_supertiles)) # 2-byte unsigned short for actual count
+                    f.write(struct.pack("<H", len(supertiles_data))) # 2-byte unsigned short for actual count
                 else:
-                    # This case should not be reached if num_supertiles is always valid (e.g. 0 not allowed)
-                    _debug(f" save_supertiles: Invalid num_supertiles value ({num_supertiles}) for saving.")
-                    raise ValueError(f"num_supertiles ({num_supertiles}) out of expected range for saving.")
+                    # This case should not be reached if len(supertiles_data) is always valid (e.g. 0 not allowed)
+                    _debug(f" save_supertiles: Invalid len(supertiles_data) value ({len(supertiles_data)}) for saving.")
+                    raise ValueError(f"len(supertiles_data) ({len(supertiles_data)}) out of expected range for saving.")
                 
                 # Write supertile grid dimensions (these remain 1 byte each)
                 f.write(struct.pack("B", self.supertile_grid_width))
                 f.write(struct.pack("B", self.supertile_grid_height))
 
-                reserved_data = bytes([0] * RESERVED_BYTES_COUNT)
-                f.write(reserved_data)
+                # Use first 2 reserved bytes to store the supertile limit.
+                _debug(f"[save_supertiles] Saving self.project_supertile_limit value ({self.project_supertile_limit}).")
+                limit_value_to_write = 0xFFFF if self.project_supertile_limit >= MAX_SUPERTILES else self.project_supertile_limit
+                f.write(struct.pack("<H", limit_value_to_write))
+                # Write the remaining reserved bytes as zero.
+                f.write(bytes([0] * (RESERVED_BYTES_COUNT - 2)))
                 
                 tiles_per_definition = self.supertile_grid_width * self.supertile_grid_height
-                if tiles_per_definition <= 0 and num_supertiles > 0 : # Defensive check for invalid grid dims
+                if tiles_per_definition <= 0 and len(supertiles_data) > 0 : # Defensive check for invalid grid dims
                     _debug(f" save_supertiles: Invalid supertile dimensions ({self.supertile_grid_width}x{self.supertile_grid_height}), cannot save data.")
                     raise ValueError("Supertile dimensions are zero or negative, cannot save definition data.")
 
                 # Write data for each supertile
-                for i in range(num_supertiles): # Iterate up to the actual number of supertiles
+                for i in range(len(supertiles_data)): # Iterate up to the actual number of supertiles
                     if i >= len(supertiles_data): # Safety break
-                        _de_warningbug(f" save_supertiles: num_supertiles ({num_supertiles}) > len(supertiles_data). Stopping ST data write at ST {i}.")
+                        _de_warningbug(f" save_supertiles: len(supertiles_data) ({len(supertiles_data)}) > len(supertiles_data). Stopping ST data write at ST {i}.")
                         # Pad remaining ST definitions if this happens
-                        for _ in range(num_supertiles - i):
+                        for _ in range(len(supertiles_data) - i):
                             for _ in range(tiles_per_definition):
                                 f.write(struct.pack("B", 0)) # Write 0 for each tile index
                         break
@@ -6593,7 +6670,7 @@ class TileEditorApp:
 
     def open_supertiles(self, filepath=None, is_standalone_operation=True):
         # Loads a supertile file, returning True on success, False on failure.
-        global supertiles_data, num_supertiles, current_supertile_index, selected_supertile_for_map
+        global supertiles_data, current_supertile_index, selected_supertile_for_map
         load_path = filepath
         if not load_path:
             load_path = filedialog.askopenfilename(
@@ -6638,11 +6715,19 @@ class TileEditorApp:
                 expected_size_new = header_size + RESERVED_BYTES_COUNT + data_payload_size
                 expected_size_old = header_size + data_payload_size
 
-                has_reserved_bytes = False
-                if file_size_check == expected_size_new: has_reserved_bytes = True
-                elif file_size_check != expected_size_old: raise ValueError(f"File size mismatch. Expected old: {expected_size_old} or new: {expected_size_new}, got {file_size_check}.")
-
-                if has_reserved_bytes: f.read(RESERVED_BYTES_COUNT)
+                limit_bytes = f.read(2)
+                if len(limit_bytes) < 2: raise EOFError("EOF reading supertile limit bytes.")
+                limit_from_file = struct.unpack("<H", limit_bytes)[0]
+                _debug(f"[open_supertiles] Read supertileset size limit from file: {limit_from_file}.")
+                # Read and discard remaining reserved bytes
+                f.read(RESERVED_BYTES_COUNT - 2)
+                    
+                # Per spec, 0x0000 and 0xFFFF map to the max limit
+                if limit_from_file == 0x0000 or limit_from_file == 0xFFFF:
+                    self.project_supertile_limit = MAX_SUPERTILES
+                else:
+                    self.project_supertile_limit = limit_from_file
+                _debug(f"[open_supertiles] project_supertile_limit set to {self.project_supertile_limit}.")
 
                 temp_supertiles_data = []
                 if loaded_num_st_from_file > 0:
@@ -6681,19 +6766,16 @@ class TileEditorApp:
                     self.supertile_grid_height = loaded_grid_height_from_file
                     self._reconfigure_supertile_definition_canvas()
                 
-                for i in range(MAX_SUPERTILES):
-                    if i < loaded_num_st_from_file:
-                        supertiles_data[i] = temp_supertiles_data[i]
-                    else:
-                        supertiles_data[i] = [[0] * self.supertile_grid_width for _ in range(self.supertile_grid_height)]
+                supertiles_data = temp_supertiles_data
+                # Ensure at least one supertile exists if the file was empty.
+                if not supertiles_data:
+                    supertiles_data.append([[0] * self.supertile_grid_width for _ in range(self.supertile_grid_height)])
                 
-                num_supertiles = loaded_num_st_from_file if loaded_num_st_from_file > 0 else 1
-                
-                current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1))
-                selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
+                current_supertile_index = max(0, min(current_supertile_index, len(supertiles_data) - 1))
+                selected_supertile_for_map = max(0, min(selected_supertile_for_map, len(supertiles_data) - 1))
                 
                 max_valid_tile_idx = len(tileset_patterns) - 1
-                for st_idx in range(num_supertiles):
+                for st_idx in range(len(supertiles_data)):
                     for r in range(self.supertile_grid_height):
                         for c in range(self.supertile_grid_width):
                             if supertiles_data[st_idx][r][c] > max_valid_tile_idx:
@@ -6712,9 +6794,12 @@ class TileEditorApp:
                     try:
                         if self.notebook and self.notebook.winfo_exists(): self.notebook.select(self.tab_supertile_editor)
                     except tk.TclError: pass
-                    messagebox.showinfo("Load Successful", f"Loaded {num_supertiles} supertiles.")
+                    messagebox.showinfo("Load Successful", f"Loaded {len(supertiles_data)} supertiles.")
                     self._mark_project_modified()
                     self._add_to_recent_list("modules", load_path)
+
+                self.supertile_limit_var.set(self.project_supertile_limit)
+
                 return True
             else: 
                 return False
@@ -6730,7 +6815,7 @@ class TileEditorApp:
             return False
 
     def save_map(self, filepath=None, is_standalone_operation=True):
-        global map_width, map_height, map_data, num_supertiles # Using globals
+        global map_width, map_height, map_data
         save_path = filepath
         if not save_path:
             save_path = filedialog.asksaveasfilename(
@@ -6750,11 +6835,11 @@ class TileEditorApp:
                 reserved_data = bytes([0] * RESERVED_BYTES_COUNT)
                 f.write(reserved_data)
 
-                use_2_byte_indices_for_map = (num_supertiles > 255)
+                use_2_byte_indices_for_map = (len(supertiles_data) > 255)
                 if use_2_byte_indices_for_map:
-                    _debug(f" save_map: Using 2-byte ST indices (num_supertiles={num_supertiles}).")
+                    _debug(f" save_map: Using 2-byte ST indices (len(supertiles_data)={len(supertiles_data)}).")
                 else:
-                    _debug(f" save_map: Using 1-byte ST indices (num_supertiles={num_supertiles}).")
+                    _debug(f" save_map: Using 1-byte ST indices (len(supertiles_data)={len(supertiles_data)}).")
 
                 for r in range(map_height):
                     if r >= len(map_data): # Should not happen if map_data is consistent
@@ -6808,7 +6893,7 @@ class TileEditorApp:
 
     def open_map(self, filepath=None, is_standalone_operation=True):
         # Loads a map file, returning True on success, False on failure.
-        global map_data, map_width, map_height, num_supertiles
+        global map_data, map_width, map_height
         load_path = filepath
         if not load_path:
             load_path = filedialog.askopenfilename(
@@ -6868,7 +6953,7 @@ class TileEditorApp:
                 for r in range(loaded_h_map):
                     for c in range(loaded_w_map):
                         st_idx = new_map_data[r][c]
-                        if not (0 <= st_idx < num_supertiles):
+                        if not (0 <= st_idx < len(supertiles_data)):
                             missing_st_indices.add(st_idx)
                             new_map_data[r][c] = 0
                 
@@ -7225,103 +7310,39 @@ class TileEditorApp:
         self.undo_manager.execute(command)
         messagebox.showinfo("Tileset Limit", f"Tileset limit has been set to {self.project_tile_limit}.", parent=self.root)
 
-    def set_supertile_count(self):
-        global num_supertiles, current_supertile_index, selected_supertile_for_map, supertiles_data
+    def set_supertile_limit(self, new_limit):
+        """Handles user request to set a new supertile limit via an undoable command."""
+        if not (1 <= new_limit <= MAX_SUPERTILES):
+            messagebox.showerror("Invalid Limit", f"Supertile limit must be between 1 and {MAX_SUPERTILES}.", parent=self.root)
+            self.supertile_limit_var.set(self.project_supertile_limit)
+            return
 
-        prompt = f"Enter number of supertiles (1-{MAX_SUPERTILES}):"
-        new_count_str = simpledialog.askstring(
-            "Set Supertile Count", prompt, initialvalue=str(num_supertiles), parent=self.root
-        )
+        if new_limit == self.project_supertile_limit:
+            return
 
-        if new_count_str:
-            try:
-                new_count = int(new_count_str)
+        current_size = len(supertiles_data)
 
-                if not (1 <= new_count <= MAX_SUPERTILES):
-                    messagebox.showerror(
-                        "Invalid Count",
-                        f"Count must be between 1 and {MAX_SUPERTILES}.",
-                        parent=self.root
-                    )
-                    return
+        if new_limit < current_size:
+            affected_map_cells = []
+            for i in range(new_limit, current_size):
+                usage = self._check_supertile_usage(i)
+                if usage:
+                    affected_map_cells.extend(usage)
+            
+            warning_msg = (
+                f"Setting the limit to {new_limit} will delete supertiles from index {new_limit} to {current_size - 1}.\n\n"
+                "This action is fully undoable."
+            )
+            if affected_map_cells:
+                warning_msg += "\n\nSupertiles being deleted are in use on the map. These map cells will be reset to Supertile 0."
 
-                if new_count == num_supertiles:
-                    return
-
-                reduced_count = new_count < num_supertiles
-                confirmed_st_resize = True
-                if reduced_count:
-                    affected_map_cells_list = []
-                    for del_idx_st in range(new_count, num_supertiles):
-                        usage_on_map = self._check_supertile_usage(del_idx_st)
-                        affected_map_cells_list.extend(usage_on_map)
-
-                    confirm_prompt_st = f"Reducing count to {new_count} will discard supertiles {new_count} to {num_supertiles-1}."
-                    if affected_map_cells_list:
-                        confirm_prompt_st += "\n\n*** WARNING! ***\nDiscarded supertiles are used on the Map."
-                        confirm_prompt_st += (
-                            "\n\nReferences on the Map will be reset to Supertile 0."
-                        )
-
-                    confirmed_st_resize = messagebox.askokcancel(
-                        "Reduce Supertile Count", confirm_prompt_st, icon="warning", parent=self.root
-                    )
-
-                if confirmed_st_resize:
-                    if self._clear_marked_unused(trigger_redraw=False):
-                        pass
-
-                    self._mark_project_modified()
-                    data_structure_changed = False # To track if STs were added/removed
-
-                    if reduced_count:
-                        for del_idx_st_loop in range(new_count, num_supertiles):
-                            self._update_map_refs_for_supertile_change(del_idx_st_loop, "delete")
-                            self._adjust_marked_indices_after_delete(self.marked_unused_supertiles, del_idx_st_loop)
-                        
-                        # Trim the supertiles_data list
-                        if len(supertiles_data) > new_count: # Ensure we don't slice if already smaller
-                            supertiles_data = supertiles_data[:new_count]
-                        data_structure_changed = True
-                        
-                    elif new_count > num_supertiles: # Increasing count
-                        st_to_add = new_count - num_supertiles
-                        for _ in range(st_to_add):
-                            if len(supertiles_data) < MAX_SUPERTILES:
-                                supertiles_data.append(
-                                    [[0] * self.supertile_grid_width for _r_add in range(self.supertile_grid_height)]
-                                )
-                                data_structure_changed = True
-                            else: 
-                                break # MAX_SUPERTILES limit hit during loop
-                    
-                    old_num_supertiles = num_supertiles
-                    num_supertiles = len(supertiles_data) # Set from actual list length after ops
-                    if num_supertiles != old_num_supertiles:
-                        data_structure_changed = True
-
-
-                    current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1 if num_supertiles > 0 else 0))
-                    selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1 if num_supertiles > 0 else 0))
-
-                    self.supertile_image_cache.clear()
-                    self.map_render_cache.clear() # If map refs changed
-                    self.invalidate_minimap_background_cache() # If map refs changed
-                    
-                    self.update_all_displays(changed_level="all")
-                    self._update_editor_button_states()
-                    self._update_edit_menu_state()
-                    self._update_supertile_rotate_button_state()
-                    
-                    if data_structure_changed: # If supertile list actually changed
-                        self._request_tile_usage_refresh() # STs use tiles, their count/defs changed
-                        self._request_supertile_usage_refresh()
-
-            except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter a valid whole number.", parent=self.root)
-            except Exception as e:
-                messagebox.showerror("Error", f"An error occurred: {e}", parent=self.root)
-                _error(f"Error setting supertile count: {e}")
+            if not messagebox.askokcancel("Confirm Truncate Supertiles", warning_msg, icon="warning", parent=self.root):
+                self.supertile_limit_var.set(self.project_supertile_limit)
+                return
+        
+        command = SetSupertileLimitCommand(self, new_limit)
+        self.undo_manager.execute(command)
+        messagebox.showinfo("Supertile Limit", f"Supertile limit has been set to {self.project_supertile_limit}.", parent=self.root)
 
     def set_map_dimensions(self):
         global map_width, map_height, map_data
@@ -7402,8 +7423,8 @@ class TileEditorApp:
             _debug(f"Cleared Tile {current_tile_index} via command.")
 
     def clear_current_supertile(self):
-        global current_supertile_index, num_supertiles 
-        if not (0 <= current_supertile_index < num_supertiles):
+        global current_supertile_index
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             return
         prompt = f"Clear definition (set all to tile 0) for supertile {current_supertile_index}?"
         if messagebox.askokcancel("Clear Supertile", prompt):
@@ -7514,10 +7535,10 @@ class TileEditorApp:
             messagebox.showinfo("Paste Tile", "The clipboard does not contain valid MSX Tile Forge tile data.")
 
     def copy_current_supertile(self):
-        global current_supertile_index, num_supertiles, supertiles_data
+        global current_supertile_index, supertiles_data
         global tileset_patterns, tileset_colors
 
-        if not (0 <= current_supertile_index < num_supertiles):
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             messagebox.showwarning("Copy Supertile", "No valid supertile selected.")
             return
 
@@ -7565,8 +7586,8 @@ class TileEditorApp:
             messagebox.showerror("Copy Error", "Could not copy supertile data to the system clipboard.")
 
     def paste_supertile(self):
-        global current_supertile_index, num_supertiles, supertiles_data
-        if not (0 <= current_supertile_index < num_supertiles):
+        global current_supertile_index, supertiles_data
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             messagebox.showwarning("Paste Supertile", "No valid supertile selected to paste onto.")
             return
 
@@ -7675,7 +7696,7 @@ class TileEditorApp:
                 if (0 <= target_map_row < map_height and 0 <= target_map_col < map_width):
                     if r_offset < len(clip_data) and c_offset < len(clip_data[r_offset]):
                         st_index_to_paste = clip_data[r_offset][c_offset]
-                        if 0 <= st_index_to_paste < num_supertiles:
+                        if 0 <= st_index_to_paste < len(supertiles_data):
                             new_map_data[target_map_row][target_map_col] = st_index_to_paste
                         else:
                             new_map_data[target_map_row][target_map_col] = 0
@@ -8404,7 +8425,7 @@ class TileEditorApp:
                     try:
                         if 0 <= st_row_mm < map_height and 0 <= st_col_mm < map_width:
                             supertile_idx_mm = map_data[st_row_mm][st_col_mm]
-                            if 0 <= supertile_idx_mm < num_supertiles:
+                            if 0 <= supertile_idx_mm < len(supertiles_data):
                                 st_def_mm = supertiles_data[supertile_idx_mm]
                                 if st_def_mm and len(st_def_mm) == self.supertile_grid_height and \
                                    (self.supertile_grid_height == 0 or (self.supertile_grid_width > 0 and len(st_def_mm[0]) == self.supertile_grid_width) or self.supertile_grid_width == 0) and \
@@ -8698,10 +8719,10 @@ class TileEditorApp:
         elif selected_tab_index == 2: 
             copy_label = "Copy Supertile"
             paste_label = "Paste Supertile"
-            can_copy = 0 <= current_supertile_index < num_supertiles
+            can_copy = 0 <= current_supertile_index < len(supertiles_data)
             
             can_paste = False
-            if 0 <= current_supertile_index < num_supertiles:
+            if 0 <= current_supertile_index < len(supertiles_data):
                 try:
                     clipboard_data = json.loads(self.root.clipboard_get())
                     if isinstance(clipboard_data, dict) and \
@@ -8896,7 +8917,7 @@ class TileEditorApp:
     def _place_tile_in_supertile(self, r_place, c_place):
         global supertiles_data, current_supertile_index, selected_tile_for_supertile
         
-        if not (0 <= current_supertile_index < num_supertiles):
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             return False
         if not (0 <= selected_tile_for_supertile < len(tileset_patterns)):
             return False
@@ -9008,8 +9029,8 @@ class TileEditorApp:
             self._update_window_title()  # Update title when first marked as modified
 
     def flip_supertile_horizontal(self):
-        global supertiles_data, current_supertile_index, num_supertiles
-        if not (0 <= current_supertile_index < num_supertiles):
+        global supertiles_data, current_supertile_index
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             messagebox.showwarning("Flip Supertile", "No valid supertile selected.", parent=self.root)
             return
         current_definition = supertiles_data[current_supertile_index]
@@ -9036,8 +9057,8 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} flipped horizontally.")
 
     def flip_supertile_vertical(self):
-        global supertiles_data, current_supertile_index, num_supertiles
-        if not (0 <= current_supertile_index < num_supertiles):
+        global supertiles_data, current_supertile_index
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             messagebox.showwarning("Flip Supertile", "No valid supertile selected.", parent=self.root)
             return
         current_definition_to_flip_st = supertiles_data[current_supertile_index]
@@ -9058,8 +9079,8 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} flipped vertically.")
 
     def rotate_supertile_90cw(self):
-        global supertiles_data, current_supertile_index, num_supertiles
-        if not (0 <= current_supertile_index < num_supertiles):
+        global supertiles_data, current_supertile_index
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             messagebox.showwarning("Rotate Supertile", "No valid supertile selected.", parent=self.root)
             return
         if self.supertile_grid_width != self.supertile_grid_height:
@@ -9090,10 +9111,10 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} rotated 90 CW.")
 
     def shift_supertile_up(self):
-        global supertiles_data, current_supertile_index, num_supertiles
+        global supertiles_data, current_supertile_index
         current_st_h_for_shift = self.supertile_grid_height
-        if not (0 <= current_supertile_index < num_supertiles) or current_st_h_for_shift <= 0:
-            if current_st_h_for_shift <=1 and 0 <= current_supertile_index < num_supertiles :
+        if not (0 <= current_supertile_index < len(supertiles_data)) or current_st_h_for_shift <= 0:
+            if current_st_h_for_shift <=1 and 0 <= current_supertile_index < len(supertiles_data) :
                  _debug(f"Supertile {current_supertile_index} is {current_st_h_for_shift} unit(s) high, cannot shift up.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
@@ -9117,10 +9138,10 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} shifted up.")
 
     def shift_supertile_down(self):
-        global supertiles_data, current_supertile_index, num_supertiles
+        global supertiles_data, current_supertile_index
         current_st_h_for_shift_d = self.supertile_grid_height
-        if not (0 <= current_supertile_index < num_supertiles) or current_st_h_for_shift_d <= 0:
-            if current_st_h_for_shift_d <=1 and 0 <= current_supertile_index < num_supertiles:
+        if not (0 <= current_supertile_index < len(supertiles_data)) or current_st_h_for_shift_d <= 0:
+            if current_st_h_for_shift_d <=1 and 0 <= current_supertile_index < len(supertiles_data):
                 _debug(f"Supertile {current_supertile_index} is {current_st_h_for_shift_d} unit(s) high, cannot shift down.")
                 return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
@@ -9144,11 +9165,11 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} shifted down.")
 
     def shift_supertile_left(self):
-        global supertiles_data, current_supertile_index, num_supertiles
+        global supertiles_data, current_supertile_index
         current_st_w_for_shift_l = self.supertile_grid_width
         current_st_h_for_shift_l = self.supertile_grid_height
-        if not (0 <= current_supertile_index < num_supertiles) or current_st_w_for_shift_l <= 0 or current_st_h_for_shift_l <= 0:
-            if current_st_w_for_shift_l <=1 and 0 <= current_supertile_index < num_supertiles :
+        if not (0 <= current_supertile_index < len(supertiles_data)) or current_st_w_for_shift_l <= 0 or current_st_h_for_shift_l <= 0:
+            if current_st_w_for_shift_l <=1 and 0 <= current_supertile_index < len(supertiles_data) :
                  _debug(f"Supertile {current_supertile_index} is {current_st_w_for_shift_l} unit(s) wide, cannot shift left.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
@@ -9176,11 +9197,11 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} shifted left.")
 
     def shift_supertile_right(self):
-        global supertiles_data, current_supertile_index, num_supertiles
+        global supertiles_data, current_supertile_index
         current_st_w_for_shift_r = self.supertile_grid_width
         current_st_h_for_shift_r = self.supertile_grid_height
-        if not (0 <= current_supertile_index < num_supertiles) or current_st_w_for_shift_r <= 0 or current_st_h_for_shift_r <= 0:
-            if current_st_w_for_shift_r <= 1 and 0 <= current_supertile_index < num_supertiles :
+        if not (0 <= current_supertile_index < len(supertiles_data)) or current_st_w_for_shift_r <= 0 or current_st_h_for_shift_r <= 0:
+            if current_st_w_for_shift_r <= 1 and 0 <= current_supertile_index < len(supertiles_data) :
                  _debug(f"Supertile {current_supertile_index} is {current_st_w_for_shift_r} unit(s) wide, cannot shift right.")
                  return
             messagebox.showwarning("Shift Supertile", "Invalid supertile or dimensions for shift operation.", parent=self.root)
@@ -9208,7 +9229,7 @@ class TileEditorApp:
         _debug(f"Supertile {current_supertile_index} shifted right.")
 
     def handle_supertile_def_right_click(self, event):
-        global selected_tile_for_supertile, current_supertile_index, num_supertiles, supertiles_data
+        global selected_tile_for_supertile, current_supertile_index, supertiles_data
 
         canvas = self.supertile_def_canvas
         # SUPERTILE_DEF_TILE_SIZE is display size of one mini-tile in editor
@@ -9223,7 +9244,7 @@ class TileEditorApp:
         if (
             0 <= row < self.supertile_grid_height
             and 0 <= col < self.supertile_grid_width
-            and 0 <= current_supertile_index < num_supertiles
+            and 0 <= current_supertile_index < len(supertiles_data)
         ):
             try:
                 # Ensure definition structure matches before accessing
@@ -9257,7 +9278,7 @@ class TileEditorApp:
 
     def handle_map_canvas_right_click(self, event):
         """Handles right-click on the map canvas to select the clicked supertile."""
-        global selected_supertile_for_map, map_data, map_width, map_height, num_supertiles
+        global selected_supertile_for_map, map_data, map_width, map_height
 
         # Prevent interference with panning or other actions
         if self.current_mouse_action is not None:
@@ -9286,7 +9307,7 @@ class TileEditorApp:
                 clicked_supertile_index = map_data[map_row][map_col]
 
                 # Check if the retrieved supertile index is valid
-                if 0 <= clicked_supertile_index < num_supertiles:
+                if 0 <= clicked_supertile_index < len(supertiles_data):
                     # Check if the selection actually changed
                     if selected_supertile_for_map != clicked_supertile_index:
                         selected_supertile_for_map = clicked_supertile_index
@@ -9304,7 +9325,7 @@ class TileEditorApp:
                         self.scroll_selectors_to_supertile(selected_supertile_for_map)
                 else:
                     print(
-                        f"Right-click: Supertile index {clicked_supertile_index} at map [{map_row},{map_col}] is out of bounds (max {num_supertiles-1})."
+                        f"Right-click: Supertile index {clicked_supertile_index} at map [{map_row},{map_col}] is out of bounds (max {len(supertiles_data)-1})."
                     )
 
             except IndexError:
@@ -9317,7 +9338,7 @@ class TileEditorApp:
         if not (0 <= tile_index_check < len(tileset_patterns)):
             return used_in_supertiles_list
 
-        for st_idx_check in range(num_supertiles):
+        for st_idx_check in range(len(supertiles_data)):
             definition_check = supertiles_data[st_idx_check] # global
             
             # Check consistency of this definition with project settings
@@ -9345,7 +9366,7 @@ class TileEditorApp:
         Returns a list of (row, col) map coordinates that use it.
         """
         used_in_map = []
-        if not (0 <= supertile_index < num_supertiles):
+        if not (0 <= supertile_index < len(supertiles_data)):
             return used_in_map  # Invalid index
 
         for r in range(map_height):
@@ -9356,7 +9377,7 @@ class TileEditorApp:
 
     def _update_supertile_refs_for_tile_change(self, tile_idx_changed, action_type): # Renamed index, action
         references_changed = False # Flag to track if any ST def was actually modified
-        for st_idx_update in range(num_supertiles):
+        for st_idx_update in range(len(supertiles_data)):
             current_definition_update = supertiles_data[st_idx_update] 
 
             if not current_definition_update or len(current_definition_update) != self.supertile_grid_height or \
@@ -9402,7 +9423,7 @@ class TileEditorApp:
                              # For safety, could map to a default like 0, or log.
                              # Current logic: it would remain MAX_SUPERTILES-1 if index makes it shift.
                              # If index makes map_data[r][c] need to be > MAX_SUPERTILES-1, it's an issue.
-                             # Let's assume for now that num_supertiles management prevents this.
+                             # Let's assume for now that len(supertiles_data) management prevents this.
                              # A safer increment:
                              # original_val = map_data[r][c]
                              # map_data[r][c] = min(MAX_SUPERTILES - 1, original_val + 1)
@@ -9475,12 +9496,12 @@ class TileEditorApp:
         return True
 
     def _insert_supertile(self, index_to_insert_at): 
-        global num_supertiles, supertiles_data 
+        global supertiles_data 
 
-        if not (0 <= index_to_insert_at <= num_supertiles):
-            _error(f"Insert supertile index {index_to_insert_at} out of range [0, {num_supertiles}].")
+        if not (0 <= index_to_insert_at <= len(supertiles_data)):
+            _error(f"Insert supertile index {index_to_insert_at} out of range [0, {len(supertiles_data)}].")
             return False
-        if num_supertiles >= MAX_SUPERTILES:
+        if len(supertiles_data) >= MAX_SUPERTILES:
             _error("Cannot insert supertile, maximum reached.")
             return False
 
@@ -9508,12 +9529,12 @@ class TileEditorApp:
         Returns:
             bool: True if deletion was successful, False otherwise.
         """
-        global num_supertiles, supertiles_data
+        global supertiles_data
 
-        if not (0 <= index < num_supertiles):
-            _error(f"Delete supertile index {index} out of range [0, {num_supertiles - 1}].")
+        if not (0 <= index < len(supertiles_data)):
+            _error(f"Delete supertile index {index} out of range [0, {len(supertiles_data) - 1}].")
             return False
-        if num_supertiles <= 1:
+        if len(supertiles_data) <= 1:
             _error("Cannot delete the last supertile.")
             return False
 
@@ -9530,8 +9551,6 @@ class TileEditorApp:
         return True
 
     def _update_editor_button_states(self):
-        global num_supertiles # Using globals
-
         # --- Tile Editor Buttons ---
         can_add_tile = len(tileset_patterns) < self.project_tile_limit
         can_insert_tile = len(tileset_patterns) < self.project_tile_limit
@@ -9554,9 +9573,9 @@ class TileEditorApp:
                 state=tk.NORMAL if can_delete_tile else tk.DISABLED
             )
 
-        can_add_supertile = num_supertiles < MAX_SUPERTILES 
-        can_insert_supertile = num_supertiles < MAX_SUPERTILES # Same condition
-        can_delete_supertile = num_supertiles > 1
+        can_add_supertile = len(supertiles_data) < self.project_supertile_limit
+        can_insert_supertile = len(supertiles_data) < self.project_supertile_limit
+        can_delete_supertile = len(supertiles_data) > 1
 
         if hasattr(self, "add_supertile_button") and self.add_supertile_button.winfo_exists():
             self.add_supertile_button.config(
@@ -9712,20 +9731,16 @@ class TileEditorApp:
         _debug(f"Deleted tile at index {delete_idx}")
 
     def handle_add_supertile(self):  
-        global num_supertiles, current_supertile_index
+        global current_supertile_index
 
-        if num_supertiles >= MAX_SUPERTILES:
-            messagebox.showwarning(
-                "Add Supertile Failed",
-                f"Could not add supertile. Maximum {MAX_SUPERTILES} reached?",
-                parent=self.root
-            )
+        if len(supertiles_data) >= self.project_supertile_limit:
+            messagebox.showwarning("Add Supertile Failed", f"Could not add supertile. The supertile limit is set to {self.project_supertile_limit}.")
             return
 
         if self._clear_marked_unused(trigger_redraw=False):
             pass
 
-        new_st_idx = num_supertiles
+        new_st_idx = len(supertiles_data)
         blank_st_definition = [
             [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
         ]
@@ -9733,12 +9748,12 @@ class TileEditorApp:
         st_add_command = ModifyListCommand("Add Supertile", supertiles_data, new_st_idx, blank_st_definition, is_insert=True)
         
         # Command to update application state
-        old_state = (num_supertiles, current_supertile_index)
-        new_state = (num_supertiles + 1, new_st_idx)
+        old_state = (current_supertile_index,)
+        new_state = (new_st_idx,)
         
         def state_setter(state_tuple):
-            global num_supertiles, current_supertile_index
-            num_supertiles, current_supertile_index = state_tuple
+            global current_supertile_index
+            current_supertile_index = state_tuple[0]
 
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
@@ -9765,14 +9780,10 @@ class TileEditorApp:
         _debug(f"Added new supertile {new_st_idx}")
 
     def handle_insert_supertile(self):
-        global num_supertiles, current_supertile_index, selected_supertile_for_map
+        global current_supertile_index, selected_supertile_for_map
 
-        if num_supertiles >= MAX_SUPERTILES:
-            messagebox.showwarning(
-                "Insert Supertile Failed",
-                f"Could not insert supertile. Maximum {MAX_SUPERTILES} reached or error.",
-                parent=self.root
-            )
+        if len(supertiles_data) >= self.project_supertile_limit:
+            messagebox.showwarning("Insert Supertile Failed", f"Could not insert supertile. The supertile limit is set to {self.project_supertile_limit}.")
             return
 
         if self._clear_marked_unused(trigger_redraw=False):
@@ -9799,16 +9810,16 @@ class TileEditorApp:
         map_refs_command = SetDataCommand("Update Map Refs", self, map_data_setter, new_map_data, old_map_data)
         
         # Command to update application state
-        old_state = (num_supertiles, current_supertile_index, selected_supertile_for_map)
-        new_num_supertiles = num_supertiles + 1
-        new_selection = insert_idx # current_supertile_index does not change
+        old_state = (current_supertile_index, selected_supertile_for_map)
+        new_num_supertiles = len(supertiles_data) + 1
+        new_selection = insert_idx
         new_map_selection = selected_supertile_for_map + 1 if selected_supertile_for_map >= insert_idx else selected_supertile_for_map
         new_map_selection = min(new_map_selection, new_num_supertiles - 1)
-        new_state = (new_num_supertiles, new_selection, new_map_selection)
+        new_state = (new_selection, new_map_selection)
 
         def state_setter(state_tuple):
-            global num_supertiles, current_supertile_index, selected_supertile_for_map
-            num_supertiles, current_supertile_index, selected_supertile_for_map = state_tuple
+            global current_supertile_index, selected_supertile_for_map
+            current_supertile_index, selected_supertile_for_map = state_tuple
 
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
@@ -9830,14 +9841,14 @@ class TileEditorApp:
         _debug(f"Inserted supertile at index {insert_idx}")
 
     def handle_delete_supertile(self):
-        global num_supertiles, current_supertile_index, selected_supertile_for_map
+        global current_supertile_index, selected_supertile_for_map
 
-        if num_supertiles <= 1:
+        if len(supertiles_data) <= 1:
             messagebox.showinfo("Delete Supertile", "Cannot delete the last supertile.", parent=self.root)
             return
 
         delete_idx = current_supertile_index
-        if not (0 <= delete_idx < num_supertiles):
+        if not (0 <= delete_idx < len(supertiles_data)):
             messagebox.showerror("Delete Supertile Error", "Invalid supertile index selected.", parent=self.root)
             return
 
@@ -9875,8 +9886,8 @@ class TileEditorApp:
         
         map_refs_command = SetDataCommand("Update Map Refs", self, map_data_setter, new_map_data, old_map_data)
         
-        old_state = (num_supertiles, current_supertile_index, selected_supertile_for_map)
-        new_num_supertiles = num_supertiles - 1
+        old_state = (current_supertile_index, selected_supertile_for_map)
+        new_num_supertiles = len(supertiles_data) - 1
         new_selection = min(delete_idx, new_num_supertiles - 1)
         new_map_selection = selected_supertile_for_map
         if selected_supertile_for_map == delete_idx:
@@ -9884,11 +9895,11 @@ class TileEditorApp:
         elif selected_supertile_for_map > delete_idx:
             new_map_selection -= 1
         new_map_selection = min(new_map_selection, new_num_supertiles - 1)
-        new_state = (new_num_supertiles, new_selection, new_map_selection)
+        new_state = (new_selection, new_map_selection)
 
         def state_setter(state_tuple):
-            global num_supertiles, current_supertile_index, selected_supertile_for_map
-            num_supertiles, current_supertile_index, selected_supertile_for_map = state_tuple
+            global current_supertile_index, selected_supertile_for_map
+            current_supertile_index, selected_supertile_for_map = state_tuple
 
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
 
@@ -9958,14 +9969,14 @@ class TileEditorApp:
         return True
 
     def _reposition_supertile(self, source_index_st, target_index_st):
-        global num_supertiles, supertiles_data, map_data, map_width, map_height
+        global supertiles_data, map_data, map_width, map_height
         global current_supertile_index, selected_supertile_for_map 
 
-        if not (0 <= source_index_st < num_supertiles):
+        if not (0 <= source_index_st < len(supertiles_data)):
             _error(f"Invalid source index {source_index_st} for supertile move.")
             return False
         
-        clamped_target_index_st = max(0, min(target_index_st, num_supertiles))
+        clamped_target_index_st = max(0, min(target_index_st, len(supertiles_data)))
 
         if source_index_st == clamped_target_index_st:
             return False
@@ -10049,7 +10060,7 @@ class TileEditorApp:
         elif item_type_str == "supertile":
             item_render_w = self.supertile_grid_width * TILE_WIDTH
             item_render_h = self.supertile_grid_height * TILE_HEIGHT
-            max_items_count = num_supertiles
+            max_items_count = len(supertiles_data)
 
             if item_render_w <= 0 or item_render_h <= 0:
                 _debug(f" _get_index_from_canvas_coords: Invalid item_render_w/h for supertile ({item_render_w}x{item_render_h}).")
@@ -10210,7 +10221,7 @@ class TileEditorApp:
             elif self.drag_item_type == "supertile":
                 item_w_ind = self.supertile_grid_width * TILE_WIDTH
                 item_h_ind = self.supertile_grid_height * TILE_HEIGHT
-                max_items_ind = num_supertiles
+                max_items_ind = len(supertiles_data)
                 actual_canvas_w_ind = target_canvas_for_indicator.winfo_width()
                 if (item_w_ind + padding_ind) > 0:
                     items_across_ind = max(1, (actual_canvas_w_ind - padding_ind) // (item_w_ind + padding_ind))
@@ -10251,7 +10262,7 @@ class TileEditorApp:
 
                 max_items = 0
                 if item_type_for_click == "tile": max_items = len(tileset_patterns)
-                elif item_type_for_click == "supertile": max_items = num_supertiles
+                elif item_type_for_click == "supertile": max_items = len(supertiles_data)
 
                 index_at_release = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type_for_click)
                 if 0 <= index_at_release < max_items:
@@ -10289,7 +10300,7 @@ class TileEditorApp:
                 item_type = self.drag_item_type
                 max_items = 0
                 if item_type == "tile": max_items = len(tileset_patterns)
-                elif item_type == "supertile": max_items = num_supertiles
+                elif item_type == "supertile": max_items = len(supertiles_data)
                 
                 is_alt_down = (event.state & 0x20000) != 0
                 is_ctrl_down = (event.state & 0x0004) != 0
@@ -10809,7 +10820,7 @@ class TileEditorApp:
 
     def _find_unused_tiles(self):
         used_tile_indices = set()
-        for st_idx in range(num_supertiles):
+        for st_idx in range(len(supertiles_data)):
             definition = supertiles_data[st_idx]
             if not definition or len(definition) != self.supertile_grid_height or \
                (self.supertile_grid_height > 0 and len(definition[0]) != self.supertile_grid_width):
@@ -10827,7 +10838,7 @@ class TileEditorApp:
 
     def _find_unused_supertiles(self):
         """Identifies supertiles not used in the map_data."""
-        global map_data, map_width, map_height, num_supertiles
+        global map_data, map_width, map_height
         used_st_indices = set()
         # Supertile 0 is implicitly used/reserved
         for r_idx in range(map_height): # Renamed r
@@ -10836,7 +10847,7 @@ class TileEditorApp:
         # _debug(f"DEBUG: Used Supertile Indices from map_data: {used_st_indices}") # DEBUG
 
         unused_supertiles = set()
-        for i in range(1, num_supertiles): # Start from 1
+        for i in range(1, len(supertiles_data)): # Start from 1
             if i not in used_st_indices:
                 unused_supertiles.add(i)
         _debug(f"DEBUG: Found Unused Supertiles (indices): {unused_supertiles}") # DEBUG
@@ -12139,7 +12150,7 @@ class TileEditorApp:
             return placeholder_pil
 
 
-        if not (0 <= supertile_index < num_supertiles):
+        if not (0 <= supertile_index < len(supertiles_data)):
             # Already filled with INVALID_SUPERTILE_COLOR
             self.map_render_cache[cache_key] = pil_supertile_image
             return pil_supertile_image
@@ -12901,33 +12912,32 @@ class TileEditorApp:
         _debug(f"Added {num_to_add} new tiles.")
 
     def handle_add_many_supertiles(self):
-        global num_supertiles, current_supertile_index
-        _debug(f"\n[HANDLE ADD MANY] START. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
-        if num_supertiles >= MAX_SUPERTILES:
-            messagebox.showinfo("Add Many Supertiles", "Supertile set is already full.", parent=self.root)
+        global current_supertile_index
+        _debug(f"\n[HANDLE ADD MANY] START. len(supertiles_data)={len(supertiles_data)}, len(supertiles_data)={len(supertiles_data)}")
+        if len(supertiles_data) >= self.project_supertile_limit:
+            messagebox.showinfo("Add Many Supertiles", f"Supertile set is at its limit of {self.project_supertile_limit}.", parent=self.root)
             return
-        space_available = MAX_SUPERTILES - num_supertiles
-        num_to_add = self._create_add_many_dialog(self.root, "Add Many Supertiles", f"How many supertiles to add? (1-{space_available})", num_supertiles, MAX_SUPERTILES)
+        space_available = self.project_supertile_limit - len(supertiles_data)
+        num_to_add = self._create_add_many_dialog(self.root, "Add Many Supertiles", f"How many supertiles to add? (1-{space_available})", len(supertiles_data), self.project_supertile_limit)
         if num_to_add is None or num_to_add <= 0: return
 
         if self._clear_marked_unused(trigger_redraw=False): pass
         
-        first_new_st_idx = num_supertiles
+        first_new_st_idx = len(supertiles_data)
         commands = []
         for i in range(num_to_add):
-            new_idx = num_supertiles + i
+            new_idx = len(supertiles_data) + i
             blank_st_definition = [[0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)]
             commands.append(ModifyListCommand("Add Supertile", supertiles_data, new_idx, blank_st_definition, is_insert=True))
             _debug(f"[HANDLE ADD MANY] Created ModifyListCommand to insert at index {new_idx}")
 
-        old_state = (num_supertiles, current_supertile_index)
-        new_state = (num_supertiles + num_to_add, first_new_st_idx)
+        old_state = (current_supertile_index,)
+        new_state = (first_new_st_idx,)
         _debug(f"[HANDLE ADD MANY] Created state command. Old state={old_state}, New state={new_state}")
         def state_setter(state_tuple):
-            global num_supertiles, current_supertile_index
-            _debug(f"  [state_setter] Called. Setting state to {state_tuple}. Previous num_supertiles={num_supertiles}")
-            num_supertiles, current_supertile_index = state_tuple
-            _debug(f"  [state_setter] State SET. New num_supertiles={num_supertiles}")
+            global current_supertile_index
+            _debug(f"  [state_setter] Called. Setting state to {state_tuple}.")
+            current_supertile_index = state_tuple[0]
         state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
         commands.append(state_command)
 
@@ -12942,7 +12952,7 @@ class TileEditorApp:
 
         composite = CompositeCommand(f"Add {num_to_add} Supertiles", commands, app_ref=self, post_hooks=[post_add_hooks])
         self.undo_manager.execute(composite)
-        _debug(f"[HANDLE ADD MANY] FINISHED. num_supertiles={num_supertiles}, len(supertiles_data)={len(supertiles_data)}")
+        _debug(f"[HANDLE ADD MANY] FINISHED. len(supertiles_data)={len(supertiles_data)}, len(supertiles_data)={len(supertiles_data)}")
 
     def append_tileset_from_file(self):
         global tileset_patterns, tileset_colors, current_tile_index
@@ -13177,7 +13187,7 @@ class TileEditorApp:
         return result["action"]
 
     def append_supertiles_from_file(self):
-        global supertiles_data, num_supertiles, tileset_patterns, tileset_colors
+        global supertiles_data, tileset_patterns, tileset_colors
         global current_supertile_index, current_tile_index 
 
         st_load_path = filedialog.askopenfilename(
@@ -13242,11 +13252,11 @@ class TileEditorApp:
              messagebox.showinfo("Append Supertiles", "The selected supertile file contains no supertile definitions to append.", parent=self.root)
              return
 
-        st_space_available = MAX_SUPERTILES - num_supertiles
-        tile_space_available = MAX_TILES - len(tileset_patterns)
+        st_space_available = self.project_supertile_limit - len(supertiles_data)
+        tile_space_available = self.project_tile_limit - len(tileset_patterns)
 
         if st_space_available <= 0:
-            messagebox.showinfo("Append Supertiles", "Current project supertile set is full. Cannot append.", parent=self.root)
+            messagebox.showinfo("Append Supertiles", f"Current project supertile set is at its limit of {self.project_supertile_limit}. Cannot append.", parent=self.root)
             return
         # Allow appending STs even if tile space is full, if file_tile_count is 0 or refs are handled
         # The main check is if associated tiles *needed* from file can fit.
@@ -13409,18 +13419,15 @@ class TileEditorApp:
         
         appended_st_actual_count = 0
         if temp_appended_supertile_definitions:
-            first_new_st_idx_project = num_supertiles
+            first_new_st_idx_project = len(supertiles_data)
             for st_def_to_add in temp_appended_supertile_definitions: # Iterate only STs confirmed for import
-                if num_supertiles < MAX_SUPERTILES:
-                    supertiles_data[num_supertiles] = st_def_to_add
-                    num_supertiles += 1
-                    appended_st_actual_count +=1
-                else: break
-            if appended_st_actual_count > 0: 
+                if len(supertiles_data) < self.project_supertile_limit:
+                    supertiles_data.append(st_def_to_add)
+                    appended_st_actual_count += 1
+                else:
+                    break
+            if appended_st_actual_count > 0:
                 current_supertile_index = first_new_st_idx_project
-
-        if appended_tiles_actual_count > 0:
-             current_tile_index = original_starting_tile_index_in_project
 
         self.clear_all_caches()
         self.invalidate_minimap_background_cache()
@@ -13554,7 +13561,6 @@ class TileEditorApp:
         _debug(f"\n Synchronizing from USAGE WINDOW: type='{item_type}', index={index}")
         global selected_color_index, current_tile_index, selected_tile_for_supertile 
         global current_supertile_index, selected_supertile_for_map 
-        global num_supertiles 
 
         if item_type == "color":
             if not (0 <= index <= 15):
@@ -13629,8 +13635,8 @@ class TileEditorApp:
                 _error(f"   Unexpected error during tile selection synchronization: {e}")
 
         elif item_type == "supertile":
-            if not (0 <= index < num_supertiles):
-                _error(f"   Invalid supertile index {index} (num_supertiles: {num_supertiles}). Sync aborted.")
+            if not (0 <= index < len(supertiles_data)):
+                _error(f"   Invalid supertile index {index} (len(supertiles_data): {len(supertiles_data)}). Sync aborted.")
                 return
             
             try:
@@ -13747,7 +13753,7 @@ class TileEditorApp:
 
     def _calculate_supertile_usage_data(self):
         results = []
-        for st_idx in range(num_supertiles):
+        for st_idx in range(len(supertiles_data)):
             map_usage, _ = self._get_info_for_single_supertile(st_idx)
             
             results.append({
@@ -13796,7 +13802,7 @@ class TileEditorApp:
             return ph_photo
 
         # --- Part 3: Render supertile content onto temp_full_photo ---
-        if not (0 <= supertile_index < num_supertiles):
+        if not (0 <= supertile_index < len(supertiles_data)):
             temp_full_photo.put(INVALID_SUPERTILE_COLOR, to=(0,0, temp_full_photo_w, temp_full_photo_h))
         else:
             definition = supertiles_data[supertile_index]
@@ -14119,7 +14125,7 @@ class TileEditorApp:
         _debug(" _restore_window_states: Method finished.")
 
     def _calculate_tile_usage_in_single_supertile(self, tile_index, supertile_index):
-        if not (0 <= tile_index < len(tileset_patterns) and 0 <= supertile_index < num_supertiles):
+        if not (0 <= tile_index < len(tileset_patterns) and 0 <= supertile_index < len(supertiles_data)):
             return 0
 
         count = 0
@@ -14142,7 +14148,7 @@ class TileEditorApp:
         if not (0 <= tile_index_to_check < len(tileset_patterns)):
             return 0, 0
 
-        for st_idx in range(num_supertiles):
+        for st_idx in range(len(supertiles_data)):
             local_count = self._calculate_tile_usage_in_single_supertile(tile_index_to_check, st_idx)
 
             if local_count > 0:
@@ -14243,7 +14249,7 @@ class TileEditorApp:
 
     def _get_info_for_single_supertile(self, supertile_index):
         map_usage_count = 0
-        if 0 <= supertile_index < num_supertiles:
+        if 0 <= supertile_index < len(supertiles_data):
             for r in range(map_height):
                 for c in range(map_width):
                     if 0 <= r < len(map_data) and 0 <= c < len(map_data[r]):
@@ -14253,7 +14259,7 @@ class TileEditorApp:
                         _debug(f" Map data access out of bounds for ({r},{c}) in _get_info_for_single_supertile")
 
         unique_tile_count = 0
-        if 0 <= supertile_index < num_supertiles:
+        if 0 <= supertile_index < len(supertiles_data):
             unique_tiles = set()
             st_definition = supertiles_data[supertile_index]
             if st_definition and len(st_definition) == self.supertile_grid_height and \
@@ -14783,7 +14789,7 @@ class TileEditorApp:
 
     def _handle_supertile_map_usage_label_click(self, event=None):
         """Called when the map usage label in the Supertile Editor is clicked."""
-        if not (0 <= current_supertile_index < num_supertiles):
+        if not (0 <= current_supertile_index < len(supertiles_data)):
             return
 
         # Check if the supertile is actually used on the map before proceeding
@@ -15069,7 +15075,7 @@ class TileEditorApp:
 
     def _update_supertile_refs_for_tile_swap(self, index_a, index_b):
         """Updates supertile definitions after a tile swap."""
-        for st_idx in range(num_supertiles):
+        for st_idx in range(len(supertiles_data)):
             definition = supertiles_data[st_idx]
             if not definition: continue
 
@@ -15514,11 +15520,11 @@ class TileEditorApp:
         Clears all supertile definitions to point to Tile 0 without user confirmation.
         Used internally after an image import invalidates the entire tileset.
         """
-        global supertiles_data, num_supertiles
+        global supertiles_data
 
         _debug("Performing non-interactive clear of all supertile definitions.")
         
-        for i in range(num_supertiles):
+        for i in range(len(supertiles_data)):
             # Recreate the definition based on current project dimensions
             supertiles_data[i] = [
                 [0 for _c in range(self.supertile_grid_width)] for _r in range(self.supertile_grid_height)
@@ -15830,7 +15836,7 @@ class TileEditorApp:
 
                 max_items = 0
                 if item_type_for_click == "tile": max_items = len(tileset_patterns)
-                elif item_type_for_click == "supertile": max_items = num_supertiles
+                elif item_type_for_click == "supertile": max_items = len(supertiles_data)
 
                 index_at_release = self._get_index_from_canvas_coords(canvas, event.x, event.y, item_type_for_click)
                 if 0 <= index_at_release < max_items:
@@ -15868,7 +15874,7 @@ class TileEditorApp:
                 item_type = self.drag_item_type
                 max_items = 0
                 if item_type == "tile": max_items = len(tileset_patterns)
-                elif item_type == "supertile": max_items = num_supertiles
+                elif item_type == "supertile": max_items = len(supertiles_data)
                 
                 is_alt_down = (event.state & 0x20000) != 0
                 is_ctrl_down = (event.state & 0x0004) != 0
@@ -16052,7 +16058,7 @@ class TileEditorApp:
         elif source_widget == self.map_supertile_selector_canvas:
             _debug("[DEEP DIVE] Request from Map Editor Palette to Supertile Editor.")
             supertile_idx_to_edit = self._get_index_from_canvas_coords(source_widget, event.x, event.y, "supertile")
-            if 0 <= supertile_idx_to_edit < num_supertiles:
+            if 0 <= supertile_idx_to_edit < len(supertiles_data):
                 current_supertile_index = supertile_idx_to_edit
                 self.notebook.select(self.tab_supertile_editor)
                 self.update_all_displays(changed_level="all")
@@ -16462,6 +16468,15 @@ class TileEditorApp:
             messagebox.showerror("Invalid Input", "Please enter a valid whole number for the limit.", parent=self.root)
             # Reset the UI variable to the actual current limit
             self.tile_limit_var.set(self.project_tile_limit)
+
+    def _apply_supertile_limit_from_entry(self, event=None):
+        """Validates and applies the supertile limit from the UI Entry widget."""
+        try:
+            new_limit = self.supertile_limit_var.get()
+            self.set_supertile_limit(new_limit)
+        except tk.TclError:
+            messagebox.showerror("Invalid Input", "Please enter a valid whole number for the limit.", parent=self.root)
+            self.supertile_limit_var.set(self.project_supertile_limit)
 
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
