@@ -157,16 +157,20 @@ for r in range(8):
             msx2_512_colors_rgb7.append((r, g, b))
 
 # --- Data Structures ---
+
+# Initialize tileset with one "empty" tile. The list will grow dynamically.
 tileset_colors = [
-    [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)] for _ in range(MAX_TILES)
+    [(WHITE_IDX, BLACK_IDX) for _ in range(TILE_HEIGHT)]
 ]
 tileset_patterns = [
-    [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)] for _ in range(MAX_TILES)
+    [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
 ]
-# Initialize with one empty supertile. The list will grow dynamically.
+
+# Initialize supertileset with one "empty" supertile. The list will grow dynamically.
 supertiles_data = [
     [[0 for _ in range(DEFAULT_SUPERTILE_GRID_WIDTH)] for _ in range(DEFAULT_SUPERTILE_GRID_HEIGHT)]
 ]
+
 current_tile_index = 0
 selected_color_index = WHITE_IDX
 last_drawn_pixel = None
@@ -686,38 +690,6 @@ class UpdateSupertileRefsForTileCommand(ICommand):
 
     def undo(self):
         self._process_refs(is_forward=False)
-
-class ReorderListCommand(ICommand):
-    """Command to handle reordering or swapping items in a list."""
-    def __init__(self, description, list_obj, source_index, target_index, is_swap=False):
-        super().__init__(description)
-        self.list_obj = list_obj
-        self.source_index = source_index
-        self.target_index = target_index
-        self.is_swap = is_swap
-        self.moved_item = None # To store item during move
-
-    def execute(self):
-        if self.is_swap:
-            # Swap the items at the two indices
-            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
-                self.list_obj[self.target_index], self.list_obj[self.source_index]
-        else: # It's a move (reposition)
-            # Remove item from its original position and store it
-            self.moved_item = self.list_obj.pop(self.source_index)
-            # Insert the item at the new target position
-            self.list_obj.insert(self.target_index, self.moved_item)
-
-    def undo(self):
-        if self.is_swap:
-            # A swap is its own inverse
-            self.list_obj[self.source_index], self.list_obj[self.target_index] = \
-                self.list_obj[self.target_index], self.list_obj[self.source_index]
-        else: # Undo a move
-            # Remove the item from its new position
-            item_to_move_back = self.list_obj.pop(self.target_index)
-            # Re-insert it at its original source position
-            self.list_obj.insert(self.source_index, item_to_move_back)
 
 class ReorderListCommand(ICommand):
     """Command to handle reordering or swapping items in a list."""
