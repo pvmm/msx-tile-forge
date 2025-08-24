@@ -11943,114 +11943,118 @@ class TileEditorApp:
         return "break"
 
     def _execute_rom_tile_import(self):
-        """Reads selected tile data from ROM and appends to the main tileset, using stored colors and offsets."""
+        """
+        Reads selected tile data from ROM and appends to the main tileset.
+        This operation is now fully undoable.
+        """
         global current_tile_index, tileset_patterns, tileset_colors
 
         if not self.rom_import_dialog or not tk.Toplevel.winfo_exists(self.rom_import_dialog):
             return
 
         dialog = self.rom_import_dialog
-
         selection_dict = getattr(dialog, 'rom_importer_selection', {})
         if not selection_dict:
             messagebox.showwarning("Import Error", "No tiles selected from ROM.", parent=dialog)
             return
 
         rom_data = dialog.rom_data
-        
         sorted_selected_items = sorted(selection_dict.items(), key=lambda item: item[0])
-
         num_tiles_to_import_attempt = len(sorted_selected_items)
-        imported_tiles_count = 0
-        first_newly_imported_tile_index = -1
-        tileset_structure_changed = False # Flag to see if len(tileset_patterns) actually increased
-
-        for current_rom_tile_absolute_idx, (fg_idx_for_import, bg_idx_for_import, fine_offset_for_import) in sorted_selected_items:
-            if len(tileset_patterns) >= self.project_tile_limit:
+        
+        # --- Prepare data and commands without modifying global state yet ---
+        commands_to_execute = []
+        tiles_to_add_patterns = []
+        tiles_to_add_colors = []
+        
+        for current_rom_tile_absolute_idx, (fg_idx, bg_idx, fine_offset) in sorted_selected_items:
+            current_tileset_size = len(tileset_patterns) + len(tiles_to_add_patterns)
+            if current_tileset_size >= self.project_tile_limit:
                 messagebox.showinfo(
                     "Import Limit Reached",
-                    f"Project tileset limit of {self.project_tile_limit} reached.\nImported {imported_tiles_count} of {num_tiles_to_import_attempt} selected tiles.",
+                    f"Project tileset limit of {self.project_tile_limit} reached.\n"
+                    f"Staged {len(tiles_to_add_patterns)} of {num_tiles_to_import_attempt} selected tiles for import.",
                     parent=dialog
                 )
                 break
 
-            rom_byte_start_pos = fine_offset_for_import + (current_rom_tile_absolute_idx * TILE_WIDTH)
-
+            rom_byte_start_pos = fine_offset + (current_rom_tile_absolute_idx * TILE_WIDTH)
             if not (0 <= rom_byte_start_pos < len(rom_data)):
-                _debug(f" ROM Import EXEC: Skipping invalid ROM tile index {current_rom_tile_absolute_idx} with stored offset {fine_offset_for_import}, leading to offset {rom_byte_start_pos} out of bounds for ROM size {len(rom_data)}")
+                _debug(f"ROM Import: Skipping out-of-bounds tile index {current_rom_tile_absolute_idx}")
                 continue
 
-            new_tile_pattern_data = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
-            new_tile_color_data = [(fg_idx_for_import, bg_idx_for_import) for _ in range(TILE_HEIGHT)]
+            new_pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+            new_colors = [(fg_idx, bg_idx) for _ in range(TILE_HEIGHT)]
 
-            if rom_byte_start_pos + TILE_WIDTH > len(rom_data): # TILE_WIDTH is bytes per tile (TILE_HEIGHT bytes)
+            bytes_to_read = TILE_HEIGHT
+            if rom_byte_start_pos + bytes_to_read > len(rom_data):
                 num_bytes_avail = len(rom_data) - rom_byte_start_pos
-                # Ensure tile_bytes_from_rom is TILE_HEIGHT bytes long for row iteration
-                tile_bytes_from_rom = rom_data[rom_byte_start_pos:] + bytes(TILE_HEIGHT - num_bytes_avail if TILE_HEIGHT > num_bytes_avail else 0)
+                tile_bytes = rom_data[rom_byte_start_pos:] + bytes(bytes_to_read - num_bytes_avail)
             else:
-                tile_bytes_from_rom = rom_data[rom_byte_start_pos : rom_byte_start_pos + TILE_HEIGHT]
+                tile_bytes = rom_data[rom_byte_start_pos : rom_byte_start_pos + bytes_to_read]
 
+            for r in range(TILE_HEIGHT):
+                if r < len(tile_bytes):
+                    row_byte = tile_bytes[r]
+                    for c in range(TILE_WIDTH):
+                        new_pattern[r][c] = (row_byte >> (7 - c)) & 1
+            
+            tiles_to_add_patterns.append(new_pattern)
+            tiles_to_add_colors.append(new_colors)
 
-            for r_pixel in range(TILE_HEIGHT):
-                if r_pixel < len(tile_bytes_from_rom):
-                    row_byte_value = tile_bytes_from_rom[r_pixel]
-                    for c_pixel in range(TILE_WIDTH):
-                        new_tile_pattern_data[r_pixel][c_pixel] = (row_byte_value >> (7 - c_pixel)) & 1
-                else: # Should only happen if TILE_HEIGHT > len(tile_bytes_from_rom) after padding
-                    for c_pixel in range(TILE_WIDTH):
-                        new_tile_pattern_data[r_pixel][c_pixel] = 0 # Fill with background
+        if not tiles_to_add_patterns:
+            messagebox.showwarning("Import Notice",
+                                   "No new tiles were imported. Tileset might be full or selected ROM data was out of bounds.",
+                                   parent=self.root)
+            self._close_rom_importer_dialog()
+            return
+            
+        # --- Create the Undoable Commands ---
+        
+        # Clear any "Marked Unused" highlights before proceeding
+        self._clear_marked_unused(trigger_redraw=False)
 
-            if len(tileset_patterns) < MAX_TILES:
-                if len(tileset_patterns) > len(tileset_patterns) and len(tileset_colors) > len(tileset_patterns):
-                    if first_newly_imported_tile_index == -1:
-                        first_newly_imported_tile_index = len(tileset_patterns)
+        first_new_tile_idx = len(tileset_patterns)
+        
+        for i in range(len(tiles_to_add_patterns)):
+            new_idx = len(tileset_patterns) + i
+            commands_to_execute.append(ModifyListCommand("Import Tile", tileset_patterns, new_idx, tiles_to_add_patterns[i], is_insert=True))
+            commands_to_execute.append(ModifyListCommand("Import Tile", tileset_colors, new_idx, tiles_to_add_colors[i], is_insert=True))
+        
+        old_state = (current_tile_index,)
+        new_state = (first_new_tile_idx,)
+        def state_setter(state):
+            global current_tile_index
+            current_tile_index = state[0]
+        state_command = SetDataCommand("Update App State", self, state_setter, new_state, old_state)
+        commands_to_execute.append(state_command)
 
-                    tileset_patterns[len(tileset_patterns)] = new_tile_pattern_data
-                    tileset_colors[len(tileset_patterns)] = new_tile_color_data
-
-                    imported_tiles_count += 1
-                    tileset_structure_changed = True # len(tileset_patterns) increased
-                    self._mark_project_modified()
-                else:
-                    _error(f" ROM Import EXEC Error: Tileset data structures not large enough for index {len(tileset_patterns)}.")
-                    break
-            else:
-                break
-
-        parent_dialog_for_messagebox = self.rom_import_dialog
-        self._close_rom_importer_dialog()
-
-        if imported_tiles_count > 0:
-            if first_newly_imported_tile_index != -1:
-                current_tile_index = first_newly_imported_tile_index
-            else: # Should not happen if tiles were imported
-                current_tile_index = len(tileset_patterns) - 1
-
+        def post_import_hooks():
+            self._mark_project_modified()
             self.clear_all_caches()
             self.invalidate_minimap_background_cache()
-
             if hasattr(self, 'notebook') and hasattr(self, 'tab_tile_editor'):
-                try:
-                    self.notebook.select(self.tab_tile_editor)
-                except tk.TclError:
-                    _debug(" TclError selecting tile editor tab after import (notebook/tab gone?).")
-
+                try: self.notebook.select(self.tab_tile_editor)
+                except tk.TclError: pass
             self.update_all_displays(changed_level="all")
             self.scroll_viewers_to_tile(current_tile_index)
             self._update_editor_button_states()
-            self._update_edit_menu_state()
-            if tileset_structure_changed: # If new tiles were added
-                self._request_color_usage_refresh()
-                self._request_tile_usage_refresh()
-                self._request_supertile_usage_refresh()
+            self._request_color_usage_refresh()
+            self._request_tile_usage_refresh()
+            self._request_supertile_usage_refresh()
 
-            messagebox.showinfo("Import Successful",
-                                f"Successfully imported {imported_tiles_count} tile(s).",
-                                parent=self.root)
-        elif num_tiles_to_import_attempt > 0 :
-             messagebox.showwarning("Import Notice",
-                                   "No new tiles were imported. Tileset might be full or selected ROM data was out of bounds.",
-                                   parent=self.root)
+        composite = CompositeCommand(f"Import {len(tiles_to_add_patterns)} Tiles", commands_to_execute, app_ref=self, post_hooks=[post_import_hooks])
+        
+        # Close dialog *before* executing the command
+        self._close_rom_importer_dialog()
+        
+        # Now execute the entire import as one undoable action
+        self.undo_manager.execute(composite)
+        
+        final_message = f"Successfully imported {len(tiles_to_add_patterns)} tile(s)."
+        if len(tiles_to_add_patterns) < num_tiles_to_import_attempt:
+            final_message += f"\n({num_tiles_to_import_attempt - len(tiles_to_add_patterns)} tiles were not imported due to limits.)"
+        messagebox.showinfo("Import Successful", final_message, parent=self.root)
 
     def _get_zoomed_supertile_pixel_dims(self):
         """
