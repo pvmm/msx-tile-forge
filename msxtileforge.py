@@ -6232,9 +6232,12 @@ class TileEditorApp:
 
             confirm_load = True
             if is_standalone_operation:
+                self.root.bell() 
                 confirm_load = messagebox.askokcancel(
-                    "Load Palette",
-                    "Replace the current active palette with data from this file?",
+                    "Confirm Palette Load",
+                    "This will replace the current active palette.\n\n"
+                    "This action cannot be undone and will clear the undo history. Proceed?",
+                    icon='warning',
                     parent=self.root
                 )
 
@@ -6247,7 +6250,9 @@ class TileEditorApp:
                 global selected_color_index 
                 selected_color_index = WHITE_IDX
                 
-                if is_standalone_operation: 
+                if is_standalone_operation:
+                    self.undo_manager.clear()
+
                     self.clear_all_caches()
                     self.invalidate_minimap_background_cache()
                     self.update_all_displays(changed_level="all")
@@ -6492,9 +6497,13 @@ class TileEditorApp:
 
             confirm = True
             if is_standalone_operation:
+                self.root.bell()
                 confirm = messagebox.askokcancel(
-                    "Load Tileset",
-                    f"Replace current tileset with {loaded_num_tiles} tile(s) from this file?",
+                    "Confirm Tileset Load",
+                    f"This will replace the current tileset with {loaded_num_tiles} tile(s) from the file.\n\n"
+                    "This action cannot be undone and will clear the undo history. Proceed?",
+                    icon='warning',
+                    parent=self.root
                 )
 
             if confirm:
@@ -6508,6 +6517,8 @@ class TileEditorApp:
                 selected_tile_for_supertile = max(0, min(selected_tile_for_supertile, len(tileset_patterns) - 1))
 
                 if is_standalone_operation:
+                    self.undo_manager.clear()
+
                     self.clear_all_caches()
                     self.invalidate_minimap_background_cache()
                     self.update_all_displays(changed_level="all")
@@ -6718,9 +6729,13 @@ class TileEditorApp:
             
             confirm_load = True
             if is_standalone_operation:
+                self.root.bell()
                 confirm_load = messagebox.askokcancel(
-                    "Load Supertiles",
-                    f"Replace current supertiles with {loaded_num_st_from_file} definition(s) from this file?",
+                    "Confirm Supertile Load",
+                    f"This will replace current supertiles with {loaded_num_st_from_file} definition(s) from the file.\n\n"
+                    "This action cannot be undone and will clear the undo history. Proceed?",
+                    icon='warning',
+                    parent=self.root
                 )
 
             if confirm_load:
@@ -6754,6 +6769,8 @@ class TileEditorApp:
                                 supertiles_data[st_idx][r][c] = 0
 
                 if is_standalone_operation:
+                    self.undo_manager.clear()
+
                     self.supertile_image_cache.clear()
                     self.map_render_cache.clear()
                     self.invalidate_minimap_background_cache()
@@ -6916,7 +6933,14 @@ class TileEditorApp:
             
             confirm_load = True
             if is_standalone_operation:
-                confirm_load = messagebox.askokcancel("Load Map", "Replace current map with data from this file?", parent=self.root)
+                self.root.bell()
+                confirm_load = messagebox.askokcancel(
+                    "Confirm Map Load",
+                    "This will replace the current map with data from the file.\n\n"
+                    "This action cannot be undone and will clear the undo history. Proceed?",
+                    icon='warning',
+                    parent=self.root
+                )
 
             if confirm_load:
                 if self._clear_marked_unused(trigger_redraw=False): pass
@@ -6940,6 +6964,8 @@ class TileEditorApp:
                     messagebox.showwarning("Map Load Warning", msg, parent=self.root)
 
                 if is_standalone_operation:
+                    self.undo_manager.clear()
+
                     self.map_render_cache.clear()
                     self.invalidate_minimap_background_cache()
                     self.update_all_displays(changed_level="all")
