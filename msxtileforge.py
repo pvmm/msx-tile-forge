@@ -961,6 +961,7 @@ class SetSupertileLimitCommand(ICommand):
         global supertiles_data, map_data
         global current_supertile_index, selected_supertile_for_map
 
+        _debug(f"[_apply_and_update] Setting app_ref.project_supertile_limit to: {limit}")
         self.app_ref.project_supertile_limit = limit
         
         supertiles_data.clear()
@@ -6608,8 +6609,12 @@ class TileEditorApp:
                 f.write(struct.pack("B", self.supertile_grid_width))
                 f.write(struct.pack("B", self.supertile_grid_height))
 
-                reserved_data = bytes([0] * RESERVED_BYTES_COUNT)
-                f.write(reserved_data)
+                # Use first 2 reserved bytes to store the supertile limit.
+                _debug(f"[save_supertiles] Saving self.project_supertile_limit value ({self.project_supertile_limit}).")
+                limit_value_to_write = 0xFFFF if self.project_supertile_limit >= MAX_SUPERTILES else self.project_supertile_limit
+                f.write(struct.pack("<H", limit_value_to_write))
+                # Write the remaining reserved bytes as zero.
+                f.write(bytes([0] * (RESERVED_BYTES_COUNT - 2)))
                 
                 tiles_per_definition = self.supertile_grid_width * self.supertile_grid_height
                 if tiles_per_definition <= 0 and len(supertiles_data) > 0 : # Defensive check for invalid grid dims
@@ -6710,11 +6715,19 @@ class TileEditorApp:
                 expected_size_new = header_size + RESERVED_BYTES_COUNT + data_payload_size
                 expected_size_old = header_size + data_payload_size
 
-                has_reserved_bytes = False
-                if file_size_check == expected_size_new: has_reserved_bytes = True
-                elif file_size_check != expected_size_old: raise ValueError(f"File size mismatch. Expected old: {expected_size_old} or new: {expected_size_new}, got {file_size_check}.")
-
-                if has_reserved_bytes: f.read(RESERVED_BYTES_COUNT)
+                limit_bytes = f.read(2)
+                if len(limit_bytes) < 2: raise EOFError("EOF reading supertile limit bytes.")
+                limit_from_file = struct.unpack("<H", limit_bytes)[0]
+                _debug(f"[open_supertiles] Read supertileset size limit from file: {limit_from_file}.")
+                # Read and discard remaining reserved bytes
+                f.read(RESERVED_BYTES_COUNT - 2)
+                    
+                # Per spec, 0x0000 and 0xFFFF map to the max limit
+                if limit_from_file == 0x0000 or limit_from_file == 0xFFFF:
+                    self.project_supertile_limit = MAX_SUPERTILES
+                else:
+                    self.project_supertile_limit = limit_from_file
+                _debug(f"[open_supertiles] project_supertile_limit set to {self.project_supertile_limit}.")
 
                 temp_supertiles_data = []
                 if loaded_num_st_from_file > 0:
@@ -6784,6 +6797,9 @@ class TileEditorApp:
                     messagebox.showinfo("Load Successful", f"Loaded {len(supertiles_data)} supertiles.")
                     self._mark_project_modified()
                     self._add_to_recent_list("modules", load_path)
+
+                self.supertile_limit_var.set(self.project_supertile_limit)
+
                 return True
             else: 
                 return False
