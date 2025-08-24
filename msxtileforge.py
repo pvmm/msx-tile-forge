@@ -2570,7 +2570,7 @@ class ImageImportDialog(tk.Toplevel):
         super().__init__(parent)
         self.transient(parent)
         self.grab_set()
-        self.title("Import Project from Image")
+        self.title("Create Project from Image")
         self.resizable(False, False)
 
         self.app_ref = app_instance
@@ -3378,12 +3378,8 @@ class TileEditorApp:
         import_export_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Import/Export", menu=import_export_menu)
         import_export_menu.add_command(
-            label="Append Tileset from File...", 
-            command=self.append_tileset_from_file
-        )
-        import_export_menu.add_command(
-            label="Append Supertiles from File...", 
-            command=self.append_supertiles_from_file
+            label="Create Project from Image...",
+            command=self.handle_import_project_from_image
         )
         import_export_menu.add_separator()
         import_export_menu.add_command(
@@ -3394,9 +3390,14 @@ class TileEditorApp:
             label="Import Tiles from Image...",
             command=self.import_tiles_from_image
         )
+        import_export_menu.add_separator()
         import_export_menu.add_command(
-            label="Import Project from Image...",
-            command=self.handle_import_project_from_image
+            label="Append Tileset from File...", 
+            command=self.append_tileset_from_file
+        )
+        import_export_menu.add_command(
+            label="Append Supertiles from File...", 
+                command=self.append_supertiles_from_file
         )
         import_export_menu.add_separator()
         import_export_menu.add_command(
@@ -16318,7 +16319,14 @@ class TileEditorApp:
 
     def handle_import_project_from_image(self):
         if self.project_modified:
-            if not messagebox.askokcancel("Unsaved Changes", "This will replace your current project. Discard unsaved changes?", icon="warning", parent=self.root):
+            self.root.bell()
+            if not messagebox.askokcancel(
+                "Confirm Project Replace",
+                "This will replace your current project with content generated from the image, and your unsaved changes will be lost.\n\n"
+                "This action cannot be undone and will clear the undo history. Proceed?",
+                icon="warning", 
+                parent=self.root
+            ):
                 return
 
         image_filepath = filedialog.askopenfilename(
