@@ -3408,11 +3408,11 @@ class TileEditorApp:
             label="Import Tiles from File...", 
             command=self.handle_import_tiles_from_file
         )
-        import_export_menu.add_separator()
-        import_export_menu.add_command(
-            label="Append Supertiles from File...", 
-                command=self.append_supertiles_from_file
-        )
+        #import_export_menu.add_separator()
+        #import_export_menu.add_command(
+        #    label="Append Supertiles from File...", 
+        #        command=self.append_supertiles_from_file
+        #)
         import_export_menu.add_separator()
         import_export_menu.add_command(
             label="Export Raw Project...",
