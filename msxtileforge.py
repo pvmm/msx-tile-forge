@@ -113,8 +113,7 @@ MSX2_RGB7_VALUES = [
     (5, 5, 5),
     (7, 7, 7),
 ]
-BLACK_IDX = 1
-MED_GREEN_IDX = 2
+BLACK_IDX = 0
 WHITE_IDX = 15
 
 # --- Placeholder Colors ---
@@ -2652,6 +2651,7 @@ class ImageImportDialog(tk.Toplevel):
         reset_button.pack(side="bottom", anchor="e")
 
         # --- Import Settings Frame ---
+        # --- Import Settings Frame ---
         settings_frame = ttk.LabelFrame(main_frame, text="Import Settings")
         settings_frame.pack(fill="x", padx=5, pady=5)
         
@@ -2660,6 +2660,7 @@ class ImageImportDialog(tk.Toplevel):
         settings_grid.columnconfigure(1, weight=1)
         settings_grid.columnconfigure(3, weight=1)
         
+        # Row 0: Max Tiles and Optimization
         ttk.Label(settings_grid, text="Max Tiles:").grid(row=0, column=0, sticky="w", padx=(0, 5))
         self.max_tiles_var = tk.IntVar(value=256)
         ttk.Spinbox(settings_grid, from_=1, to=256, textvariable=self.max_tiles_var, width=5).grid(row=0, column=1, sticky="w")
@@ -2667,16 +2668,12 @@ class ImageImportDialog(tk.Toplevel):
         ttk.Label(settings_grid, text="Optimization:").grid(row=0, column=2, sticky="w", padx=(10, 5))
         self.opt_mode_var = tk.StringVar(value="neutral")
         ttk.Combobox(settings_grid, textvariable=self.opt_mode_var, values=['neutral', 'sharp', 'balanced', 'soft'], state="readonly", width=12).grid(row=0, column=3, sticky="w")
-
-        ttk.Label(settings_grid, text="Super Tile:").grid(row=1, column=0, sticky="w", pady=(5,0))
-        st_frame = ttk.Frame(settings_grid)
-        st_frame.grid(row=1, column=1, sticky="w", pady=(5,0))
-        self.st_w_var = tk.IntVar(value=4)
-        self.st_h_var = tk.IntVar(value=4)
-        ttk.Spinbox(st_frame, from_=1, to=32, textvariable=self.st_w_var, width=3).pack(side="left")
-        ttk.Label(st_frame, text=" x ").pack(side="left")
-        ttk.Spinbox(st_frame, from_=1, to=32, textvariable=self.st_h_var, width=3).pack(side="left")
         
+        # Row 1: Sort Tileset and Color Metric
+        ttk.Label(settings_grid, text="Sort Tileset:").grid(row=1, column=0, sticky="w", pady=(5,0))
+        self.sort_tiles_var = tk.StringVar(value="cluster")
+        ttk.Combobox(settings_grid, textvariable=self.sort_tiles_var, values=['none', 'greedy', 'cluster'], state="readonly", width=12).grid(row=1, column=1, sticky="w", pady=(5,0))
+
         ttk.Label(settings_grid, text="Color Metric:").grid(row=1, column=2, sticky="w", padx=(10, 5), pady=(5,0))
         self.metric_var = tk.StringVar(value="weighted-rgb")
         metric_values = ['rgb', 'weighted-rgb']
@@ -2684,9 +2681,16 @@ class ImageImportDialog(tk.Toplevel):
             metric_values.extend(['cie76', 'ciede2000'])
         ttk.Combobox(settings_grid, textvariable=self.metric_var, values=metric_values, state="readonly", width=12).grid(row=1, column=3, sticky="w", pady=(5,0))
         
-        ttk.Label(settings_grid, text="Sort Tileset:").grid(row=2, column=0, sticky="w", pady=(5,0))
-        self.sort_tiles_var = tk.StringVar(value="cluster")
-        ttk.Combobox(settings_grid, textvariable=self.sort_tiles_var, values=['none', 'greedy', 'cluster'], state="readonly", width=12).grid(row=2, column=1, sticky="w", pady=(5,0))
+        # Row 2: Supertile dimensions
+        self.st_label = ttk.Label(settings_grid, text="Supertile:")
+        self.st_label.grid(row=2, column=0, sticky="w", pady=(5,0))
+        self.st_frame = ttk.Frame(settings_grid)
+        self.st_frame.grid(row=2, column=1, sticky="w", pady=(5,0))
+        self.st_w_var = tk.IntVar(value=4)
+        self.st_h_var = tk.IntVar(value=4)
+        ttk.Spinbox(self.st_frame, from_=1, to=32, textvariable=self.st_w_var, width=3).pack(side="left")
+        ttk.Label(self.st_frame, text=" x ").pack(side="left")
+        ttk.Spinbox(self.st_frame, from_=1, to=32, textvariable=self.st_h_var, width=3).pack(side="left")
 
         # --- Advanced Options Frame ---
         advanced_frame = ttk.LabelFrame(main_frame, text="Advanced Options")
@@ -2818,6 +2822,16 @@ class ImageImportDialog(tk.Toplevel):
         x = parent.winfo_x() + (parent.winfo_width() // 2) - (self.winfo_reqwidth() // 2)
         y = parent.winfo_y() + (parent.winfo_height() // 2) - (self.winfo_reqheight() // 2)
         self.geometry(f"+{x}+{y}")
+
+class ImageTileImportDialog(ImageImportDialog):
+    def __init__(self, parent, app_instance, image_path):
+        super().__init__(parent, app_instance, image_path)
+        self.title("Import Tiles from Image")
+
+    def _build_ui(self):
+        super()._build_ui()
+        self.st_label.grid_forget()
+        self.st_frame.grid_forget()
 
 # --- Application Class  -----------------------------------------------------------------------------------------------
 class TileEditorApp:
@@ -15361,17 +15375,6 @@ class TileEditorApp:
         NEW WORKFLOW: Runs msxtilemagic.py to pre-process an image, then presents
         the resulting tiles in a selection dialog for undoable, additive import.
         """
-        if self.project_modified:
-            self.root.bell()
-            if not messagebox.askokcancel(
-                "Confirm Import",
-                "This action will replace the current palette and add new tiles to the tileset. Unsaved changes to the palette will be lost.\n\n"
-                "This operation will be undoable. Proceed?",
-                icon="warning",
-                parent=self.root
-            ):
-                return
-
         image_filepath = filedialog.askopenfilename(
             title="Select Image to Generate Tiles From",
             filetypes=[
@@ -15385,8 +15388,7 @@ class TileEditorApp:
         if not image_filepath:
             return
 
-        # Use the existing dialog to get all script parameters from the user
-        dialog = ImageImportDialog(self.root, self, image_filepath)
+        dialog = ImageTileImportDialog(self.root, self, image_filepath)
         dialog.wait_window()
         
         options = dialog.result
@@ -16498,7 +16500,22 @@ class TileEditorApp:
         canvas_frame = ttk.Frame(main_frame); canvas_frame.grid(row=0, column=1, sticky="nswe")
         canvas_frame.grid_rowconfigure(0, weight=1); canvas_frame.grid_columnconfigure(0, weight=1)
         v_scroll = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
-        dialog.canvas = tk.Canvas(canvas_frame, bg="darkgrey", yscrollcommand=v_scroll.set, highlightthickness=0)
+        # --- NEW: Calculate the fixed size for a 16x16 grid ---
+        fixed_size = VIEWER_TILE_SIZE
+        fixed_padding = 1
+        num_cols = 16
+        num_rows = 16
+        canvas_fixed_width = num_cols * (fixed_size + fixed_padding) + fixed_padding
+        canvas_fixed_height = num_rows * (fixed_size + fixed_padding) + fixed_padding
+
+        dialog.canvas = tk.Canvas(
+            canvas_frame,
+            bg="darkgrey",
+            yscrollcommand=v_scroll.set,
+            highlightthickness=0,
+            width=canvas_fixed_width,   # Set fixed width
+            height=canvas_fixed_height  # Set fixed height
+        )
         v_scroll.config(command=lambda *args: self._on_image_importer_scroll(dialog, *args))
         dialog.canvas.grid(row=0, column=0, sticky="nsew")
         v_scroll.grid(row=0, column=1, sticky="ns")
@@ -16553,18 +16570,23 @@ class TileEditorApp:
 
         size = VIEWER_TILE_SIZE
         padding = 1
-        cols = max(1, canvas_w // (size + padding))
+        cols = 16
         dialog.grid_cols = cols
         rows = (len(patterns) + cols - 1) // cols
         
-        dialog.canvas.config(scrollregion=(0, 0, cols * (size + padding), rows * (size + padding)))
-        
+        dialog.canvas.config(scrollregion=(0, 0, cols * (size + padding) + padding, rows * (size + padding) + padding))
+
+        if not hasattr(dialog, 'image_refs'):
+            dialog.image_refs = []
+        dialog.image_refs.clear()
+
         for i, pattern in enumerate(patterns):
             r, c = divmod(i, cols)
             x1 = c * (size + padding) + padding
             y1 = r * (size + padding) + padding
             
             img = self._render_temp_tile_image(pattern, colors[i], palette, size)
+            dialog.image_refs.append(img) # Store reference
             dialog.canvas.create_image(x1, y1, image=img, anchor="nw", tags=f"tile_{i}")
             
             if i in dialog.selection:
@@ -16730,7 +16752,13 @@ class TileEditorApp:
             dialog.hover_info_text_var.set("Grid Index: N/A")
 
     def _on_image_canvas_left_click(self, event, dialog):
+        """
+        Handles left-clicks on the image import selection canvas.
+        This logic is a direct port of the mature selection behavior from the ROM importer.
+        """
         if not dialog.winfo_exists(): return
+        
+        # --- 1. Calculate the clicked tile index ---
         size = VIEWER_TILE_SIZE
         padding = 1
         cx, cy = dialog.canvas.canvasx(event.x), dialog.canvas.canvasy(event.y)
@@ -16740,25 +16768,63 @@ class TileEditorApp:
 
         if not (0 <= idx < len(dialog.temp_tileset_patterns)): return
 
+        # --- 2. Get current state ---
         is_shift = (event.state & 0x0001) != 0
         is_ctrl = (event.state & 0x0004) != 0
-
-        if is_shift and dialog.anchor_idx != -1:
-            dialog.selection.clear()
-            start, end = min(dialog.anchor_idx, idx), max(dialog.anchor_idx, idx)
-            for i in range(start, end + 1): dialog.selection[i] = True
-        elif is_ctrl:
-            if idx in dialog.selection: del dialog.selection[idx]
-            else: dialog.selection[idx] = True
-            dialog.anchor_idx = idx
-        else:
-            dialog.selection.clear()
-            dialog.selection[idx] = True
-            dialog.anchor_idx = idx
+        selection = dialog.selection
         
+        # --- 3. Apply selection logic (equivalent to ROM importer) ---
+        
+        if is_shift and is_ctrl:
+            # Add a range to the current selection.
+            if dialog.anchor_idx != -1:
+                start, end = min(dialog.anchor_idx, idx), max(dialog.anchor_idx, idx)
+                for i in range(start, end + 1):
+                    selection[i] = True
+            else:
+                # Fallback: No anchor exists, so behave like a Ctrl+Click.
+                if idx in selection: del selection[idx]
+                else: selection[idx] = True
+                dialog.anchor_idx = idx
+        
+        elif is_shift:
+            # Replace the current selection with a new range.
+            selection.clear()
+            if dialog.anchor_idx != -1:
+                start, end = min(dialog.anchor_idx, idx), max(dialog.anchor_idx, idx)
+                for i in range(start, end + 1):
+                    selection[i] = True
+            else:
+                # Fallback: No anchor exists, so behave like a Normal Click.
+                selection[idx] = True
+                dialog.anchor_idx = idx
+                
+        elif is_ctrl:
+            # Toggle a single tile in the current selection.
+            if idx in selection:
+                del selection[idx]
+                if dialog.anchor_idx == idx: # If we deselected the anchor...
+                    dialog.anchor_idx = -1 # ...it is no longer a valid anchor.
+            else:
+                selection[idx] = True
+                dialog.anchor_idx = idx # Update anchor to the last-clicked tile.
+            
+            # If the selection is now empty, there can be no anchor.
+            if not selection:
+                dialog.anchor_idx = -1
+            
+        else: # Normal click
+            # Replace the current selection with a single tile.
+            is_already_selected = (len(selection) == 1 and idx in selection)
+            if not is_already_selected:
+                selection.clear()
+                selection[idx] = True
+            dialog.anchor_idx = idx # Always set the anchor on a normal click.
+
+        # --- 4. Update the UI ---
         self._draw_image_importer_canvas(dialog)
-        dialog.selection_info_text_var.set(f"Tiles Selected: {len(dialog.selection)}")
-        dialog.import_button.config(state=tk.NORMAL if dialog.selection else tk.DISABLED)
+        dialog.selection_info_text_var.set(f"Tiles Selected: {len(selection)}")
+        dialog.import_button.config(state=tk.NORMAL if selection else tk.DISABLED)
 
     def _clear_image_import_selection(self, dialog):
         if not dialog.winfo_exists(): return
@@ -16852,8 +16918,6 @@ class TileEditorApp:
         # Execute the entire import
         self.undo_manager.execute(composite)
         
-        messagebox.showinfo("Import Successful", f"Successfully imported {num_actually_imported} tile(s).", parent=self.root)
-
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
 
