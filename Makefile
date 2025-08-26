@@ -1,4 +1,5 @@
 # Makefile for MSX Tile Forge
+$(info OS=$(shell uname))
 
 # Define the name of the main script and all helper scripts to be included.
 MAIN_SCRIPT = msxtileforge.py
