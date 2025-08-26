@@ -3404,11 +3404,11 @@ class TileEditorApp:
             label="Import Tiles from Image...",
             command=self.import_tiles_from_image
         )
-        import_export_menu.add_separator()
         import_export_menu.add_command(
-            label="Append Tileset from File...", 
-            command=self.append_tileset_from_file
+            label="Import Tiles from File...", 
+            command=self.handle_import_tiles_from_file
         )
+        import_export_menu.add_separator()
         import_export_menu.add_command(
             label="Append Supertiles from File...", 
                 command=self.append_supertiles_from_file
@@ -12971,156 +12971,6 @@ class TileEditorApp:
         self.undo_manager.execute(composite)
         _debug(f"[HANDLE ADD MANY] FINISHED. len(supertiles_data)={len(supertiles_data)}, len(supertiles_data)={len(supertiles_data)}")
 
-    def append_tileset_from_file(self):
-        global tileset_patterns, tileset_colors, current_tile_index
-        
-        if len(tileset_patterns) >= self.project_tile_limit:
-            messagebox.showinfo("Append Tileset", f"Current project tileset is at its limit of {self.project_tile_limit}. Cannot append.", parent=self.root)
-            return
-
-        load_path = filedialog.askopenfilename(
-            master=self.root, # Ensure dialog is modal to the main app
-            filetypes=[("MSX Tileset", "*.SC4Tiles"), ("All Files", "*.*")],
-            title="Select Tileset File to Append",
-        )
-        if not load_path:
-            return # User cancelled
-
-        try:
-            temp_loaded_patterns = []
-            temp_loaded_colors = []
-            tiles_in_file_count = 0
-
-            with open(load_path, "rb") as f:
-                # Read header
-                num_tiles_header_byte_val = f.read(1)
-                if not num_tiles_header_byte_val:
-                    raise ValueError("Selected file is empty or missing tile count header.")
-                
-                header_value = struct.unpack("B", num_tiles_header_byte_val)[0]
-                tiles_in_file_count = 256 if header_value == 0 else header_value
-
-                if not (1 <= tiles_in_file_count <= MAX_TILES):
-                    raise ValueError(f"Invalid tile count in file header: {tiles_in_file_count}.")
-
-                # Read and discard reserved bytes (expecting v0.0.39 format)
-                reserved_bytes_read = f.read(RESERVED_BYTES_COUNT)
-                if len(reserved_bytes_read) < RESERVED_BYTES_COUNT:
-                    # This indicates it's either an old format file missing these bytes,
-                    # or a corrupted new one. For append, we strictly expect the new format.
-                    raise ValueError(f"File '{os.path.basename(load_path)}' does not appear to be a valid v0.0.39+ format tileset file (missing reserved bytes after header). Please migrate it if it's an older version.")
-                
-                _debug(f"Info: Read {tiles_in_file_count} tiles header, skipped {RESERVED_BYTES_COUNT} reserved bytes from appending file.")
-
-                # Read all pattern data from file
-                bytes_per_tile_pattern = TILE_HEIGHT
-                total_pattern_bytes_to_read = tiles_in_file_count * bytes_per_tile_pattern
-                all_pattern_data_bytes = f.read(total_pattern_bytes_to_read)
-                if len(all_pattern_data_bytes) < total_pattern_bytes_to_read:
-                    raise EOFError("EOF while reading pattern data block from append file.")
-
-                current_byte_offset_pattern = 0
-                for _i in range(tiles_in_file_count):
-                    tile_pattern_data = [[0] * TILE_WIDTH for _r in range(TILE_HEIGHT)]
-                    tile_pattern_bytes = all_pattern_data_bytes[current_byte_offset_pattern : current_byte_offset_pattern + bytes_per_tile_pattern]
-                    for r_idx in range(TILE_HEIGHT):
-                        byte_val = tile_pattern_bytes[r_idx]
-                        for c in range(TILE_WIDTH):
-                            pixel_bit = (byte_val >> (7 - c)) & 1
-                            tile_pattern_data[r_idx][c] = pixel_bit
-                    temp_loaded_patterns.append(tile_pattern_data)
-                    current_byte_offset_pattern += bytes_per_tile_pattern
-                
-                # Read all color data from file
-                bytes_per_tile_colors = TILE_HEIGHT
-                total_color_bytes_to_read = tiles_in_file_count * bytes_per_tile_colors
-                all_color_data_bytes = f.read(total_color_bytes_to_read)
-                if len(all_color_data_bytes) < total_color_bytes_to_read:
-                    raise EOFError("EOF while reading color data block from append file.")
-
-                current_byte_offset_colors = 0
-                for _i in range(tiles_in_file_count):
-                    tile_color_data = [(WHITE_IDX, BLACK_IDX) for _r in range(TILE_HEIGHT)]
-                    tile_color_bytes = all_color_data_bytes[current_byte_offset_colors : current_byte_offset_colors + bytes_per_tile_colors]
-                    for r_idx in range(TILE_HEIGHT):
-                        byte_val = tile_color_bytes[r_idx]
-                        fg_idx = (byte_val >> 4) & 0x0F
-                        bg_idx = byte_val & 0x0F
-                        if not (0 <= fg_idx < 16 and 0 <= bg_idx < 16):
-                            tile_color_data[r_idx] = (WHITE_IDX, BLACK_IDX) # Default on error
-                        else:
-                            tile_color_data[r_idx] = (fg_idx, bg_idx)
-                    temp_loaded_colors.append(tile_color_data)
-                    current_byte_offset_colors += bytes_per_tile_colors
-
-            # File reading successful, now handle append logic
-            space_available = self.project_tile_limit - len(tileset_patterns)
-
-            num_to_actually_append = tiles_in_file_count # How many we'd like to append
-
-            if tiles_in_file_count > space_available:
-                confirm_partial = messagebox.askyesno(
-                    "Tileset Limit Reached",
-                    f"The selected file contains {tiles_in_file_count} tiles, "
-                    f"but there is only space for {space_available} more tiles in the current project (max {MAX_TILES}).\n\n"
-                    f"Do you want to append the first {space_available} tiles from the file?",
-                    parent=self.root
-                )
-                if confirm_partial:
-                    num_to_actually_append = space_available
-                else:
-                    _debug("User cancelled partial tile append.")
-                    return # User cancelled
-            
-            if num_to_actually_append <= 0: # Handles case where space_available was 0 or became 0
-                messagebox.showinfo("Append Tileset", "No space available or no tiles to append.", parent=self.root)
-                return
-
-            if self._clear_marked_unused(trigger_redraw=False):
-                pass
-
-            self._mark_project_modified()
-            
-            first_appended_tile_idx = len(tileset_patterns) # For selection later
-
-            for i in range(num_to_actually_append):
-                if len(tileset_patterns) < MAX_TILES: # Final check within loop
-                    tileset_patterns.append(temp_loaded_patterns[i])
-                    tileset_colors.append(temp_loaded_colors[i])
-                else:
-                    # This logic is correct: stop if the maximum is reached.
-                    _debug(" append_tileset: Exceeded MAX_TILES during append loop.")
-                    break
-            
-            current_tile_index = first_appended_tile_idx # Select first appended tile
-
-            self.clear_all_caches()
-            self.invalidate_minimap_background_cache()
-            self.update_all_displays(changed_level="all")
-            self.scroll_viewers_to_tile(current_tile_index)
-            self._update_editor_button_states()
-            self._request_color_usage_refresh()
-
-            final_message = f"Appended {num_to_actually_append} tile(s) from {os.path.basename(load_path)}."
-            if num_to_actually_append < tiles_in_file_count:
-                final_message += f"\n({tiles_in_file_count - num_to_actually_append} tiles from file were not appended due to limit.)"
-            messagebox.showinfo("Append Successful", final_message, parent=self.root)
-
-        except FileNotFoundError:
-            messagebox.showerror("Append Error", f"File not found:\n{load_path}", parent=self.root)
-        except (EOFError, ValueError, struct.error) as e:
-            messagebox.showerror(
-                "Append Tileset Error",
-                f"Invalid data or format in tileset file '{os.path.basename(load_path)}':\n{e}",
-                parent=self.root
-            )
-        except Exception as e:
-            messagebox.showerror(
-                "Append Tileset Error",
-                f"Failed to append tileset from '{os.path.basename(load_path)}':\n{e}",
-                parent=self.root
-            )
-
     def _confirm_supertile_import_with_broken_refs(self, parent_dialog, supertile_def_to_render, original_st_index_in_file, num_tiles_actually_staged, original_starting_tile_idx_in_project):
         """
         Placeholder for a dialog that shows a supertile with broken refs and asks for confirmation.
@@ -16917,7 +16767,195 @@ class TileEditorApp:
         
         # Execute the entire import
         self.undo_manager.execute(composite)
+
+    def handle_import_tiles_from_file(self):
+        """
+        Handles the 'Import Tiles from File...' action. Reads a .SC4Tiles file
+        and opens a selection dialog for the user to choose which tiles to append.
+        """
+        if len(tileset_patterns) >= self.project_tile_limit:
+            messagebox.showinfo("Import Tiles", f"The project tileset is at its limit of {self.project_tile_limit}. Cannot import more tiles.", parent=self.root)
+            return
+
+        load_path = filedialog.askopenfilename(
+            master=self.root,
+            filetypes=[("MSX Tileset", "*.SC4Tiles"), ("All Files", "*.*")],
+            title="Select Tileset File to Import From",
+        )
+        if not load_path:
+            return
+
+        try:
+            # --- This block reads the entire .SC4Tiles file into temporary lists ---
+            with open(load_path, "rb") as f:
+                header = struct.unpack("B", f.read(1))[0]
+                num_tiles = 256 if header == 0 else header
+                f.read(RESERVED_BYTES_COUNT) # Skip reserved bytes
+                pattern_bytes = f.read(num_tiles * TILE_HEIGHT)
+                color_bytes = f.read(num_tiles * TILE_HEIGHT)
+
+            if len(pattern_bytes) < num_tiles * TILE_HEIGHT or len(color_bytes) < num_tiles * TILE_HEIGHT:
+                raise EOFError("File is incomplete or corrupted.")
+
+            temp_patterns = []
+            temp_colors = []
+            for i in range(num_tiles):
+                pattern = [[0] * TILE_WIDTH for _ in range(TILE_HEIGHT)]
+                colors = [(0, 0)] * TILE_HEIGHT
+                for r in range(TILE_HEIGHT):
+                    p_byte = pattern_bytes[i * TILE_HEIGHT + r]
+                    c_byte = color_bytes[i * TILE_HEIGHT + r]
+                    colors[r] = ((c_byte >> 4) & 0xF, c_byte & 0xF)
+                    for c in range(TILE_WIDTH):
+                        pattern[r][c] = (p_byte >> (7 - c)) & 1
+                temp_patterns.append(pattern)
+                temp_colors.append(colors)
+            
+            # --- Launch the selection dialog with the loaded data ---
+            self._show_file_tile_selection_dialog(temp_patterns, temp_colors, self.active_msx_palette)
+
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Could not read the selected tileset file:\n{e}", parent=self.root)
+
+    def _show_file_tile_selection_dialog(self, temp_patterns, temp_colors, active_palette):
+        """
+        Displays a dialog for selecting tiles from a file. This is a clone of the
+        image tile selection dialog but uses the current project's palette for rendering.
+        """
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Import Tiles - Select Tiles to Add")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Store the loaded data on the dialog instance
+        dialog.temp_tileset_patterns = temp_patterns
+        dialog.temp_tileset_colors = temp_colors
+        dialog.temp_palette_hex = active_palette # Use the project's current palette for preview
+        dialog.selection = {}
+        dialog.anchor_idx = -1
+        dialog.grid_cols = 16 # Fixed column count
+        dialog.redraw_timer_id = None
+        dialog.hover_info_text_var = tk.StringVar(value="Grid Index: N/A")
+        dialog.selection_info_text_var = tk.StringVar(value="Tiles Selected: 0")
+
+        main_frame = ttk.Frame(dialog, padding=5)
+        main_frame.pack(expand=True, fill="both")
+        main_frame.grid_columnconfigure(0, weight=1); main_frame.grid_rowconfigure(0, weight=1)
+
+        # Left info panel
+        left_frame = ttk.Frame(main_frame, padding=(5,0))
+        left_frame.grid(row=0, column=0, sticky="nswe")
+        ttk.Label(left_frame, textvariable=dialog.hover_info_text_var).pack(anchor="w")
+        ttk.Label(left_frame, textvariable=dialog.selection_info_text_var).pack(anchor="w")
         
+        # Main canvas view with fixed 16x16 size
+        canvas_frame = ttk.Frame(main_frame); canvas_frame.grid(row=0, column=1, sticky="nswe")
+        canvas_frame.grid_rowconfigure(0, weight=1); canvas_frame.grid_columnconfigure(0, weight=1)
+        v_scroll = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
+        
+        fixed_size = VIEWER_TILE_SIZE
+        fixed_padding = 1
+        canvas_fixed_width = 16 * (fixed_size + fixed_padding) + fixed_padding
+        canvas_fixed_height = 16 * (fixed_size + fixed_padding) + fixed_padding
+
+        dialog.canvas = tk.Canvas(
+            canvas_frame, bg="darkgrey", yscrollcommand=v_scroll.set, highlightthickness=0,
+            width=canvas_fixed_width, height=canvas_fixed_height
+        )
+        v_scroll.config(command=lambda *args: self._on_image_importer_scroll(dialog, *args))
+        dialog.canvas.grid(row=0, column=0, sticky="nsew")
+        v_scroll.grid(row=0, column=1, sticky="ns")
+
+        # Bottom buttons
+        buttons_frame = ttk.Frame(main_frame, padding=(0, 10, 0, 0))
+        buttons_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+        buttons_frame.grid_columnconfigure(0, weight=1) # Center buttons
+        
+        btn_container = ttk.Frame(buttons_frame)
+        btn_container.pack()
+
+        dialog.import_button = ttk.Button(
+            btn_container, text="Import", state=tk.DISABLED,
+            command=lambda: self._execute_file_tile_import(dialog)
+        )
+        cancel_button = ttk.Button(
+            btn_container, text="Cancel", command=dialog.destroy
+        )
+        dialog.import_button.pack(side=tk.LEFT, padx=5)
+        cancel_button.pack(side=tk.LEFT, padx=5)
+
+        # Bind events (reuses the robust handlers from the image importer)
+        dialog.canvas.bind("<Configure>", lambda e: self._on_image_importer_canvas_configure(dialog))
+        dialog.canvas.bind("<Motion>", lambda e: self._on_image_canvas_motion(e, dialog))
+        dialog.canvas.bind("<Button-1>", lambda e: self._on_image_canvas_left_click(e, dialog))
+        dialog.canvas.bind("<Escape>", lambda e: self._clear_image_import_selection(dialog))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+
+        # Initial draw
+        dialog.after(50, lambda: self._on_image_importer_canvas_configure(dialog))
+
+    def _execute_file_tile_import(self, dialog):
+        """
+        Takes selected tiles from the file import dialog and appends them to the
+        project in a single, undoable command.
+        """
+        global current_tile_index
+        
+        if not dialog.winfo_exists(): return
+        
+        selection = dialog.selection
+        if not selection:
+            messagebox.showwarning("Import Error", "No tiles were selected.", parent=dialog)
+            return
+
+        commands = []
+        sorted_indices = sorted(selection.keys())
+        first_new_tile_idx = len(tileset_patterns)
+        num_actually_imported = 0
+        
+        for tile_idx_from_file in sorted_indices:
+            current_project_size = len(tileset_patterns) + num_actually_imported
+            if current_project_size >= self.project_tile_limit:
+                messagebox.showinfo("Import Limit Reached", f"Project tileset limit of {self.project_tile_limit} reached. Imported {num_actually_imported} tiles.", parent=self.root)
+                break
+            
+            new_idx_in_project = len(tileset_patterns) + num_actually_imported
+            pattern_to_add = dialog.temp_tileset_patterns[tile_idx_from_file]
+            colors_to_add = dialog.temp_tileset_colors[tile_idx_from_file]
+            
+            commands.append(ModifyListCommand("Import Tile", tileset_patterns, new_idx_in_project, pattern_to_add, is_insert=True))
+            commands.append(ModifyListCommand("Import Tile", tileset_colors, new_idx_in_project, colors_to_add, is_insert=True))
+            num_actually_imported += 1
+
+        if num_actually_imported == 0:
+             dialog.destroy()
+             messagebox.showinfo("Import Notice", "No tiles were imported (limit may have been reached).", parent=self.root)
+             return
+
+        # Command to update selection state
+        old_state = (current_tile_index,)
+        new_state = (first_new_tile_idx,)
+        def state_setter(state): global current_tile_index; current_tile_index = state[0]
+        commands.append(SetDataCommand("Update App State", self, state_setter, new_state, old_state))
+        
+        # Post-import UI update hooks
+        def post_import_hooks():
+            self._mark_project_modified()
+            self.clear_all_caches()
+            self.invalidate_minimap_background_cache()
+            self.update_all_displays(changed_level="all")
+            self.scroll_viewers_to_tile(current_tile_index)
+            self._update_editor_button_states()
+            self._request_color_usage_refresh()
+            self._request_tile_usage_refresh()
+
+        composite = CompositeCommand(f"Import {num_actually_imported} Tiles", commands, app_ref=self, post_hooks=[post_import_hooks])
+        
+        dialog.destroy()
+        self.undo_manager.execute(composite)
+        
+        messagebox.showinfo("Import Successful", f"Successfully imported {num_actually_imported} tile(s).", parent=self.root)
+
 # print(dir(TileEditorApp))
 # exit() # Stop before GUI starts for this test
 
