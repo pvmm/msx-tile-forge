@@ -135,10 +135,15 @@ jobs:
           UPLOAD_COUNT=0
           COMMENT_FILE_LIST=""
           
-          find . -type f -print0 | while IFS= read -r -d $'\0' FILE; do
+          # This is the fix: Explicitly find only the top-level package files.
+          # The '*/' ensures we are looking inside the artifact subdirectories.
+          PACKAGE_FILES=$(find . -maxdepth 2 -type f \( -name "*_win.zip" -o -name "*_lin.tar.gz" -o -name "*_deb.deb" -o -name "*_src.zip" \))
+
+          for FILE in $PACKAGE_FILES; do
             FILENAME=$(basename "$FILE")
             echo "Uploading $FILENAME to item '${IA_IDENTIFIER}'..."
             if [ $UPLOAD_COUNT -eq 0 ]; then
+              # First file creates the item and sets all metadata
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
                 --header "x-amz-auto-make-bucket: 1" \
@@ -150,6 +155,7 @@ jobs:
                 --upload-file "$FILE" \
                 "https://s3.us.archive.org/${IA_IDENTIFIER}/${FILENAME}"
             else
+              # Subsequent files are just added
               sleep 15
               curl --fail --location --request PUT \
                 --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
@@ -163,20 +169,36 @@ jobs:
           done
           
           cd ..
-          
-          sleep 30
-          
+
+      - name: Upload Item Icon
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          IA_IDENTIFIER: ${{ needs.generate-version.outputs.item_identifier }}
+        run: |
+          echo "Uploading item icon..."
+          curl --fail --location --request PUT \
+            --header "Authorization: LOW ${IA_ACCESS_KEY}:${IA_SECRET_KEY}" \
+            --header "x-archive-meta-thumbnail: 1" \
+            --upload-file "./Resources/splash4_1.png" \
+            "https://s3.us.archive.org/${IA_IDENTIFIER}/icon.png"
+
+      - name: Post Final Commit Comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
           COMMIT_SHA=$(git rev-parse HEAD)
           COMMENT_BODY="🚀 **Nightly Build Successful for \`${{ inputs.branch }}\`**
 
           A new historical archive for this build has been created and tagged for collection.
-          **Item Page:** [${IA_IDENTIFIER}](https://archive.org/details/${IA_IDENTIFIER})
+          **Item Page:** [${{ needs.generate-version.outputs.item_identifier }}](https://archive.org/details/${{ needs.generate-version.outputs.item_identifier }})
 
           Version: \`${{ needs.generate-version.outputs.version_string }}\`
           Commit: \`${COMMIT_SHA}\`
 
           **Downloads:**
-          ${COMMENT_FILE_LIST}"
+          ${{ steps.upload-packages.outputs.comment_file_list }}"
 
           echo "Posting comment to commit ${COMMIT_SHA}"
           gh api \
@@ -186,3 +208,4 @@ jobs:
             -f body=- <<EOF
           ${COMMENT_BODY}
           EOF
+
