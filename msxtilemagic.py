@@ -882,7 +882,7 @@ def main():
     parser.add_argument("--supertile-height", type=int, default=4, help="Height of supertiles in tiles. Default: 4")
     parser.add_argument("--find-best-offset", action="store_true", help="[EXPERIMENTAL] Test all 64 tile offsets in parallel and pick the one which reduces color clash.")
     parser.add_argument("--synthesize-tiles", action="store_true", help="[EXPERIMENTAL] Generate new 'ideal' tiles for merged groups instead of picking an existing one.")
-
+    parser.add_argument("--no-maps", action="store_true", help="Generate only the palette and tileset, skipping supertile and map generation.")
     parser.add_argument("--optimization-mode", type=str, choices=['neutral', 'sharp', 'balanced', 'soft'], default='neutral', 
                         help="Palette strategy for optimization.\n"
                              "  neutral (default): Faithful, neutral color selection.\n"
@@ -1063,25 +1063,7 @@ def main():
     num_unique_base_patterns = len(final_unique_patterns)
     print(f"   [INFO] Optimization complete. Final tile count: {num_unique_base_patterns}")
 
-    # --- 7. Supertile Discovery and Sorting ---
-    supertile_definitions = []
-    final_map_to_write = final_tile_map_indices
-    num_supertiles = num_unique_base_patterns
-    use_supertiles = args.supertile_width > 1 or args.supertile_height > 1
-
-    # Part A: Discover unique supertiles
-    if use_supertiles:
-        print(f"7. Discovering {args.supertile_width}x{args.supertile_height} supertiles...")
-        supertile_definitions, supertile_map = discover_supertiles(final_tile_map_indices, args.supertile_width, args.supertile_height)
-        num_supertiles = len(supertile_definitions)
-        final_map_to_write = supertile_map
-        print(f"   [INFO] Found {num_supertiles} unique {args.supertile_width}x{args.supertile_height} supertiles.")
-    else:
-        print("7. Generating 1x1 supertile definitions...")
-        for i in range(num_unique_base_patterns):
-            supertile_definitions.append(np.array([[i]], dtype=np.int16))
-
-    # Part B: Create the final MSX palette (must be done before sorting supertiles)
+    # 6.1: Create the final MSX palette (must be done before sorting supertiles)
     final_palette_0_7 = [(0,0,0)] * 16
     for i, slot_rule in enumerate(final_rules):
         if slot_rule == 'block':
@@ -1089,38 +1071,57 @@ def main():
     for i, color in enumerate(render_working_palette_0_7):
         final_slot = working_to_final_map[i]
         final_palette_0_7[final_slot] = color
+    
+    # --- 7. Supertile Discovery and Sorting ---
+    if not args.no_maps:
+        supertile_definitions = []
+        final_map_to_write = final_tile_map_indices
+        num_supertiles = num_unique_base_patterns
+        use_supertiles = args.supertile_width > 1 or args.supertile_height > 1
 
-    # Part C: Sort the supertiles by visual similarity if requested
-    if use_supertiles and args.sort_tileset != 'none' and num_supertiles > 1:
-        # Create a PIL-compatible RGB 0-255 palette for the comparison function
-        final_pil_palette_for_compare = [(c[0]*255//7, c[1]*255//7, c[2]*255//7) if c[0] < 128 else (0,0,0) for c in final_palette_0_7]
-        pil_final_palette_flat_for_compare = [comp for rgb in final_pil_palette_for_compare for comp in rgb]
+        # Part 7.1: Discover unique supertiles
+        if use_supertiles:
+            print(f"7. Discovering {args.supertile_width}x{args.supertile_height} supertiles...")
+            supertile_definitions, supertile_map = discover_supertiles(final_tile_map_indices, args.supertile_width, args.supertile_height)
+            num_supertiles = len(supertile_definitions)
+            final_map_to_write = supertile_map
+            print(f"   [INFO] Found {num_supertiles} unique {args.supertile_width}x{args.supertile_height} supertiles.")
+        else:
+            print("7. Generating 1x1 supertile definitions...")
+            for i in range(num_unique_base_patterns):
+                supertile_definitions.append(np.array([[i]], dtype=np.int16))
+
+        # 7.2: Sort the supertiles by visual similarity if requested
+        if use_supertiles and args.sort_tileset != 'none' and num_supertiles > 1:
+            # Create a PIL-compatible RGB 0-255 palette for the comparison function
+            final_pil_palette_for_compare = [(c[0]*255//7, c[1]*255//7, c[2]*255//7) if c[0] < 128 else (0,0,0) for c in final_palette_0_7]
+            pil_final_palette_flat_for_compare = [comp for rgb in final_pil_palette_for_compare for comp in rgb]
         
-        print(f"   Sorting {num_supertiles} supertiles for visual coherence...")
-        st_similarity_map = defaultdict(list)
-        st_pairs = list(combinations(range(num_supertiles), 2))
+            print(f"   Sorting {num_supertiles} supertiles for visual coherence...")
+            st_similarity_map = defaultdict(list)
+            st_pairs = list(combinations(range(num_supertiles), 2))
         
-        st_similarity_map = defaultdict(list)
-        st_pairs = list(combinations(range(num_supertiles), 2))
+            st_similarity_map = defaultdict(list)
+            st_pairs = list(combinations(range(num_supertiles), 2))
 
-        init_args = (supertile_definitions, final_unique_patterns, final_pil_palette_for_compare, args.color_metric)
-        chunksize = max(1, len(st_pairs) // (args.cores * 16))
+            init_args = (supertile_definitions, final_unique_patterns, final_pil_palette_for_compare, args.color_metric)
+            chunksize = max(1, len(st_pairs) // (args.cores * 16))
 
-        with multiprocessing.Pool(processes=args.cores, initializer=_init_supertile_worker, initargs=init_args) as pool:
-            for dist, idx1, idx2 in tqdm(pool.imap_unordered(_calculate_supertile_cost_worker, st_pairs, chunksize=chunksize), total=len(st_pairs), desc="   Clustering supertiles", leave=False):
-                st_similarity_map[idx1].append((dist, idx2))
-                st_similarity_map[idx2].append((dist, idx1))
+            with multiprocessing.Pool(processes=args.cores, initializer=_init_supertile_worker, initargs=init_args) as pool:
+                for dist, idx1, idx2 in tqdm(pool.imap_unordered(_calculate_supertile_cost_worker, st_pairs, chunksize=chunksize), total=len(st_pairs), desc="   Clustering supertiles", leave=False):
+                    st_similarity_map[idx1].append((dist, idx2))
+                    st_similarity_map[idx2].append((dist, idx1))
 
-        for idx in st_similarity_map:
-            st_similarity_map[idx].sort()
+            for idx in st_similarity_map:
+                st_similarity_map[idx].sort()
 
-        original_st_map = {i: st for i, st in enumerate(supertile_definitions)}
-        sorted_supertiles, old_st_to_new_map = sort_items_by_similarity(
-            supertile_definitions,
-            st_similarity_map,
-            original_st_map,
-            strategy=args.sort_tileset
-        )
+            original_st_map = {i: st for i, st in enumerate(supertile_definitions)}
+            sorted_supertiles, old_st_to_new_map = sort_items_by_similarity(
+                supertile_definitions,
+                st_similarity_map,
+                original_st_map,
+                strategy=args.sort_tileset
+            )
 
         # Update the definitions and map with the new sorted order
         supertile_definitions = sorted_supertiles
@@ -1141,38 +1142,41 @@ def main():
         
     write_sc4_palette(f"{full_output_path}.SC4Pal", final_palette_0_7)
     write_sc4_tiles(f"{full_output_path}.SC4Tiles", final_unique_patterns)
-    write_sc4_supertiles(f"{full_output_path}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
-    write_sc4_map(f"{full_output_path}.SC4Map", final_map_to_write, num_supertiles)
+
+    if not args.no_maps:
+        write_sc4_supertiles(f"{full_output_path}.SC4Super", supertile_definitions, args.supertile_width, args.supertile_height)
+        write_sc4_map(f"{full_output_path}.SC4Map", final_map_to_write, num_supertiles)
 
     # --- 9. Generate Visual Outputs ---
-    print("9. Generating visual outputs...")
-    final_pil_palette = [(0,0,0)] * 16
-    for i, color in enumerate(final_palette_0_7):
-        if color[0] < 128:
-            final_pil_palette[i] = (color[0]*255//7, color[1]*255//7, color[2]*255//7)
+    if not args.no_maps:
+        print("9. Generating visual outputs...")
+        final_pil_palette = [(0,0,0)] * 16
+        for i, color in enumerate(final_palette_0_7):
+            if color[0] < 128:
+                final_pil_palette[i] = (color[0]*255//7, color[1]*255//7, color[2]*255//7)
     
-    pil_final_palette_flat = [c for rgb in final_pil_palette for c in rgb]
-    pil_final_palette_flat.extend([0,0,0] * (256-16))
+        pil_final_palette_flat = [c for rgb in final_pil_palette for c in rgb]
+        pil_final_palette_flat.extend([0,0,0] * (256-16))
 
-    reconstructed_img = Image.new('P', (img_width, img_height), color=0)
-    reconstructed_img.putpalette(pil_final_palette_flat)
-    for r_map in range(tile_map_height):
-        for c_map in range(tile_map_width):
-            pattern_idx = final_tile_map_indices[r_map, c_map]
-            if 0 <= pattern_idx < num_unique_base_patterns:
-                tile_to_paste = reconstruct_sc4_tile_pil(final_unique_patterns[pattern_idx][0], final_unique_patterns[pattern_idx][1], pil_final_palette_flat)
-                reconstructed_img.paste(tile_to_paste, (c_map * 8, r_map * 8))
-    reconstructed_img.save(f"{full_output_path}_reconstructed.png")
+        reconstructed_img = Image.new('P', (img_width, img_height), color=0)
+        reconstructed_img.putpalette(pil_final_palette_flat)
+        for r_map in range(tile_map_height):
+            for c_map in range(tile_map_width):
+                pattern_idx = final_tile_map_indices[r_map, c_map]
+                if 0 <= pattern_idx < num_unique_base_patterns:
+                    tile_to_paste = reconstruct_sc4_tile_pil(final_unique_patterns[pattern_idx][0], final_unique_patterns[pattern_idx][1], pil_final_palette_flat)
+                    reconstructed_img.paste(tile_to_paste, (c_map * 8, r_map * 8))
+        reconstructed_img.save(f"{full_output_path}_reconstructed.png")
 
-    tiles_per_row = 16
-    num_rows = (num_unique_base_patterns + tiles_per_row - 1) // tiles_per_row
-    tileset_vis = Image.new('P', (tiles_per_row*8, num_rows*8), color=0)
-    tileset_vis.putpalette(pil_final_palette_flat)
-    for i, (p_data, c_data) in enumerate(final_unique_patterns):
-        r_vis, c_vis = divmod(i, tiles_per_row)
-        tile_to_paste = reconstruct_sc4_tile_pil(p_data, c_data, pil_final_palette_flat)
-        tileset_vis.paste(tile_to_paste, (c_vis * 8, r_vis * 8))
-    tileset_vis.save(f"{full_output_path}_tileset.png")
+        tiles_per_row = 16
+        num_rows = (num_unique_base_patterns + tiles_per_row - 1) // tiles_per_row
+        tileset_vis = Image.new('P', (tiles_per_row*8, num_rows*8), color=0)
+        tileset_vis.putpalette(pil_final_palette_flat)
+        for i, (p_data, c_data) in enumerate(final_unique_patterns):
+            r_vis, c_vis = divmod(i, tiles_per_row)
+            tile_to_paste = reconstruct_sc4_tile_pil(p_data, c_data, pil_final_palette_flat)
+            tileset_vis.paste(tile_to_paste, (c_vis * 8, r_vis * 8))
+        tileset_vis.save(f"{full_output_path}_tileset.png")
     
     print("\nProcessing complete.")
 
