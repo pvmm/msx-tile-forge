@@ -1,4 +1,5 @@
 name: 2. RC Build (REL_XX.YY.ZZ Branches)
+
 on:
   workflow_dispatch:
 
@@ -90,4 +91,62 @@ jobs:
 
   #########################################
   # C. Call the Reusable Builders
-  ################################
+  #########################################
+  build-linux:
+    name: Call Linux Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      lin_filename: ${{ needs.generate-version.outputs.lin_filename }}
+      deb_filename: ${{ needs.generate-version.outputs.deb_filename }}
+
+  build-windows:
+    name: Call Windows Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      win_filename: ${{ needs.generate-version.outputs.win_filename }}
+
+  build-source:
+    name: Call Source Builder
+    needs: [generate-version, prepare-source]
+    uses: ./.github/workflows/build-source.yml
+    with:
+      prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
+      src_filename: ${{ needs.generate-version.outputs.src_filename }}
+
+  #########################################
+  # D. Publish Pre-release to GitHub
+  #########################################
+  publish-pre-release:
+    name: Publish Pre-release
+    needs: [generate-version, build-linux, build-windows, build-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all final build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: final-artifacts
+      
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Create and Push Git Tag
+        run: |
+          # We need to checkout to be in a git repo to push the tag
+          git checkout ${{ github.ref_name }}
+          git tag "v${{ needs.generate-version.outputs.version_string }}"
+          git push origin "v${{ needs.generate-version.outputs.version_string }}"
+
+      - name: Create GitHub Pre-release and Upload Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ needs.generate-version.outputs.version_string }}" ./final-artifacts/*/* \
+            --title "Release Candidate v${{ needs.generate-version.outputs.version_string }}" \
+            --notes "This is a pre-release version for testing. All packages are attached below." \
+            --prerelease

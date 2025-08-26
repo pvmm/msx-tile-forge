@@ -18,7 +18,7 @@ You can download pre-compiled, ready-to-run versions of MSX Tile Forge for vario
 *   **Latest Official Release & Release Candidates:** For the most stable versions (yet to be populated), please visit the **[Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases)**. (Note: The first official release is coming soon!)
 
 *   **Nightly Builds:** For the latest "bleeding-edge" features and fixes, you can download a build from the most recent successful nightly run. These builds are generated automatically and are not guaranteed to be stable, but they represent the most up-to-date version of the software.
-    *   **[Browse All Nightly Builds on the Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build"&sort=-date)**
+    *   **[Browse All Nightly Builds on the Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build"&sort=-addeddate)**
 
 *   **Source Code:** If you prefer to run the application from source, you can download the latest source archive from the [Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases) or clone the repository directly. This is a much smaller download, but it requires you to set up your own Python environment as described in the [Getting Started](#getting-started) section.
 

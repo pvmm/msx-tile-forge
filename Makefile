@@ -29,6 +29,7 @@ lin:
 		--add-data "msxtilemagic.py:." \
 		--add-data "tilerandomizer.py:." \
 		--add-data "supertilerandomizer.py:." \
+		--hidden-import='PIL._tkinter_finder' \
 		$(MAIN_SCRIPT)
 	cp README.md LICENSE dist/$(MAIN_SCRIPT:.py=)/
 	# Create the final tar.gz archive directly with the specified name
