@@ -27,6 +27,11 @@ You can download pre-compiled, ready-to-run versions of MSX Tile Forge for vario
 *   **Palette Editor:**
     *   Manage a 16-color active MSX2 palette.
     *   Select colors from a 512-color MSX2 visual picker or by direct RGB (0-7 per channel) input.
+    *   **Consolidated Color Editor Panel:**
+        *   Features linked 9-bit (MSX, 0-7) and 24-bit (Standard RGB, 0-255) inputs.
+        *   Changes in one format instantly update the other in real-time.
+        *   Live preview swatches show the user-defined 24-bit color and the closest resulting 9-bit MSX2 color.
+    *   **Informative Tooltips:** Hover over any color in the Active Palette or the 512 Color Picker to see a tooltip with its slot/index and both 9-bit and 24-bit RGB values.
     *   **Advanced Drag-and-Drop:**
         *   **Swap (LMB Drag):** Drag a color slot and drop it onto another to swap their positions and all color references throughout the tileset.
         *   **Replace All (Alt+LMB Drop):** Hold `ALT` while dropping a source color onto a target color to replace all uses of the target color with the source color across the entire project. A visual confirmation dialog will appear.
@@ -233,7 +238,11 @@ This tab is dedicated to managing the 16-color active palette used for all graph
 *   **Selected Slot Information:** Shows the selected slot's index, a color preview, its hexadecimal RGB value, its MSX2-specific RGB values (0-7 per channel), and a count of how many times it's used. The usage count is a **clickable link** to find all tiles using that color.
 *   **Color Modification:**
     *   **MSX2 512 Color Picker:** A large grid displaying all 512 possible MSX2 colors. Clicking a color here applies it to the selected active palette slot.
-    *   **Set Color (RGB 0-7):** Input R, G, B values (0-7 each) and click "Set" to apply them to the selected slot.
+    *   **Set Selected Color Panel:** This panel provides two synchronized ways to define a color:
+        *   **MSX (0-7):** Input R, G, and B values from 0-7 in this row.
+        *   **RGB (0-255):** Input standard R, G, and B values from 0-255 in this row.
+        *   As you type in one set of boxes, the other set and the preview swatches will update in real-time to show the closest match. Invalid characters are blocked, and out-of-range numbers are automatically corrected when you leave an input box.
+        *   Click the **"Set Color"** button to apply the final MSX2 color to the selected palette slot. This action is undoable.
 *   **Reset Palette:** A button to revert the active 16-color palette to the standard MSX2 hardware default colors.
 
 ### 2. Tile Editor Tab
