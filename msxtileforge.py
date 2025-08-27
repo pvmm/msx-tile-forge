@@ -2873,8 +2873,14 @@ class TileEditorApp:
         self.active_msx_palette = []
         self.selected_palette_slot = 0
 
+        self._is_updating_color_inputs = False # Recursion guard for traces
+        self.msx2_color_preview_canvas = None
+        self.hex24_color_preview_canvas = None
+        self.rgb9_r_var, self.rgb9_g_var, self.rgb9_b_var = None, None, None
+        self.rgb24_r_var, self.rgb24_g_var, self.rgb24_b_var = None, None, None
+
         self._main_window_configure_timer = None 
-        self._map_canvas_configure_timer = None 
+        self._map_canvas_configure_timer = None
         self._palette_pane_resize_timer = None
         self.single_click_timer = None
 
@@ -3434,96 +3440,120 @@ class TileEditorApp:
         main_frame.grid_rowconfigure(0, weight=1)
         main_frame.grid_columnconfigure(0, weight=0)
         main_frame.grid_columnconfigure(1, weight=1)
-        # Left Frame Contents
-        current_palette_frame = ttk.LabelFrame(
-            left_frame, text="Active Palette (16 colors)"
-        )
+        
+        # --- Left Frame Contents ---
+        current_palette_frame = ttk.LabelFrame(left_frame, text="Active Palette (16 colors)")
         current_palette_frame.pack(pady=(0, 10), fill="x")
         cp_canvas_width = 4 * (CURRENT_PALETTE_SLOT_SIZE + 2) + 2
         cp_canvas_height = 4 * (CURRENT_PALETTE_SLOT_SIZE + 2) + 2
-
-        self.current_palette_canvas = tk.Canvas(
-            current_palette_frame,
-            width=cp_canvas_width,
-            height=cp_canvas_height,
-            borderwidth=0,
-            highlightthickness=0,
-        )
+        self.current_palette_canvas = tk.Canvas(current_palette_frame, width=cp_canvas_width, height=cp_canvas_height, borderwidth=0, highlightthickness=0)
         self.current_palette_canvas.pack()
-        self.current_palette_canvas.bind(
-            "<Button-1>", self.handle_current_palette_click
-        )
+        self.current_palette_canvas.bind("<Button-1>", self.handle_current_palette_click)
         self.current_palette_canvas.bind("<B1-Motion>", self.handle_palette_drag_motion)
         self.current_palette_canvas.bind("<ButtonRelease-1>", self.handle_palette_drag_release)
+
         info_frame = ttk.LabelFrame(left_frame, text="Selected Slot Info")
         info_frame.pack(pady=(0, 10), fill="x")
-
         preview_canvas_size = 48 
-        self.selected_color_preview_canvas = tk.Canvas(
-            info_frame, 
-            width=preview_canvas_size, 
-            height=preview_canvas_size,
-            bg="darkgrey",
-            highlightthickness=0
-        )
+        self.selected_color_preview_canvas = tk.Canvas(info_frame, width=preview_canvas_size, height=preview_canvas_size, bg="darkgrey", highlightthickness=0)
         self.selected_color_preview_canvas.grid(row=0, column=0, rowspan=3, padx=5, pady=5)
-        
         self.selected_slot_label = ttk.Label(info_frame, text="Slot: 0")
         self.selected_slot_label.grid(row=0, column=1, padx=(0, 5), sticky="sw")
-
         self.selected_slot_rgb_label = ttk.Label(info_frame, text="RGB: #000000")
         self.selected_slot_rgb_label.grid(row=1, column=1, padx=(0, 5), sticky="nw")
-        
         self.selected_color_usage_label = tk.Label(info_frame, text="Usage: N/A", anchor="w", justify=tk.LEFT)
         self.selected_color_usage_label.grid(row=2, column=1, padx=(0, 5), sticky="nw")
         self.selected_color_usage_label.bind("<Button-1>", self._handle_usage_label_click)
-        
-        info_frame.grid_rowconfigure(0, weight=1)
-        info_frame.grid_rowconfigure(1, weight=1)
-        info_frame.grid_rowconfigure(2, weight=1)
+        info_frame.grid_rowconfigure(0, weight=1); info_frame.grid_rowconfigure(1, weight=1); info_frame.grid_rowconfigure(2, weight=1)
         info_frame.grid_columnconfigure(1, weight=1)
 
-        rgb_frame = ttk.LabelFrame(left_frame, text="Set Color (RGB 0-7)")
-        rgb_frame.pack(pady=(0, 10), fill="x")
-        r_label = ttk.Label(rgb_frame, text="R:")
-        r_label.grid(row=0, column=0, padx=(5, 0))
-        self.rgb_r_var = tk.StringVar(value="0")
-        self.rgb_r_entry = ttk.Entry(rgb_frame, textvariable=self.rgb_r_var, width=2)
-        self.rgb_r_entry.grid(row=0, column=1)
-        g_label = ttk.Label(rgb_frame, text="G:")
-        g_label.grid(row=0, column=2, padx=(5, 0))
-        self.rgb_g_var = tk.StringVar(value="0")
-        self.rgb_g_entry = ttk.Entry(rgb_frame, textvariable=self.rgb_g_var, width=2)
-        self.rgb_g_entry.grid(row=0, column=3)
-        b_label = ttk.Label(rgb_frame, text="B:")
-        b_label.grid(row=0, column=4, padx=(5, 0))
-        self.rgb_b_var = tk.StringVar(value="0")
-        self.rgb_b_entry = ttk.Entry(rgb_frame, textvariable=self.rgb_b_var, width=2)
-        self.rgb_b_entry.grid(row=0, column=5)
-        apply_rgb_button = ttk.Button(
-            rgb_frame, text="Set", command=self.handle_rgb_apply
-        )
-        apply_rgb_button.grid(row=0, column=6, padx=5, pady=5)
-        reset_palette_button = ttk.Button(
-            left_frame,
-            text="Reset to MSX2 Default",
-            command=self.reset_palette_to_default,
-        )
-        reset_palette_button.pack(pady=(0, 5), fill="x")
-        # Right Frame Contents
+        # --- New consolidated frame for setting colors ---
+        set_color_frame = ttk.LabelFrame(left_frame, text="Set Selected Color")
+        set_color_frame.pack(pady=(0, 10), fill="x")
+
+        # Row 1: Preview Canvases
+        preview_frame = ttk.Frame(set_color_frame, padding=(5, 5, 5, 0))
+        preview_frame.pack(fill="x") # Let it fill horizontally to the compact width
+        preview_frame.grid_columnconfigure(0, weight=1)
+        preview_frame.grid_columnconfigure(1, weight=1)
+        
+        ttk.Label(preview_frame, text="MSX2 (9 bits)", font=("TkSmallCaptionFont",)).grid(row=0, column=0)
+        ttk.Label(preview_frame, text="RGB (24 bits)", font=("TkSmallCaptionFont",)).grid(row=0, column=1)
+
+        preview_canvas_container = ttk.Frame(preview_frame)
+        preview_canvas_container.grid(row=1, column=0, columnspan=2, sticky="ew")
+        preview_canvas_container.grid_columnconfigure(0, weight=1)
+        preview_canvas_container.grid_columnconfigure(1, weight=1)
+        
+        self.msx2_color_preview_canvas = tk.Canvas(preview_canvas_container, height=50, width=100, bg="black", highlightthickness=0)
+        self.msx2_color_preview_canvas.pack(side="left")
+        self.hex24_color_preview_canvas = tk.Canvas(preview_canvas_container, height=50, width=100, bg="black", highlightthickness=0)
+        self.hex24_color_preview_canvas.pack(side="left")
+
+        # Container for aligned input rows
+        input_container_frame = ttk.Frame(set_color_frame, padding=5)
+        input_container_frame.pack(pady=5) # pack without fill/expand
+        
+        # Validation commands
+        vcmd_9bit = (self.root.register(self._validate_9bit_input), '%P')
+        vcmd_24bit = (self.root.register(self._validate_24bit_input), '%P')
+
+        # Row 2: 9-bit (MSX2) RGB Inputs
+        ttk.Label(input_container_frame, text="MSX (0-7)").grid(row=0, column=0, columnspan=6, sticky="w")
+        ttk.Label(input_container_frame, text="R:").grid(row=1, column=0, sticky="e", padx=(0,2))
+        self.rgb9_r_var = tk.StringVar()
+        rgb9_r_entry = ttk.Entry(input_container_frame, textvariable=self.rgb9_r_var, width=4, justify='center', validate='key', validatecommand=vcmd_9bit)
+        rgb9_r_entry.grid(row=1, column=1)
+        ttk.Label(input_container_frame, text="G:").grid(row=1, column=2, sticky="e", padx=(5,2))
+        self.rgb9_g_var = tk.StringVar()
+        rgb9_g_entry = ttk.Entry(input_container_frame, textvariable=self.rgb9_g_var, width=4, justify='center', validate='key', validatecommand=vcmd_9bit)
+        rgb9_g_entry.grid(row=1, column=3)
+        ttk.Label(input_container_frame, text="B:").grid(row=1, column=4, sticky="e", padx=(5,2))
+        self.rgb9_b_var = tk.StringVar()
+        rgb9_b_entry = ttk.Entry(input_container_frame, textvariable=self.rgb9_b_var, width=4, justify='center', validate='key', validatecommand=vcmd_9bit)
+        rgb9_b_entry.grid(row=1, column=5)
+
+        # Row 3: 24-bit (Standard) RGB Inputs
+        ttk.Label(input_container_frame, text="RGB (0-255)").grid(row=2, column=0, columnspan=6, sticky="w", pady=(5,0))
+        ttk.Label(input_container_frame, text="R:").grid(row=3, column=0, sticky="e", padx=(0,2))
+        self.rgb24_r_var = tk.StringVar()
+        rgb24_r_entry = ttk.Entry(input_container_frame, textvariable=self.rgb24_r_var, width=4, justify='center', validate='key', validatecommand=vcmd_24bit)
+        rgb24_r_entry.grid(row=3, column=1)
+        ttk.Label(input_container_frame, text="G:").grid(row=3, column=2, sticky="e", padx=(5,2))
+        self.rgb24_g_var = tk.StringVar()
+        rgb24_g_entry = ttk.Entry(input_container_frame, textvariable=self.rgb24_g_var, width=4, justify='center', validate='key', validatecommand=vcmd_24bit)
+        rgb24_g_entry.grid(row=3, column=3)
+        ttk.Label(input_container_frame, text="B:").grid(row=3, column=4, sticky="e", padx=(5,2))
+        self.rgb24_b_var = tk.StringVar()
+        rgb24_b_entry = ttk.Entry(input_container_frame, textvariable=self.rgb24_b_var, width=4, justify='center', validate='key', validatecommand=vcmd_24bit)
+        rgb24_b_entry.grid(row=3, column=5)
+
+        # Row 4 & 5: Action Buttons
+        ttk.Button(set_color_frame, text="Set Color", command=self.handle_rgb_apply, width=28).pack(padx=5, pady=(5,2))
+        ttk.Button(set_color_frame, text="Reset to MSX2 Default", command=self.reset_palette_to_default, width=28).pack(padx=5, pady=(2,5))
+        
+        # --- Bindings for Coercion and Tracing ---
+        rgb9_entries = (rgb9_r_entry, rgb9_g_entry, rgb9_b_entry)
+        rgb24_entries = (rgb24_r_entry, rgb24_g_entry, rgb24_b_entry)
+        for var, entry in zip((self.rgb9_r_var, self.rgb9_g_var, self.rgb9_b_var), rgb9_entries):
+            entry.bind("<FocusOut>", lambda e, v=var, t="9bit": self._handle_color_input_coerce(v, t))
+        for var, entry in zip((self.rgb24_r_var, self.rgb24_g_var, self.rgb24_b_var), rgb24_entries):
+            entry.bind("<FocusOut>", lambda e, v=var, t="24bit": self._handle_color_input_coerce(v, t))
+        self.rgb9_r_var.trace_add("write", lambda *args: self._on_9bit_input_change())
+        self.rgb9_g_var.trace_add("write", lambda *args: self._on_9bit_input_change())
+        self.rgb9_b_var.trace_add("write", lambda *args: self._on_9bit_input_change())
+        self.rgb24_r_var.trace_add("write", lambda *args: self._on_24bit_input_change())
+        self.rgb24_g_var.trace_add("write", lambda *args: self._on_24bit_input_change())
+        self.rgb24_b_var.trace_add("write", lambda *args: self._on_24bit_input_change())
+        
+        # --- Right Frame Contents ---
         picker_frame = ttk.LabelFrame(right_frame, text="MSX2 512 Color Picker")
         picker_frame.pack(expand=True, fill="both")
         picker_canvas_width = MSX2_PICKER_COLS * (MSX2_PICKER_SQUARE_SIZE + 1) + 1
         picker_canvas_height = MSX2_PICKER_ROWS * (MSX2_PICKER_SQUARE_SIZE + 1) + 1
         picker_hbar = ttk.Scrollbar(picker_frame, orient=tk.HORIZONTAL)
         picker_vbar = ttk.Scrollbar(picker_frame, orient=tk.VERTICAL)
-        self.msx2_picker_canvas = tk.Canvas(
-            picker_frame,
-            bg="lightgrey",
-            scrollregion=(0, 0, picker_canvas_width, picker_canvas_height),
-            xscrollcommand=picker_hbar.set,
-            yscrollcommand=picker_vbar.set,
-        )
+        self.msx2_picker_canvas = tk.Canvas(picker_frame, bg="lightgrey", scrollregion=(0, 0, picker_canvas_width, picker_canvas_height), xscrollcommand=picker_hbar.set, yscrollcommand=picker_vbar.set)
         picker_hbar.config(command=self.msx2_picker_canvas.xview)
         picker_vbar.config(command=self.msx2_picker_canvas.yview)
         self.msx2_picker_canvas.grid(row=0, column=0, sticky="nsew")
@@ -3533,6 +3563,99 @@ class TileEditorApp:
         picker_frame.grid_columnconfigure(0, weight=1)
         self.msx2_picker_canvas.bind("<Button-1>", self.handle_512_picker_click)
         self.draw_512_picker()
+   
+
+    def _validate_9bit_input(self, P):
+        """Validation command for 9-bit (0-7) RGB Entry widgets."""
+        if P == "":
+            return True
+        if P.isdigit() and len(P) == 1:
+            return True
+        return False
+
+    def _validate_24bit_input(self, P):
+        """Validation command for 24-bit (0-255) RGB Entry widgets."""
+        if P == "":
+            return True
+        if P.isdigit() and len(P) <= 3:
+            return True
+        return False
+
+    def _handle_color_input_coerce(self, string_var, input_type):
+        """Coerces out-of-range values when an Entry widget loses focus."""
+        if self._is_updating_color_inputs:
+            return
+        try:
+            current_val_str = string_var.get()
+            if not current_val_str:
+                string_var.set("0")
+                return
+
+            val = int(current_val_str)
+            if input_type == "9bit":
+                if val > 7:
+                    string_var.set("7")
+            elif input_type == "24bit":
+                if val > 255:
+                    string_var.set("255")
+        except (ValueError, tk.TclError):
+            # If value is invalid for some reason, reset to 0
+            if input_type == "9bit": string_var.set("0")
+            if input_type == "24bit": string_var.set("0")
+
+    def _on_9bit_input_change(self):
+        """Trace callback for when a 9-bit (MSX) RGB value is changed."""
+        if self._is_updating_color_inputs:
+            return
+        self._is_updating_color_inputs = True
+        try:
+            r9 = int(self.rgb9_r_var.get() or 0)
+            g9 = int(self.rgb9_g_var.get() or 0)
+            b9 = int(self.rgb9_b_var.get() or 0)
+
+            # Convert 0-7 range to 0-255 range
+            r24 = min(255, r9 * 36)
+            g24 = min(255, g9 * 36)
+            b24 = min(255, b9 * 36)
+
+            self.rgb24_r_var.set(str(r24))
+            self.rgb24_g_var.set(str(g24))
+            self.rgb24_b_var.set(str(b24))
+
+            msx2_hex = self._rgb7_to_hex(r9, g9, b9)
+            self.msx2_color_preview_canvas.config(bg=msx2_hex)
+            self.hex24_color_preview_canvas.config(bg=msx2_hex) # For 9->24 bit, they are the same
+        except (ValueError, tk.TclError):
+            pass # Ignore errors during typing
+        finally:
+            self._is_updating_color_inputs = False
+
+    def _on_24bit_input_change(self):
+        """Trace callback for when a 24-bit (Standard) RGB value is changed."""
+        if self._is_updating_color_inputs:
+            return
+        self._is_updating_color_inputs = True
+        try:
+            r24 = int(self.rgb24_r_var.get() or 0)
+            g24 = int(self.rgb24_g_var.get() or 0)
+            b24 = int(self.rgb24_b_var.get() or 0)
+
+            user_hex = f"#{r24:02x}{g24:02x}{b24:02x}"
+            self.hex24_color_preview_canvas.config(bg=user_hex)
+
+            # Find closest MSX2 color
+            r9, g9, b9 = self._find_closest_msx2_color(user_hex)
+
+            self.rgb9_r_var.set(str(r9))
+            self.rgb9_g_var.set(str(g9))
+            self.rgb9_b_var.set(str(b9))
+            
+            msx2_hex = self._rgb7_to_hex(r9, g9, b9)
+            self.msx2_color_preview_canvas.config(bg=msx2_hex)
+        except (ValueError, tk.TclError):
+            pass # Ignore errors during typing
+        finally:
+            self._is_updating_color_inputs = False
 
     def create_tile_editor_widgets(self, parent_frame):
         main_frame = ttk.Frame(parent_frame)
@@ -4432,72 +4555,68 @@ class TileEditorApp:
 
     def update_palette_info_labels(self):
         slot = self.selected_palette_slot
-        if 0 <= slot < 16:
-            color_hex = self.active_msx_palette[slot]
-            rgb7 = (-1, -1, -1)
-            try:
-                idx512 = msx2_512_colors_hex.index(color_hex)
-                rgb7 = msx2_512_colors_rgb7[idx512]
-            except ValueError:
-                pass 
+        self._is_updating_color_inputs = True # Prevent traces from firing during this programmatic update
+        try:
+            if 0 <= slot < 16:
+                color_hex = self.active_msx_palette[slot]
+                rgb7 = self._hex_to_rgb7(color_hex)
+                r9, g9, b9 = rgb7
 
-            self.selected_slot_label.config(text=f"Slot: {slot}")
-            self.selected_slot_rgb_label.config(
-                text=f"RGB: {color_hex} ({rgb7[0]},{rgb7[1]},{rgb7[2]})"
-            )
-            self.rgb_r_var.set(str(rgb7[0]) if rgb7[0] != -1 else "?")
-            self.rgb_g_var.set(str(rgb7[1]) if rgb7[1] != -1 else "?")
-            self.rgb_b_var.set(str(rgb7[2]) if rgb7[2] != -1 else "?")
-            
-            if hasattr(self, 'selected_color_preview_canvas'):
-                canvas = self.selected_color_preview_canvas
-                canvas.delete("all")
-                canvas_width = canvas.winfo_width()
-                canvas_height = canvas.winfo_height()
-                if canvas_width > 1 and canvas_height > 1:
-                    canvas.create_rectangle(
-                        0, 0, canvas_width, canvas_height, 
-                        fill=color_hex, 
-                        outline=color_hex
-                    )
-        
-            if hasattr(self, 'selected_color_usage_label'):
-                pixel_uses, line_refs, tile_refs_count = self._calculate_single_color_usage(slot)
-                self.selected_color_usage_label.config(text=f"Used in {line_refs} lines in {tile_refs_count} tiles.")
+                # Update info labels
+                self.selected_slot_label.config(text=f"Slot: {slot}")
+                self.selected_slot_rgb_label.config(text=f"RGB: {color_hex} ({r9},{g9},{b9})")
                 
-                if tile_refs_count > 0:
-                    self.selected_color_usage_label.config(
-                        fg="blue", 
-                        font=self.link_font, # Use shared font
-                        cursor="hand2"
-                    )
-                else:
-                    default_fg = self.selected_slot_label.cget("foreground")
-                    if not default_fg:
-                        default_fg = "#000000"
-                    self.selected_color_usage_label.config(
-                        fg=default_fg,
-                        font=self.normal_font, # Use shared font
-                        cursor=""
-                    )
-        else:
-            self.selected_slot_label.config(text="Slot: -")
-            self.selected_slot_rgb_label.config(text="RGB: -")
-            self.rgb_r_var.set("")
-            self.rgb_g_var.set("")
-            self.rgb_b_var.set("")
-            if hasattr(self, 'selected_color_preview_canvas'):
-                self.selected_color_preview_canvas.delete("all")
-            if hasattr(self, 'selected_color_usage_label'):
-                default_fg = self.selected_slot_label.cget("foreground")
-                if not default_fg:
-                    default_fg = "#000000"
-                self.selected_color_usage_label.config(
-                    text="Usage: N/A",
-                    fg=default_fg,
-                    font=self.normal_font, # Use shared font
-                    cursor=""
-                )
+                # --- Explicitly update all UI elements ---
+                # Set 9-bit input variables
+                if self.rgb9_r_var: self.rgb9_r_var.set(str(r9))
+                if self.rgb9_g_var: self.rgb9_g_var.set(str(g9))
+                if self.rgb9_b_var: self.rgb9_b_var.set(str(b9))
+
+                # Directly calculate and set 24-bit values
+                r24 = min(255, r9 * 36)
+                g24 = min(255, g9 * 36)
+                b24 = min(255, b9 * 36)
+                if self.rgb24_r_var: self.rgb24_r_var.set(str(r24))
+                if self.rgb24_g_var: self.rgb24_g_var.set(str(g24))
+                if self.rgb24_b_var: self.rgb24_b_var.set(str(b24))
+
+                # Update all preview canvases
+                if self.msx2_color_preview_canvas: self.msx2_color_preview_canvas.config(bg=color_hex)
+                if self.hex24_color_preview_canvas: self.hex24_color_preview_canvas.config(bg=color_hex)
+                if self.selected_color_preview_canvas:
+                    self.selected_color_preview_canvas.delete("all")
+                    if self.selected_color_preview_canvas.winfo_exists():
+                        w, h = self.selected_color_preview_canvas.winfo_width(), self.selected_color_preview_canvas.winfo_height()
+                        if w > 1 and h > 1:
+                            self.selected_color_preview_canvas.create_rectangle(0,0,w,h,fill=color_hex,outline=color_hex)
+                # --- End explicit updates ---
+
+                if hasattr(self, 'selected_color_usage_label'):
+                    _, _, tile_refs_count = self._calculate_single_color_usage(slot)
+                    self.selected_color_usage_label.config(text=f"Used in {tile_refs_count} tiles.")
+                    if tile_refs_count > 0:
+                        self.selected_color_usage_label.config(fg="blue", font=self.link_font, cursor="hand2")
+                    else:
+                        default_fg = self.selected_slot_label.cget("foreground") or "#000000"
+                        self.selected_color_usage_label.config(fg=default_fg, font=self.normal_font, cursor="")
+            else:
+                # Handle case where no slot is selected (clear all fields)
+                self.selected_slot_label.config(text="Slot: -")
+                self.selected_slot_rgb_label.config(text="RGB: -")
+                if self.rgb9_r_var: self.rgb9_r_var.set("")
+                if self.rgb9_g_var: self.rgb9_g_var.set("")
+                if self.rgb9_b_var: self.rgb9_b_var.set("")
+                if self.rgb24_r_var: self.rgb24_r_var.set("")
+                if self.rgb24_g_var: self.rgb24_g_var.set("")
+                if self.rgb24_b_var: self.rgb24_b_var.set("")
+                if self.msx2_color_preview_canvas: self.msx2_color_preview_canvas.config(bg="darkgrey")
+                if self.hex24_color_preview_canvas: self.hex24_color_preview_canvas.config(bg="darkgrey")
+                if self.selected_color_preview_canvas: self.selected_color_preview_canvas.delete("all")
+                if hasattr(self, 'selected_color_usage_label'):
+                    default_fg = self.selected_slot_label.cget("foreground") or "#000000"
+                    self.selected_color_usage_label.config(text="Usage: N/A", fg=default_fg, font=self.normal_font, cursor="")
+        finally:
+            self.root.after_idle(lambda: setattr(self, '_is_updating_color_inputs', False))
 
     def draw_tileset_viewer(self, canvas, highlighted_tile_index):
         """Draws tileset viewer, highlighting selected, dragged, or unused tile."""
@@ -5109,34 +5228,30 @@ class TileEditorApp:
 
     def handle_rgb_apply(self):
         if not (0 <= self.selected_palette_slot < 16):
-            messagebox.showwarning("RGB Apply", "No active palette slot selected.", parent=self.root)
+            messagebox.showwarning("Set Color", "No active palette slot selected.", parent=self.root)
             return
         try:
-            r_val_str = self.rgb_r_var.get()
-            g_val_str = self.rgb_g_var.get()
-            b_val_str = self.rgb_b_var.get()
+            # Coerce final values before applying
+            self._handle_color_input_coerce(self.rgb9_r_var, "9bit")
+            self._handle_color_input_coerce(self.rgb9_g_var, "9bit")
+            self._handle_color_input_coerce(self.rgb9_b_var, "9bit")
 
-            if not (r_val_str and g_val_str and b_val_str):
-                raise ValueError("RGB values cannot be empty.")
+            r_val = int(self.rgb9_r_var.get())
+            g_val = int(self.rgb9_g_var.get())
+            b_val = int(self.rgb9_b_var.get())
 
-            r_val = int(r_val_str) 
-            g_val = int(g_val_str) 
-            b_val = int(b_val_str) 
-
-            if not (0 <= r_val <= 7 and 0 <= g_val <= 7 and 0 <= b_val <= 7):
-                raise ValueError("RGB values must be integers between 0 and 7.")
-            
+            # Validation is implicitly handled by the coercion logic
             new_color_hex = self._rgb7_to_hex(r_val, g_val, b_val)
-            target_slot_in_active_palette = self.selected_palette_slot
+            target_slot = self.selected_palette_slot
             
-            if self.active_msx_palette[target_slot_in_active_palette] != new_color_hex:
-                command = SetPaletteColorCommand(self, target_slot_in_active_palette, new_color_hex)
+            if self.active_msx_palette[target_slot] != new_color_hex:
+                command = SetPaletteColorCommand(self, target_slot, new_color_hex)
                 self.undo_manager.execute(command)
 
-        except ValueError as e:
-            messagebox.showerror("Invalid RGB Input", f"{e}", parent=self.root)
+        except (ValueError, tk.TclError) as e:
+            messagebox.showerror("Invalid Input", f"Could not set color due to invalid input values.", parent=self.root)
         except Exception as e_unexp:
-            messagebox.showerror("Error Applying RGB", f"An unexpected error occurred: {e_unexp}", parent=self.root)
+            messagebox.showerror("Error Applying Color", f"An unexpected error occurred: {e_unexp}", parent=self.root)
             _error(f" Unexpected error in handle_rgb_apply: {e_unexp}")
 
     def reset_palette_to_default(self):
@@ -16031,6 +16146,49 @@ class TileEditorApp:
         # Convenience function to convert sRGB (0-255) to CIELAB.
         x, y, z = self._rgb_to_xyz(r, g, b)
         return self._xyz_to_lab(x, y, z)
+
+    def _find_closest_msx2_color(self, hex_color_24bit):
+        """
+        Finds the closest MSX2 color to a given 24-bit hex color using
+        perceptual CIELAB color difference.
+        
+        Returns:
+            tuple: A tuple of (r, g, b) in the 0-7 MSX2 range.
+        """
+        try:
+            r_in = int(hex_color_24bit[1:3], 16)
+            g_in = int(hex_color_24bit[3:5], 16)
+            b_in = int(hex_color_24bit[5:7], 16)
+            
+            input_lab = self._rgb_to_lab(r_in, g_in, b_in)
+            
+            min_dist = float('inf')
+            best_match_rgb7 = (0, 0, 0)
+
+            # msx2_512_colors_rgb7 is a pre-calculated global list
+            for i, msx2_rgb7 in enumerate(msx2_512_colors_rgb7):
+                msx2_hex = msx2_512_colors_hex[i]
+                r_msx = int(msx2_hex[1:3], 16)
+                g_msx = int(msx2_hex[3:5], 16)
+                b_msx = int(msx2_hex[5:7], 16)
+                
+                msx2_lab = self._rgb_to_lab(r_msx, g_msx, b_msx)
+                
+                # Calculate squared Euclidean distance in CIELAB space (Delta E 76)
+                delta_l = input_lab[0] - msx2_lab[0]
+                delta_a = input_lab[1] - msx2_lab[1]
+                delta_b = input_lab[2] - msx2_lab[2]
+                dist_sq = delta_l**2 + delta_a**2 + delta_b**2
+                
+                if dist_sq < min_dist:
+                    min_dist = dist_sq
+                    best_match_rgb7 = msx2_rgb7
+
+            return best_match_rgb7
+
+        except (ValueError, IndexError):
+            # Fallback on any conversion or parsing error
+            return (0, 0, 0)
 
     def _render_tile_to_lab_pixels(self, tile_pattern, tile_colors_per_row, palette_hex):
         """
