@@ -68,7 +68,7 @@ RESERVED_BYTES_COUNT = 4 # NEW constant for clarity
 MAX_RECENT_FILES = 10
 
 MIN_DIM = 1
-MAX_DIM = 2048
+MAX_DIM = 1024
 
 # Unicode constant strings
 UP = " \N{BLACK UP-POINTING TRIANGLE}"
