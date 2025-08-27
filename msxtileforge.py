@@ -2833,6 +2833,42 @@ class ImageTileImportDialog(ImageImportDialog):
         self.st_label.grid_forget()
         self.st_frame.grid_forget()
 
+# --- Color tooltip Class  ---------------------------------------------------------------------------------------------
+class ColorTooltip:
+    """Creates a floating tooltip window for displaying color information."""
+    def __init__(self, parent):
+        self.parent = parent
+        self.tip_window = None
+        self.label = None
+
+    def show(self, text, x, y):
+        """Display the tooltip with the given text at the specified screen coordinates."""
+        if self.tip_window is None:
+            self.tip_window = tk.Toplevel(self.parent)
+            self.tip_window.overrideredirect(True) # No window border, title bar, etc.
+            self.label = ttk.Label(
+                self.tip_window, 
+                text=text, 
+                justify=tk.LEFT, 
+                background="#FFFFE0", # Classic tooltip color
+                relief=tk.SOLID, 
+                borderwidth=1, 
+                padding=4
+            )
+            self.label.pack()
+            self.tip_window.withdraw() # Start hidden
+
+        self.label.config(text=text)
+        # Position is offset slightly from the cursor
+        self.tip_window.geometry(f"+{x + 15}+{y + 10}")
+        self.tip_window.deiconify() # Show the window
+
+    def hide(self):
+        """Hide the tooltip window."""
+        if self.tip_window:
+            self.tip_window.withdraw()
+
+
 # --- Application Class  -----------------------------------------------------------------------------------------------
 class TileEditorApp:
     def __init__(self, root):
@@ -2878,6 +2914,7 @@ class TileEditorApp:
         self.hex24_color_preview_canvas = None
         self.rgb9_r_var, self.rgb9_g_var, self.rgb9_b_var = None, None, None
         self.rgb24_r_var, self.rgb24_g_var, self.rgb24_b_var = None, None, None
+        self.color_tooltip = ColorTooltip(self.root)
 
         self._main_window_configure_timer = None 
         self._map_canvas_configure_timer = None
@@ -3451,6 +3488,8 @@ class TileEditorApp:
         self.current_palette_canvas.bind("<Button-1>", self.handle_current_palette_click)
         self.current_palette_canvas.bind("<B1-Motion>", self.handle_palette_drag_motion)
         self.current_palette_canvas.bind("<ButtonRelease-1>", self.handle_palette_drag_release)
+        self.current_palette_canvas.bind("<Motion>", self._handle_palette_tooltip_motion)
+        self.current_palette_canvas.bind("<Leave>", self._hide_color_tooltip)
 
         info_frame = ttk.LabelFrame(left_frame, text="Selected Slot Info")
         info_frame.pack(pady=(0, 10), fill="x")
@@ -3562,6 +3601,8 @@ class TileEditorApp:
         picker_frame.grid_rowconfigure(0, weight=1)
         picker_frame.grid_columnconfigure(0, weight=1)
         self.msx2_picker_canvas.bind("<Button-1>", self.handle_512_picker_click)
+        self.msx2_picker_canvas.bind("<Motion>", self._handle_picker_tooltip_motion)
+        self.msx2_picker_canvas.bind("<Leave>", self._hide_color_tooltip)
         self.draw_512_picker()
    
 
@@ -3656,6 +3697,62 @@ class TileEditorApp:
             pass # Ignore errors during typing
         finally:
             self._is_updating_color_inputs = False
+
+    def _handle_palette_tooltip_motion(self, event):
+        """Shows and updates the color tooltip for the active 16-color palette."""
+        canvas = event.widget
+        size = CURRENT_PALETTE_SLOT_SIZE
+        padding = 2
+        col = event.x // (size + padding)
+        row = event.y // (size + padding)
+        
+        if 0 <= col < 4 and 0 <= row < 4:
+            slot_idx = row * 4 + col
+            if 0 <= slot_idx < len(self.active_msx_palette):
+                hex_color = self.active_msx_palette[slot_idx]
+                r9,g9,b9 = self._hex_to_rgb7(hex_color)
+                r24, g24, b24 = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+                tooltip_text = (
+                    f"Slot: {slot_idx}\n"
+                    f"MSX (9-bit): {r9},{g9},{b9}\n"
+                    f"RGB (24-bit): {r24},{g24},{b24}"
+                )
+                self.color_tooltip.show(tooltip_text, event.x_root, event.y_root)
+                return
+
+        self.color_tooltip.hide()
+
+    def _handle_picker_tooltip_motion(self, event):
+        """Shows and updates the color tooltip for the 512-color picker."""
+        canvas = event.widget
+        size = MSX2_PICKER_SQUARE_SIZE
+        padding = 1
+        cols = MSX2_PICKER_COLS
+        
+        canvas_x = canvas.canvasx(event.x)
+        canvas_y = canvas.canvasy(event.y)
+        col = int(canvas_x // (size + padding))
+        row = int(canvas_y // (size + padding))
+
+        if 0 <= col < MSX2_PICKER_COLS:
+            color_idx = row * cols + col
+            if 0 <= color_idx < len(msx2_512_colors_hex):
+                hex_color = msx2_512_colors_hex[color_idx]
+                r9,g9,b9 = msx2_512_colors_rgb7[color_idx]
+                r24, g24, b24 = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+                tooltip_text = (
+                    f"Index: {color_idx}\n"
+                    f"MSX (9-bit): {r9},{g9},{b9}\n"
+                    f"RGB (24-bit): {r24},{g24},{b24}"
+                )
+                self.color_tooltip.show(tooltip_text, event.x_root, event.y_root)
+                return
+                
+        self.color_tooltip.hide()
+
+    def _hide_color_tooltip(self, event=None):
+        """Event handler to explicitly hide the color tooltip."""
+        self.color_tooltip.hide()
 
     def create_tile_editor_widgets(self, parent_frame):
         main_frame = ttk.Frame(parent_frame)
