@@ -16,7 +16,7 @@ ifeq ($(OS),Windows_NT)
 SHELL := cmd.exe /c
 TARGET := $(subst /,\,$(TARGET))
 SDIST := $(subst /,\,$(SDIST))
-COPY ?= "cmd /C copy"
+COPY ?= cmd /C copy
 PYTHON ?= python
 all: all-win
 sdist: sdist-win
