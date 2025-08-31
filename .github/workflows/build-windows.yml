@@ -29,20 +29,14 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
 
-      - name: Build Windows executable
-        shell: powershell
-        run: |
-          python -m PyInstaller --onedir --clean `
-            --add-data "msxtileexport.py;." `
-            --add-data "msxtilemagic.py;." `
-            --add-data "tilerandomizer.py;." `
-            --add-data "supertilerandomizer.py;." `
-            msxtileforge.py
-          cp README.md,LICENSE dist/msxtileforge
+- name: Install Make for Windows
+        uses: crazy-max/ghaction-chocolatey@v3
+        with:
+          args: install make
 
-      - name: Create final Windows zip archive
-        shell: pwsh
-        run: Compress-Archive -Path dist/msxtileforge/* -DestinationPath dist/${{ inputs.win_filename }}
+      - name: Build Windows binary using Makefile
+        shell: bash
+        run: make all WIN_ZIP=${{ inputs.win_filename }}
 
       - name: Upload final Windows artifact
         uses: actions/upload-artifact@v4
