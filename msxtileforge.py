@@ -6973,17 +6973,17 @@ class TileEditorApp:
                     self.supertile_grid_height != loaded_grid_height_from_file):
                     if not messagebox.askokcancel("Dimension Mismatch", "Supertile dimensions in file differ from current project. Loading will change project dimensions. Continue?", icon="warning"):
                         return False 
-
-                if self.supertile_grid_width != loaded_grid_width_from_file or \
-                   self.supertile_grid_height != loaded_grid_height_from_file:
-                    self.supertile_grid_width = loaded_grid_width_from_file
-                    self.supertile_grid_height = loaded_grid_height_from_file
-                    self._reconfigure_supertile_definition_canvas()
-                
+    
                 supertiles_data = temp_supertiles_data
                 # Ensure at least one supertile exists if the file was empty.
                 if not supertiles_data:
                     supertiles_data.append([[0] * self.supertile_grid_width for _ in range(self.supertile_grid_height)])
+    
+                if self.supertile_grid_width != loaded_grid_width_from_file or \
+                    self.supertile_grid_height != loaded_grid_height_from_file:
+                    self.supertile_grid_width = loaded_grid_width_from_file
+                    self.supertile_grid_height = loaded_grid_height_from_file
+                    self._reconfigure_supertile_definition_canvas()
                 
                 current_supertile_index = max(0, min(current_supertile_index, len(supertiles_data) - 1))
                 selected_supertile_for_map = max(0, min(selected_supertile_for_map, len(supertiles_data) - 1))
