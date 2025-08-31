@@ -35,7 +35,7 @@ jobs:
           args: install make
 
       - name: Build Windows binary using Makefile
-        shell: bash
+        shell: cmd
         run: make all WIN_ZIP=${{ inputs.win_filename }}
 
       - name: Upload final Windows artifact

@@ -13,6 +13,7 @@ LIN_TGZ ?= msxtileforge_lin.tar.gz
 SRC_ZIP ?= msxtileforge_src.zip
 
 ifeq ($(OS),Windows_NT)
+SHELL := cmd.exe /c
 TARGET := $(subst /,\,$(TARGET))
 SDIST := $(subst /,\,$(SDIST))
 COPY ?= copy
