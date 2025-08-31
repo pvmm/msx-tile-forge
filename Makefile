@@ -16,7 +16,7 @@ ifeq ($(OS),Windows_NT)
 SHELL := cmd.exe /c
 TARGET := $(subst /,\,$(TARGET))
 SDIST := $(subst /,\,$(SDIST))
-COPY ?= copy
+COPY ?= "cmd /C copy"
 PYTHON ?= python
 all: all-win
 sdist: sdist-win
@@ -43,7 +43,6 @@ common:
 		--noconfirm $(MAIN_SCRIPT)
 
 all-win: prepackage common
-	type README.md
 	$(COPY) README.md $(TARGET)
 	$(COPY) LICENSE $(TARGET)
 	rem Create the final zip archive directly with the specified name
