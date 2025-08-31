@@ -43,6 +43,7 @@ common:
 		--noconfirm $(MAIN_SCRIPT)
 
 all-win: prepackage common
+	type README.md
 	$(COPY) README.md $(TARGET)
 	$(COPY) LICENSE $(TARGET)
 	rem Create the final zip archive directly with the specified name
