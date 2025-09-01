@@ -36,8 +36,8 @@ jobs:
           sudo apt-get install -y make build-essential fakeroot devscripts dh-python python3-all debhelper-compat=13
           python -m pip install pyinstaller Pillow numpy scipy platformdirs tqdm
 
-      - name: Build Linux binary and Debian package
-        run: make lin deb LIN_TGZ=${{ inputs.lin_filename }}
+      - name: Build Linux binary and Debian package using Makefile
+        run: make all deb LIN_TGZ=${{ inputs.lin_filename }}
 
       - name: Find and rename Debian package
         shell: bash
