@@ -38,6 +38,8 @@ import threading
 import queue
 from scipy.optimize import linear_sum_assignment
 import shutil
+from contextlib import redirect_stdout
+import importlib
 
 # --- Constants ---
 TILE_WIDTH = 8
@@ -210,6 +212,19 @@ def _error(message):
 
 def _critical(message):
     logger.critical(f"{str(message)}")
+
+# --- Utility Classes ------------------------------------------------------------------------------------------
+class CallbackBuffer:
+    """A buffer that calls a function every time data is received."""
+    def __init__(self, callback):
+        self.callback = callback
+
+    def write(self, data):
+        # Trigger the callback with the received data
+        self.callback(data)
+
+    def isatty(self):
+        return False
 
 # --- Undo/Redo Framework Classes ------------------------------------------------------------------------------
 class ICommand:
@@ -6573,18 +6588,10 @@ class TileEditorApp:
                     self.supertile_grid_width = loaded_grid_width_from_file
                     self.supertile_grid_height = loaded_grid_height_from_file
                     self._reconfigure_supertile_definition_canvas()
-                
-                for i in range(MAX_SUPERTILES):
-                    if i < loaded_num_st_from_file:
-                        supertiles_data[i] = temp_supertiles_data[i]
-                    else:
-                        supertiles_data[i] = [[0] * self.supertile_grid_width for _ in range(self.supertile_grid_height)]
-                
-                num_supertiles = loaded_num_st_from_file if loaded_num_st_from_file > 0 else 1
-                
-                current_supertile_index = max(0, min(current_supertile_index, num_supertiles - 1))
-                selected_supertile_for_map = max(0, min(selected_supertile_for_map, num_supertiles - 1))
-                
+
+                current_supertile_index = max(0, min(current_supertile_index, len(supertiles_data) - 1))
+                selected_supertile_for_map = max(0, min(selected_supertile_for_map, len(supertiles_data) - 1))
+
                 max_valid_tile_idx = num_tiles_in_set - 1
                 for st_idx in range(num_supertiles):
                     for r in range(self.supertile_grid_height):
@@ -16032,68 +16039,44 @@ class TileEditorApp:
         Runs an external script in a separate thread and streams its output
         to a tkinter Text widget in a GUI-safe way.
         """
-        output_queue = queue.Queue()
-
-        def thread_target(cmd, q):
-            """This function runs in a background thread."""
-            try:
-                # Create a copy of the current environment and force UTF-8 encoding
+        def run(argv):
+            # Create a copy of the current environment and force UTF-8 encoding
+            def wrapper(buffer):
                 env = os.environ.copy()
                 env['PYTHONIOENCODING'] = 'utf-8'
+                # Save argv temporarily
+                saved_argv = sys.argv
+                sys.argv = argv
+                module = None
+                # Redirect stdout to the buffer during exec
+                with redirect_stdout(buffer):
+                    try:
+                        path, module_name = os.path.split(argv[0])
+                        module_name = module_name.replace(".py", "")
+                        module = importlib.import_module(module_name, path)
+                        module.main()
+                        on_complete_callback(True)
+                    except:
+                        traceback.print_exc(file=buffer)
+                        on_complete_callback(False)
+                # Restore all
+                if module:
+                    del sys.modules[module_name]
+                    del module
+                sys.argv = saved_argv
+            return wrapper
 
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace',
-                    bufsize=1,
-                    universal_newlines=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
-                    env=env # Pass the modified environment to the subprocess
-                )
-
-                for line in iter(process.stdout.readline, ''):
-                    q.put(line)
-
-                process.stdout.close()
-                return_code = process.wait()
-                q.put(f"\n--- Process finished with exit code {return_code} ---")
-                # Put the success status (True/False) on the queue as the final item
-                q.put(return_code == 0)
-                
-            except Exception as e:
-                q.put(f"\n--- THREAD ERROR: {e} ---")
-            finally:
-                # Put failure status on the queue if an exception occurred
-                q.put(False)
-
-        thread = threading.Thread(target=thread_target, args=(command, output_queue))
+        buffer = CallbackBuffer(callback=lambda text: self._update_text_widget(text, text_widget))
+        thread = threading.Thread(target=run(command), args=(buffer,))
         thread.daemon = True
         thread.start()
-        self._check_output_queue(text_widget, output_queue, on_complete_callback)
 
-    def _check_output_queue(self, text_widget, q, on_complete_callback):
-        """Periodically checks the queue for new output and updates the Text widget."""
-        try:
-            while True:
-                line = q.get_nowait()
-
-                if isinstance(line, bool):
-                    if on_complete_callback:
-                        on_complete_callback(line) # Pass success status to callback
-                    return
-
-                if text_widget.winfo_exists():
-                    text_widget.config(state=tk.NORMAL)
-                    text_widget.insert(tk.END, line)
-                    text_widget.see(tk.END)
-                    text_widget.config(state=tk.DISABLED)
-
-        except queue.Empty:
-            if self.root.winfo_exists():
-                self.root.after(100, self._check_output_queue, text_widget, q, on_complete_callback)
+    def _update_text_widget(self, text, text_widget, done=False):
+        if text_widget.winfo_exists():
+            text_widget.config(state=tk.NORMAL)
+            text_widget.insert(tk.END, text)
+            text_widget.see(tk.END)
+            text_widget.config(state=tk.DISABLED)
 
     def handle_export_raw(self):
         if self.current_project_base_path is None:
@@ -16305,7 +16288,10 @@ class TileEditorApp:
         _debug(f"Saved pre-import palette state: {palette_before_load}")
 
         # --- Assemble the command ---
-        script_path = os.path.join(os.path.dirname(sys.argv[0]), "msxtilemagic.py")
+        if hasattr(sys, '_MEIPASS'):
+            script_path = os.path.join(os.path.dirname(sys.argv[0]), "_internal", "msxtilemagic.py")
+        else:
+            script_path = os.path.join(os.path.dirname(sys.argv[0]), "msxtilemagic.py")
         if not os.path.exists(script_path):
             messagebox.showerror("Script Error", f"Could not find the 'msxtilemagic.py' script.\nExpected location: {script_path}", parent=self.root)
             return
@@ -16313,9 +16299,8 @@ class TileEditorApp:
         output_dir = os.path.join(platformdirs.user_cache_dir(self.config_app_name, appauthor=False, ensure_exists=True), "img_import_temp")
         os.makedirs(output_dir, exist_ok=True)
         basename = os.path.splitext(os.path.basename(image_filepath))[0] + "_imp"
-        
+
         command = [
-            sys.executable,
             script_path,
             image_filepath,
             "--output-dir", output_dir,
