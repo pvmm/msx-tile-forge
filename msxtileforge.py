@@ -2634,7 +2634,7 @@ class ImageImportDialog(tk.Toplevel):
         
         auto_frame = ttk.Frame(legend_frame)
         auto_frame.pack(anchor="w")
-        ttk.Label(auto_frame, text="\uD83D\uDD8C", font=icon_font).pack(side="left")
+        ttk.Label(auto_frame, text="🖌️", font=icon_font).pack(side="left")
         ttk.Label(auto_frame, text="= Auto: Script chooses the best color.").pack(side="left", padx=5)
         
         fixed_frame = ttk.Frame(legend_frame)
@@ -2752,7 +2752,7 @@ class ImageImportDialog(tk.Toplevel):
         canvas.create_rectangle(0, 0, 33, 33, fill=bg_color, outline="grey70")
         
         icon = ""
-        if state == "auto": icon = "\uD83D\uDD8C" # Brush emoji
+        if state == "auto": icon = "🖌️" # Brush emoji
         elif state == "fixed": icon = "📌"
         elif state == "blocked": icon = "\u26D4" # Prohibited/No Entry sign
         
