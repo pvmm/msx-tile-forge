@@ -2550,7 +2550,6 @@ class ExportDialog(tk.Toplevel):
         source_file = self.project_path + ".SC4Map"
 
         command = [
-            sys.executable,
             cli_script,
             source_file,
             "--output-dir", output_dir,
@@ -15474,7 +15473,10 @@ class TileEditorApp:
             return
 
         # --- Assemble and run the external script ---
-        script_path = os.path.join(os.path.dirname(sys.argv[0]), "msxtilemagic.py")
+        if hasattr(sys, '_MEIPASS'):
+            script_path = os.path.join(os.path.dirname(sys.argv[0]), "_internal", "msxtilemagic.py")
+        else:
+            script_path = os.path.join(os.path.dirname(sys.argv[0]), "msxtilemagic.py")
         if not os.path.exists(script_path):
             messagebox.showerror("Script Error", f"Could not find 'msxtilemagic.py'.", parent=self.root)
             return
@@ -15486,7 +15488,7 @@ class TileEditorApp:
         
         # Assemble the command with the new --no-maps flag
         command = [
-            sys.executable, script_path, image_filepath,
+            script_path, image_filepath,
             "--output-dir", output_dir, "--output-basename", basename,
             "--no-maps", # NEW: Prevent supertile/map generation
             "--max-tiles", str(options["max_tiles"]),
@@ -16115,7 +16117,6 @@ class TileEditorApp:
                         on_complete_callback(True)
                     except:
                         traceback.print_exc(file=buffer)
-                        on_complete_callback(False)
                 # Restore all
                 if module:
                     del sys.modules[module_name]
