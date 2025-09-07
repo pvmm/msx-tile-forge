@@ -123,18 +123,3 @@ jobs:
       prepared_source_artifact_name: ${{ needs.generate-version.outputs.prepared_source_artifact_name }}
       src_filename: ${{ needs.generate-version.outputs.src_filename }}
 
-  #########################################
-  # D. Publish Developer Artifacts
-  #########################################
-  publish-dev-artifacts:
-    name: Publish Developer Artifacts
-    needs: [build-linux, build-windows, build-source]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all final build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: final-artifacts
-      
-      - name: List final artifacts
-        run: ls -R final-artifacts

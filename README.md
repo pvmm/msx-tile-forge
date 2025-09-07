@@ -18,15 +18,20 @@ You can download pre-compiled, ready-to-run versions of MSX Tile Forge for vario
 *   **Latest Official Release & Release Candidates:** For the most stable versions (yet to be populated), please visit the **[Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases)**. (Note: The first official release is coming soon!)
 
 *   **Nightly Builds:** For the latest "bleeding-edge" features and fixes, you can download a build from the most recent successful nightly run. These builds are generated automatically and are not guaranteed to be stable, but they represent the most up-to-date version of the software.
-    *   **[Browse All Nightly Builds on the Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build"&sort=-date)**
+    *   **[Browse All Nightly Builds on the Internet Archive](https://archive.org/search.php?query=subject%3A"msxtileforge_nightly_build"&sort=-addeddate)**
 
-*   **Source Code:** If you prefer to run the application from source, you can download the latest source archive from the [Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases) or clone the repository directly. This is a much smaller download, but it requires you to set up your own Python environment as described in the [Getting Started](#getting-started) section.
+*   **Source Code:** If you prefer to run the application from source, you can download the latest source archive from the [Releases Page](https://github.com/DamnedAngel/msx-tile-forge/releases) or clone the repository directly. This is a much smaller download, but it requires you to set up your own Python environment as described in the [Running from Source Code](#running-from-source-code) section.
 
 ## Features
 
 *   **Palette Editor:**
     *   Manage a 16-color active MSX2 palette.
     *   Select colors from a 512-color MSX2 visual picker or by direct RGB (0-7 per channel) input.
+    *   **Consolidated Color Editor Panel:**
+        *   Features linked 9-bit (MSX, 0-7) and 24-bit (Standard RGB, 0-255) inputs.
+        *   Changes in one format instantly update the other in real-time.
+        *   Live preview swatches show the user-defined 24-bit color and the closest resulting 9-bit MSX2 color.
+    *   **Informative Tooltips:** Hover over any color in the Active Palette or the 512 Color Picker to see a tooltip with its slot/index and both 9-bit and 24-bit RGB values.
     *   **Advanced Drag-and-Drop:**
         *   **Swap (LMB Drag):** Drag a color slot and drop it onto another to swap their positions and all color references throughout the tileset.
         *   **Replace All (Alt+LMB Drop):** Hold `ALT` while dropping a source color onto a target color to replace all uses of the target color with the source color across the entire project. A visual confirmation dialog will appear.
@@ -51,7 +56,7 @@ You can download pre-compiled, ready-to-run versions of MSX Tile Forge for vario
     *   Save/Load tilesets as `.SC4Tiles` binary files.
 
 *   **Supertile Editor (Project-Configurable Dimensions, e.g., 2x2, 4x4, 8x2 tiles):**
-    *   Define supertiles by arranging existing tiles in a grid of **user-defined width and height** (1-32 tiles per dimension, set per project).
+    *   Define supertiles by arranging existing tiles in a grid. The **grid dimensions (width and height, 1-32 tiles each) are set per-project** when you create a new project via `File -> New Project`.
     *   Tileset viewer for selecting component tiles from the current tileset.
     *   Supertile selector (up to 65535 supertiles) with selection and advanced drag-and-drop.
     *   **Advanced Drag-and-Drop:**
@@ -99,19 +104,21 @@ You can download pre-compiled, ready-to-run versions of MSX Tile Forge for vario
     *   **Supertile Usage (F3):** A sortable list showing how many times each supertile is used on the map, with a lazy-loading preview. **Clicking on a data cell** for a used supertile will highlight all map locations where that supertile is used.
 
 *   **Import / Export Features:**
-    *   **ROM Importer (`Import -> Import Tiles from ROM...`):** Imports 8x8 tile data directly from ROM files. Features a visual browser, live preview, advanced multi-selection (Click, Shift+Click, Ctrl+Click, Ctrl+Shift+Click), base colors control, and a fine tile start offset control.
-        *   **Per-Selection Properties:** For each selected tile (or group), the fine offset and FG/BG colors are captured and used for both previewing and the final import.
-    *   **Image Importer (`Import -> Import Tiles from Image...`):** Creates a new tileset and palette by analyzing a standard image file (PNG, BMP, etc.). This powerful feature replaces the current tileset and palette. Options include:
-        *   Using the current active palette or generating a new optimized 16-color palette from the image.
-        *   Enabling dithering for color reduction.
-        *   Ignoring and skipping duplicate tiles found in the source image.
-    *   **Full Project Importer (`Import -> Import Project from Image...`):** A powerful tool to generate a complete MSX Tile Forge project from a single image file. This feature replaces the entire current project and uses the external `msxtilemagic.py` script to perform advanced analysis. The import dialog provides extensive control over the conversion process:
-        *   **Palette Constraints:** Lock, block, or automatically select each of the 16 palette slots.
+    *   **Create Project from Image (`Import/Export -> Create Project from Image...`):** A powerful tool to generate a complete new project from a single image file. This feature **replaces the entire current project** and uses an external script (`msxtilemagic.py`) to perform advanced analysis. The import dialog provides extensive control over the conversion process:
+        *   **Palette Constraints:** Lock, block, or automatically select each of the 16 palette slots to guide the color generation.
         *   **Optimization:** Choose between quality modes (`sharp`, `balanced`, `soft`) to influence color reduction and tile matching.
         *   **Configurable Dimensions:** Set the desired Supertile width and height for the generated project.
-        *   **Advanced Options:** Enable dithering, find the best grid offset in the source image, and synthesize new tiles to represent merged tile groups for better compression.
+        *   **Advanced Options:** Enable dithering, find the best 8x8 grid offset in the source image, and synthesize new tiles to represent merged tile groups for better visual fidelity.
         *   **Color Metrics:** For advanced users, select the color difference algorithm used for analysis (including `CIE76` and `CIEDE2000` if the `colour-science` library is installed).
-    *   **Export Raw Project... (`Import/Export -> Export Raw Project...`):** Exports all project data into their raw binary formats. This feature runs an external script (`msxtileexport.py`) and provides options to automatically generate include files for assembly (`.s`) and C (`.h`), defining labels and arrays for the exported assets. This makes integrating the graphics into a development toolchain straightforward.
+
+    *   **Import Tiles from Image (`Import/Export -> Import Tiles from Image...`):** Generates a new tileset from an image file. This feature **replaces the current project palette** with a new, optimized 16-color palette generated from the image. It then presents all generated tiles in a selection dialog, allowing you to choose which ones to **append** to your current project's tileset. This uses the same powerful analysis engine as the full project importer, with options for palette constraints, optimization, and more.
+
+    *   **Import Tiles from File (`Import/Export -> Import Tiles from File...`):** Allows you to add tiles from another MSX Tile Forge project. It opens a `.SC4Tiles` file, displays all the tiles it contains using the *current project's active palette*, and lets you select which ones to **append** to your current tileset. This is useful for building a "master" tileset from multiple sources.
+
+    *   **ROM Importer (`Import -> Import Tiles from ROM...`):** Imports 8x8, 1-bit-per-pixel tile data directly from a binary file (e.g., a ROM dump). Features a visual browser, live preview, advanced multi-selection (Click, Shift+Click, Ctrl+Click), and controls for preview colors and the base byte offset.
+        *   **Per-Selection Properties:** This is the key feature of the importer. When you select a tile or a range of tiles, the **current Fine Offset and FG/BG Colors are saved with that selection**. This allows you to select tiles from different parts of the ROM file (using different offsets) and assign them different colors, all within a single import operation. The final import will use the specific properties saved for each tile.
+
+    *   **Export Raw Project (`Import/Export -> Export Raw Project...`):** Exports all project data into their raw binary formats. This feature runs an external script (`msxtileexport.py`) and provides options to automatically generate include files for assembly (`.s`) and C (`.h`), defining labels and arrays for the exported assets. This makes integrating the graphics into a development toolchain straightforward.
 
 *   **Project Management & UX:**
     *   Projects bundle all asset types: palettes, tilesets, supertiles and maps.
@@ -174,7 +181,7 @@ The main menu bar provides access to project-wide operations and settings.
 
 *   **File Menu:**
     *   **Project Management:**
-        *   `New Project (Ctrl+N)`: Starts a new project, prompting for supertile dimensions. Clears all current data (palette, tiles, supertiles, map).
+        *   `New Project (Ctrl+N)`: Starts a new project. You will first be prompted to define the **width and height of your supertiles** for this project. This dimension is then saved with the project and cannot be changed later. The action clears all current data (palette, tiles, supertiles, map).
         *   `Open Project... (Ctrl+O)`: Loads an existing project. Select any of its four component files (`.SC4Pal`, `.SC4Tiles`, `.SC4Super`, `.SC4Map`); the application loads all associated files. Supertile dimensions are restored from the `.SC4Super` file.
         *   `Save Project (Ctrl+S)`: Saves all four components of the current project. If unsaved, acts like "Save Project As...".
         *   `Save Project As... (Ctrl+Shift+S)`: Saves all four project components under a new base name and location chosen by the user.
@@ -231,7 +238,11 @@ This tab is dedicated to managing the 16-color active palette used for all graph
 *   **Selected Slot Information:** Shows the selected slot's index, a color preview, its hexadecimal RGB value, its MSX2-specific RGB values (0-7 per channel), and a count of how many times it's used. The usage count is a **clickable link** to find all tiles using that color.
 *   **Color Modification:**
     *   **MSX2 512 Color Picker:** A large grid displaying all 512 possible MSX2 colors. Clicking a color here applies it to the selected active palette slot.
-    *   **Set Color (RGB 0-7):** Input R, G, B values (0-7 each) and click "Set" to apply them to the selected slot.
+    *   **Set Selected Color Panel:** This panel provides two synchronized ways to define a color:
+        *   **MSX (0-7):** Input R, G, and B values from 0-7 in this row.
+        *   **RGB (0-255):** Input standard R, G, and B values from 0-255 in this row.
+        *   As you type in one set of boxes, the other set and the preview swatches will update in real-time to show the closest match. Invalid characters are blocked, and out-of-range numbers are automatically corrected when you leave an input box.
+        *   Click the **"Set Color"** button to apply the final MSX2 color to the selected palette slot. This action is undoable.
 *   **Reset Palette:** A button to revert the active 16-color palette to the standard MSX2 hardware default colors.
 
 ### 2. Tile Editor Tab
@@ -253,6 +264,7 @@ Used for creating and editing individual 8x8 pixel base tiles.
     *   **Tileset Viewer:** Displays all tiles in the project (up to 256). Click to select a tile; drag-and-drop for advanced operations (Move/Swap/Replace).
     *   **Tile Operations:** Buttons for "Add New", **"Add Many..." (opens a dialog to add multiple blank tiles at once)**, "Insert", "Delete" tiles.
     *   **Info Label:** Shows total number of tiles in the set.
+    *   **Project Tile Limit:** Set a custom limit (1-256) for the number of tiles in the project. This limit is saved with the project's `.SC4Tiles` file and prevents adding more tiles than intended for a specific project. Truncating the tileset via this feature is a fully undoable action.
 
 ### 3. Supertile Editor Tab
 
@@ -271,6 +283,8 @@ For creating composite "supertiles" from base tiles. Supertile grid dimensions (
     *   **Tileset Viewer:** Displays all base tiles. Click to select a tile for placing. Double-click a tile to jump to the Tile Editor.
     *   **Supertile Selector:** A resizable panel displaying all supertiles in the project (up to 65535). Click to select a supertile for editing; drag-and-drop for advanced operations (Move/Swap/Replace).
     *   **Supertile Operations:** Buttons for "Add New", **"Add Many..." (opens a dialog to add multiple blank supertiles at once)**, "Insert", "Delete" supertiles.
+    *   **Project Supertile Limit:** Set a custom limit (1-65535) for the number of supertiles in the project. This limit is saved with the `.SC4Super` file. Truncating the supertile set is a fully undoable action.
+
 
 ### 4. Map Editor Tab
 
@@ -344,8 +358,10 @@ Project component files created with this version (`.SC4Pal`, `.SC4Tiles`, `.SC4
 
 *   **Purpose:** Stores definitions for 8x8 pixel tiles.
 *   **Structure:**
-    *   **Header (1 byte):** `num_tiles_in_file`. A value of `0` indicates 256 tiles.
-    *   **Reserved Bytes (4 bytes):** For future use.
+    *   **Header:**
+        *  `num_tiles_in_file`(1 byte): A value of `0` indicates 256 tiles.
+        *  **Project Tile Limit** (1 byte): A value of `0` indicates 256 tiles.
+        *  **Reserved Bytes (3 bytes):** Currently unused.
     *   **All Pattern Data Block (Total: `num_tiles` \* 8 bytes):** Pattern data for all tiles, stored consecutively. Each tile is 8 bytes (1 byte per row). In each byte, the most significant bit is the leftmost pixel.
     *   **All Color Attribute Data Block (Total: `num_tiles` \* 8 bytes):** Color attribute data for all tiles, stored consecutively. Each tile is 8 bytes (1 byte per row). The high nibble (4 bits) is the foreground palette index, and the low nibble is the background palette index.
 
@@ -353,17 +369,21 @@ Project component files created with this version (`.SC4Pal`, `.SC4Tiles`, `.SC4
 
 *   **Purpose:** Stores supertile definitions and their grid dimensions.
 *   **Structure:**
-    *   **Supertile Count (1 or 3 bytes):** If the first byte is `1-255`, it's the count. If `0`, the next 2 bytes (a Little-Endian unsigned short) are the count (up to 65535).
-    *   **Supertile Grid Dimensions (2 bytes):** `width` (1 byte), `height` (1 byte).
-    *   **Reserved Bytes (4 bytes):** For future use.
+    *   **Header:**
+        *   **Supertile Count (1 or 3 bytes):** If the first byte is `1-255`, it's the count. If `0`, the next 2 bytes (a Little-Endian unsigned short) are the count (up to 65535).
+        *   **Supertile Grid Dimensions (2 bytes):** `width` (1 byte), `height` (1 byte).
+        *   **Project Supertile Limit (2 bytes, Little-Endian)):** A value of `0xFFFF` indicates 65535.
+        *   **Reserved Bytes (2 bytes):** Currently unused.
     *   **Supertile Definition Blocks:** Each block is `width * height` bytes, with each byte being a tile index (0-255).
 
 ### 4. Map File (`.SC4Map`)
 
 *   **Purpose:** Stores the overall map layout.
 *   **Structure:**
-    *   **Header (4 bytes):** `map_width` (2 bytes, Little-Endian), `map_height` (2 bytes, Little-Endian).
-    *   **Reserved Bytes (4 bytes):** For future use.
+    *   **Header:**
+        * `map_width` (2 bytes, Little-Endian).
+        * `map_height` (2 bytes, Little-Endian).
+        * **Reserved Bytes (4 bytes):** Currently unused.
     *   **Map Data (Variable size):** A sequence of `map_width * map_height` supertile indices.
         *   **Index Size:** If the project's total supertile count was > 255 at save time, each index is **2 bytes** (Little-Endian). Otherwise, each index is **1 byte**. The application detects this based on file size during loading.
 

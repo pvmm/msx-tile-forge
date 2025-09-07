@@ -1,4 +1,5 @@
 name: 3. Final Release
+
 on:
   push:
     tags:
@@ -16,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version_string: ${{ steps.versioning.outputs.VERSION_STRING }}
+      debian_version: ${{ steps.versioning.outputs.DEBIAN_VERSION }}
       prepared_source_artifact_name: ${{ steps.versioning.outputs.PREPARED_SOURCE_ARTIFACT_NAME }}
       win_filename: ${{ steps.versioning.outputs.WIN_FILENAME }}
       lin_filename: ${{ steps.versioning.outputs.LIN_FILENAME }}
@@ -47,10 +49,12 @@ jobs:
           BASE_NAME="msxtileforge_v${RAW_VERSION}"
           
           echo "VERSION_STRING=${RAW_VERSION}" >> $GITHUB_OUTPUT
+          # For final release, debian version is the same as the raw version
+          echo "DEBIAN_VERSION=${RAW_VERSION}" >> $GITHUB_OUTPUT
           echo "PREPARED_SOURCE_ARTIFACT_NAME=prepared-source-${{ github.run_id }}-${{ github.ref_name }}" >> $GITHUB_OUTPUT
           echo "WIN_FILENAME=${BASE_NAME}_win.zip" >> $GITHUB_OUTPUT
           echo "LIN_FILENAME=${BASE_NAME}_lin.tar.gz" >> $GITHUB_OUTPUT
-          echo "DEB_FILENAME=${BASE_NAME}_deb.deb" >> $GITHUB_OUTPUT
+          echo "DEBIAN_FILENAME=${BASE_NAME}_deb.deb" >> $GITHUB_OUTPUT
           echo "SRC_FILENAME=${BASE_NAME}_src.zip" >> $GITHUB_OUTPUT
 
   #########################################
@@ -64,13 +68,13 @@ jobs:
       - name: Checkout target branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.ref_name }} # Checkout the code at the specific tag
 
       - name: Update version strings using reusable action
         uses: ./.github/actions/update-version-in-files
         with:
           version_string: ${{ needs.generate-version.outputs.version_string }}
-          debian_version: ${{ needs.generate-version.outputs.version_string }} # For final release, debian version is the same
+          debian_version: ${{ needs.generate-version.outputs.debian_version }}
 
       - name: Upload prepared source as artifact
         uses: actions/upload-artifact@v4

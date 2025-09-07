@@ -33,10 +33,8 @@ common:
 		--add-data "msxtilemagic.py:." \
 		--add-data "tilerandomizer.py:." \
 		--add-data "supertilerandomizer.py:." \
-		$(MAIN_SCRIPT)
-	cp README.md LICENSE dist/$(MAIN_SCRIPT:.py=)/
-	# Create the final zip archive directly with the specified name
-	cd dist && zip -r $(WIN_ZIP) $(MAIN_SCRIPT:.py=)
+		--noconfirm $(MAIN_SCRIPT)
+	cp README.md LICENSE $(TARGET_DIR)
 
 all-win: prepackage common
 	cd dist && powershell Compress-Archive -Force -Path $(MAIN_SCRIPT:.py=) -DestinationPath $(WIN_ZIP)
@@ -45,14 +43,15 @@ all-lin: prepackage common
 	cd dist && tar -czvf $(LIN_TGZ) $(MAIN_SCRIPT:.py=)
 
 deb:
-	# The .deb filename is controlled by debian/changelog.
-	# The calling workflow is responsible for finding the generated .deb file and renaming it.
 	debuild -us -uc
 
 sdist:
-	mkdir -p dist/msxtileforge-source
-	cp *.py icon.bmp LICENSE README.md requirements.txt dist/msxtileforge-source/
-	# Create the final source zip archive directly with the specified name
+	mkdir -p $(SDIST)
+	cp *.py $(SDIST)
+	cp icon.bmp $(SDIST)
+	cp LICENSE $(SDIST)
+	cp README.md $(SDIST)
+	cp requirements.txt $(SDIST)
 	cd dist && zip -r $(SRC_ZIP) msxtileforge-source
 
 clean:
